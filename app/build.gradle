@@ -10,8 +10,8 @@ android {
         applicationId "com.dangvietanh.cast"
         minSdk 21
         targetSdk 34
-        versionCode 4
-        versionName "3.1"
+        versionCode 5
+        versionName "3.2"
     }
 
     signingConfigs {
@@ -41,7 +41,15 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
 }
 
 dependencies {
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
 }

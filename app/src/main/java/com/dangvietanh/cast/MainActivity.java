@@ -6,6 +6,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
@@ -43,6 +44,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 public class MainActivity extends Activity {
 
     private static final String CAST_URL = "https://dangvietanh.com/cast/screen";
@@ -69,6 +72,7 @@ public class MainActivity extends Activity {
     // Controllers
     private OverlayMenuController overlayMenu;
     private UpdateManager updateManager;
+    private NativePlayerController nativePlayer;
 
     // Media & Network
     private AudioManager audioManager;
@@ -87,7 +91,7 @@ public class MainActivity extends Activity {
                 public void onAudioFocusChange(int focusChange) {
                     if (focusChange == AudioManager.AUDIOFOCUS_LOSS
                             || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                        evalVideoJs("var v=document.getElementById('dva-video');if(v&&!v.paused)v.pause();");
+                        evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('pause');}else{var v=document.getElementById('dva-video');if(v&&!v.paused)v.pause();}");
                     }
                 }
             };
@@ -124,6 +128,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        getWindow().setBackgroundDrawable(new ColorDrawable(android.graphics.Color.BLACK));
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
         applyImmersiveFullscreen();
 
@@ -147,7 +152,41 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setUserAgentString(settings.getUserAgentString() + " DVACastTV/" + updateManager.getLocalVersionName());
+        final String fullUserAgent = settings.getUserAgentString() + " DVACastTV/" + updateManager.getLocalVersionName();
+        settings.setUserAgentString(fullUserAgent);
+
+        nativePlayer = new NativePlayerController(this, fullUserAgent, new NativePlayerController.Callback() {
+            @Override
+            public void onNativeEvent(final String snapshotJson) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (webView != null) {
+                            webView.evaluateJavascript(
+                                    "if(window.__dvaOnNativeState)window.__dvaOnNativeState("
+                                            + JSONObject.quote(snapshotJson) + ");",
+                                    null);
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onNativeVisibilityChanged(final boolean active) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        int bg = active ? android.graphics.Color.TRANSPARENT : UiHelper.COLOR_BG_BASE;
+                        if (rootLayout != null) {
+                            rootLayout.setBackgroundColor(bg);
+                        }
+                        if (webView != null) {
+                            webView.setBackgroundColor(bg);
+                        }
+                    }
+                });
+            }
+        });
 
         webView.addJavascriptInterface(new NativeBridge(), "DVACastNative");
 
@@ -161,6 +200,9 @@ public class MainActivity extends Activity {
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 pageHasError = false;
+                if (nativePlayer != null) {
+                    nativePlayer.stopMedia();
+                }
             }
 
             @Override
@@ -198,7 +240,7 @@ public class MainActivity extends Activity {
                 customView = view;
                 customViewCallback = callback;
                 webView.setVisibility(View.GONE);
-                rootLayout.addView(customView, 0, new FrameLayout.LayoutParams(
+                rootLayout.addView(customView, 1, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
                 applyImmersiveFullscreen();
@@ -219,6 +261,10 @@ public class MainActivity extends Activity {
         };
         webView.setWebChromeClient(chromeClient);
 
+        rootLayout.addView(nativePlayer.getView(), 0, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
         rootLayout.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
@@ -227,12 +273,18 @@ public class MainActivity extends Activity {
         overlayMenu = new OverlayMenuController(this, webView, new OverlayMenuController.Actions() {
             @Override
             public void onReloadPage() {
+                if (nativePlayer != null) {
+                    nativePlayer.stopMedia();
+                }
                 Toast.makeText(MainActivity.this, "Đang khởi tạo lại mã QR & phiên kết nối...", Toast.LENGTH_SHORT).show();
                 reloadCastPage();
             }
 
             @Override
             public void onClearCache() {
+                if (nativePlayer != null) {
+                    nativePlayer.stopMedia();
+                }
                 webView.clearCache(true);
                 webView.clearHistory();
                 WebStorage.getInstance().deleteAllData();
@@ -516,12 +568,12 @@ public class MainActivity extends Activity {
             mediaSession.setCallback(new MediaSession.Callback() {
                 @Override
                 public void onPlay() {
-                    evalVideoJs("var v=document.getElementById('dva-video');if(v&&v.src)v.play().catch(function(){});");
+                    evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('play');}else{var v=document.getElementById('dva-video');if(v&&v.src)v.play().catch(function(){});}");
                 }
 
                 @Override
                 public void onPause() {
-                    evalVideoJs("var v=document.getElementById('dva-video');if(v&&!v.paused)v.pause();");
+                    evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('pause');}else{var v=document.getElementById('dva-video');if(v&&!v.paused)v.pause();}");
                 }
 
                 @Override
@@ -531,12 +583,12 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onFastForward() {
-                    evalVideoJs("var v=document.getElementById('dva-video');if(v&&v.duration)v.currentTime=Math.min(v.duration,v.currentTime+10);");
+                    evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('ff');}else{var v=document.getElementById('dva-video');if(v&&v.duration)v.currentTime=Math.min(v.duration,v.currentTime+10);}");
                 }
 
                 @Override
                 public void onRewind() {
-                    evalVideoJs("var v=document.getElementById('dva-video');if(v&&v.duration)v.currentTime=Math.max(0,v.currentTime-10);");
+                    evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('rw');}else{var v=document.getElementById('dva-video');if(v&&v.duration)v.currentTime=Math.max(0,v.currentTime-10);}");
                 }
             });
             PlaybackState state = new PlaybackState.Builder()
@@ -680,13 +732,13 @@ public class MainActivity extends Activity {
         // Hardware Media Keys forwarding
         if (action == KeyEvent.ACTION_DOWN) {
             if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
-                evalVideoJs("var v=document.getElementById('dva-video');if(v&&v.src){v.paused?v.play().catch(function(){}):v.pause();}");
+                evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('toggle');}else{var v=document.getElementById('dva-video');if(v&&v.src){v.paused?v.play().catch(function(){}):v.pause();}}");
                 return true;
             } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY) {
-                evalVideoJs("var v=document.getElementById('dva-video');if(v&&v.src)v.play().catch(function(){});");
+                evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('play');}else{var v=document.getElementById('dva-video');if(v&&v.src)v.play().catch(function(){});}");
                 return true;
             } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PAUSE) {
-                evalVideoJs("var v=document.getElementById('dva-video');if(v&&!v.paused)v.pause();");
+                evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('pause');}else{var v=document.getElementById('dva-video');if(v&&!v.paused)v.pause();}");
                 return true;
             }
         }
@@ -725,6 +777,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        if (nativePlayer != null) {
+            nativePlayer.onHostPause();
+        }
         if (webView != null) {
             webView.onPause();
         }
@@ -744,6 +799,10 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {
             }
         }
+        if (nativePlayer != null) {
+            nativePlayer.release();
+            nativePlayer = null;
+        }
         if (webView != null) {
             webView.destroy();
         }
@@ -757,6 +816,11 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean hasNativePlayer() {
+            return nativePlayer != null;
+        }
+
+        @JavascriptInterface
         public void openOverlayMenu() {
             handler.post(new Runnable() {
                 @Override
@@ -766,6 +830,114 @@ public class MainActivity extends Activity {
                     }
                 }
             });
+        }
+
+        @JavascriptInterface
+        public void loadMedia(
+                final String url,
+                final String streamType,
+                final double startPosSec,
+                final boolean paused,
+                final boolean mutedState,
+                final float rate) {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (nativePlayer != null) {
+                        nativePlayer.loadMedia(url, streamType, startPosSec, paused, mutedState, rate);
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void stopMedia() {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (nativePlayer != null) {
+                        nativePlayer.stopMedia();
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void playNative() {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (nativePlayer != null) {
+                        nativePlayer.play();
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void pauseNative() {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (nativePlayer != null) {
+                        nativePlayer.pause();
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void seekNative(final double posSec) {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (nativePlayer != null) {
+                        nativePlayer.seekTo(posSec);
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void setNativeMuted(final boolean muted) {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (nativePlayer != null) {
+                        nativePlayer.setMuted(muted);
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void setNativePlaybackRate(final float rate) {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (nativePlayer != null) {
+                        nativePlayer.setPlaybackRate(rate);
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void setNativeResizeMode(final boolean cover) {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (nativePlayer != null) {
+                        nativePlayer.setResizeMode(cover);
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String getNativeSnapshotJson() {
+            NativePlayerController np = nativePlayer;
+            return np != null ? np.getSnapshotJson() : "{\"active\":false}";
         }
     }
 }

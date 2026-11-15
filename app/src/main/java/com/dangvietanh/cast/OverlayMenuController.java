@@ -40,11 +40,11 @@ public class OverlayMenuController {
     private LinearLayout mainCard;
 
     // Header views
-    private TextView backBtn;
+    private FrameLayout backBtn;
     private TextView headerTitleTv;
     private TextView headerSubTv;
     private TextView verPill;
-    private TextView closeBtn;
+    private FrameLayout closeBtn;
 
     // Main Settings Section
     private LinearLayout settingsSection;
@@ -138,17 +138,8 @@ public class OverlayMenuController {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         headerLp.bottomMargin = UiHelper.dp(context, 14);
 
-        backBtn = new TextView(context);
+        backBtn = createHeaderIconButton(R.drawable.ic_back, "Quay lại Cài đặt");
         backBtn.setId(View.generateViewId());
-        backBtn.setText("← Quay lại");
-        backBtn.setTextColor(Color.WHITE);
-        backBtn.setTextSize(12.5f);
-        backBtn.setSingleLine(true);
-        backBtn.setTypeface(Typeface.DEFAULT_BOLD);
-        backBtn.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 7),
-                UiHelper.dp(context, 14), UiHelper.dp(context, 7));
-        UiHelper.applyFocusableTileStyle(backBtn, context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BTN_FOCUSED);
         backBtn.setVisibility(View.GONE);
         backBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -156,8 +147,8 @@ public class OverlayMenuController {
                 switchToSettingsView();
             }
         });
-        LinearLayout.LayoutParams backLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        int headerIconSize = UiHelper.dp(context, 40);
+        LinearLayout.LayoutParams backLp = new LinearLayout.LayoutParams(headerIconSize, headerIconSize);
         backLp.rightMargin = UiHelper.dp(context, 12);
         headerRow.addView(backBtn, backLp);
 
@@ -213,26 +204,15 @@ public class OverlayMenuController {
         titleCol.addView(headerSubTv);
         headerRow.addView(titleCol, titleColLp);
 
-        closeBtn = new TextView(context);
+        closeBtn = createHeaderIconButton(R.drawable.ic_close, "Đóng Cài đặt");
         closeBtn.setId(View.generateViewId());
-        closeBtn.setText("✕  Đóng");
-        closeBtn.setTextColor(Color.WHITE);
-        closeBtn.setTextSize(12.5f);
-        closeBtn.setSingleLine(true);
-        closeBtn.setTypeface(Typeface.DEFAULT_BOLD);
-        closeBtn.setGravity(Gravity.CENTER);
-        closeBtn.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 8),
-                UiHelper.dp(context, 16), UiHelper.dp(context, 8));
-        UiHelper.applyFocusableTileStyle(closeBtn, context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BTN_FOCUSED);
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 hide();
             }
         });
-        LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(headerIconSize, headerIconSize);
         closeLp.leftMargin = UiHelper.dp(context, 10);
         headerRow.addView(closeBtn, closeLp);
 
@@ -506,6 +486,19 @@ public class OverlayMenuController {
         outerScroll.addView(cardContainer, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         overlayRoot.addView(outerScroll, scrollLp);
+    }
+
+    private FrameLayout createHeaderIconButton(int iconRes, String contentDesc) {
+        FrameLayout btn = new FrameLayout(context);
+        btn.setContentDescription(contentDesc);
+        UiHelper.applyFocusableTileStyle(btn, context, 20,
+                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BTN_FOCUSED);
+        ImageView iv = new ImageView(context);
+        iv.setImageResource(iconRes);
+        iv.setColorFilter(Color.WHITE);
+        btn.addView(iv, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 18), UiHelper.dp(context, 18), Gravity.CENTER));
+        return btn;
     }
 
     private View createHorizontalActionTile(int iconRes, String iconTintHex, String title, String subtitle,

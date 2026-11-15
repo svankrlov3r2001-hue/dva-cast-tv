@@ -78,7 +78,7 @@ public final class UpdateHistoryStore {
                 return entry.date;
             }
         }
-        return "15/11/2026";
+        return "16/11/2026";
     }
 
     private static List<HistoryEntry> parseServerJson(String rawJson) {
@@ -124,6 +124,15 @@ public final class UpdateHistoryStore {
 
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
+
+        List<String> v5 = new ArrayList<>();
+        v5.add("Tích hợp trình phát Native ExoPlayer (Media3) & SurfaceView giải mã phần cứng 4K 60fps HDR");
+        v5.add("Tự động phát hiện lỗi giải mã / màn hình đen và hiển thị popup thông báo rõ ràng");
+        v5.add("Tắt hiệu ứng blur khi phát video, tối ưu giảm tải GPU và hạn chế render HUD dư thừa");
+        v5.add("Ẩn nút toàn màn hình khi chạy trên App TV; tối giản nút Ngắt kết nối thành icon");
+        v5.add("Bổ sung hiệu ứng chuyển cảnh mượt mà từ màn hình QR sang trình phát phim");
+        v5.add("Đổi nút Quay lại & Đóng trong Cài đặt thành nút icon tối giản chuyên nghiệp");
+        list.add(new HistoryEntry(5L, "3.2", "16/11/2026", "Trình phát Native 4K HDR & Tối ưu Hiệu năng TV", v5));
 
         List<String> v4 = new ArrayList<>();
         v4.add("Sửa lỗi đồ họa vòng xoay Spinner trên màn hình khởi động");
