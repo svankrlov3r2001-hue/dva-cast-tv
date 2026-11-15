@@ -24,11 +24,29 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon
+      - name: Build APK (Signed Release if Keystore Secret exists, else Debug)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          mkdir -p dist
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > release-keystore.jks
+            export KEYSTORE_FILE="$PWD/release-keystore.jks"
+            gradle assembleRelease --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk dist/dva_cast.apk
+            rm -f release-keystore.jks
+            echo "Built signed Release APK: dist/dva_cast.apk"
+          else
+            gradle assembleDebug --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk dist/dva_cast.apk
+            echo "Built Debug APK (no Release Keystore Secret yet): dist/dva_cast.apk"
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: DVA-Cast-TV-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: dist/dva_cast.apk
