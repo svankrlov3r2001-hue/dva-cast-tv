@@ -3,6 +3,7 @@ package com.dangvietanh.cast;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.media.AudioAttributes;
@@ -182,6 +183,13 @@ public class MainActivity extends Activity {
 
         chromeClient = new WebChromeClient() {
             @Override
+            public Bitmap getDefaultVideoPoster() {
+                Bitmap bmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+                bmp.eraseColor(Color.TRANSPARENT);
+                return bmp;
+            }
+
+            @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
                 if (customView != null) {
                     callback.onCustomViewHidden();
@@ -219,7 +227,7 @@ public class MainActivity extends Activity {
         overlayMenu = new OverlayMenuController(this, webView, new OverlayMenuController.Actions() {
             @Override
             public void onReloadPage() {
-                Toast.makeText(MainActivity.this, "Đang tải lại trang trình chiếu...", Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, "Đang khởi tạo lại mã QR & phiên kết nối...", Toast.LENGTH_SHORT).show();
                 reloadCastPage();
             }
 
@@ -229,7 +237,7 @@ public class MainActivity extends Activity {
                 webView.clearHistory();
                 WebStorage.getInstance().deleteAllData();
                 CookieManager.getInstance().removeAllCookies(null);
-                Toast.makeText(MainActivity.this, "Đã xóa bộ nhớ đệm. Đang tải lại...", Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, "Đã dọn bộ nhớ đệm trình phát. Đang khởi tạo lại...", Toast.LENGTH_SHORT).show();
                 reloadCastPage();
             }
 
@@ -239,8 +247,18 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onFetchHistory(Runnable onComplete) {
+                updateManager.fetchHistoryAsync(onComplete);
+            }
+
+            @Override
             public String getVersionName() {
                 return updateManager.getLocalVersionName();
+            }
+
+            @Override
+            public long getVersionCode() {
+                return updateManager.getLocalVersionCode();
             }
         });
         rootLayout.addView(overlayMenu.getView(), new FrameLayout.LayoutParams(
@@ -281,9 +299,9 @@ public class MainActivity extends Activity {
         splashContent.setMinimumWidth(UiHelper.dp(this, 360));
         splashContent.setClipChildren(false);
         splashContent.setClipToPadding(false);
-        splashContent.setPadding(UiHelper.dp(this, 48), UiHelper.dp(this, 38),
-                UiHelper.dp(this, 48), UiHelper.dp(this, 38));
-        UiHelper.applyGlassCardStyle(splashContent, this, 36, UiHelper.COLOR_SURFACE_CARD, 24);
+        splashContent.setPadding(UiHelper.dp(this, 32), UiHelper.dp(this, 30),
+                UiHelper.dp(this, 32), UiHelper.dp(this, 30));
+        UiHelper.applyGlassCardStyle(splashContent, this, 40, UiHelper.COLOR_SURFACE_GLASS, 24);
 
         FrameLayout.LayoutParams contentLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -314,14 +332,14 @@ public class MainActivity extends Activity {
         LinearLayout statusPill = new LinearLayout(this);
         statusPill.setOrientation(LinearLayout.HORIZONTAL);
         statusPill.setGravity(Gravity.CENTER);
-        statusPill.setMinimumWidth(UiHelper.dp(this, 232));
-        statusPill.setPadding(UiHelper.dp(this, 26), UiHelper.dp(this, 13),
-                UiHelper.dp(this, 28), UiHelper.dp(this, 13));
-        UiHelper.applyGlassCardStyle(statusPill, this, 999, UiHelper.COLOR_SURFACE_PILL, 8);
+        statusPill.setMinimumWidth(UiHelper.dp(this, 240));
+        statusPill.setPadding(UiHelper.dp(this, 24), UiHelper.dp(this, 12),
+                UiHelper.dp(this, 26), UiHelper.dp(this, 12));
+        UiHelper.applyGlassCardStyle(statusPill, this, 24, UiHelper.COLOR_SURFACE_GLASS, 12);
 
         splashSpinner = new UiHelper.SpinnerView(this);
         LinearLayout.LayoutParams spinLp = new LinearLayout.LayoutParams(
-                UiHelper.dp(this, 22), UiHelper.dp(this, 22));
+                UiHelper.dp(this, 26), UiHelper.dp(this, 26));
         spinLp.rightMargin = UiHelper.dp(this, 12);
         statusPill.addView(splashSpinner, spinLp);
 
@@ -350,7 +368,7 @@ public class MainActivity extends Activity {
         splashRetryBtn.setPadding(UiHelper.dp(this, 26), UiHelper.dp(this, 12),
                 UiHelper.dp(this, 26), UiHelper.dp(this, 12));
         UiHelper.applyFocusableTileStyle(splashRetryBtn, this, 24,
-                UiHelper.COLOR_BTN_THEME_NORMAL, UiHelper.COLOR_BTN_THEME_FOCUSED);
+                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BTN_FOCUSED);
         splashRetryBtn.setVisibility(View.GONE);
         splashRetryBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -370,7 +388,7 @@ public class MainActivity extends Activity {
         splashOverlay.addView(splashContent, contentLp);
 
         TextView hintTv = new TextView(this);
-        hintTv.setText("Mẹo: Nhấn phím Menu hoặc giữ OK để mở Tiện ích & Bảo trì");
+        hintTv.setText("Mẹo: Nhấn phím Menu hoặc giữ OK để mở Cài đặt");
         hintTv.setTextColor(Color.argb(175, 176, 184, 200));
         hintTv.setTextSize(12);
         FrameLayout.LayoutParams hintLp = new FrameLayout.LayoutParams(
@@ -684,7 +702,7 @@ public class MainActivity extends Activity {
                 finish();
             } else {
                 lastBackPressMs = now;
-                Toast.makeText(this, "Nhấn Back lần nữa để thoát · Giữ OK để mở Tiện ích", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Nhấn Back lần nữa để thoát · Giữ OK để mở Cài đặt", Toast.LENGTH_SHORT).show();
             }
             return true;
         }

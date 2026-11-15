@@ -31,16 +31,12 @@ import java.util.Locale;
 public final class UiHelper {
 
     public static final int COLOR_BG_BASE = Color.parseColor("#07090F");
-    public static final int COLOR_SURFACE_GLASS = Color.argb(145, 10, 12, 20);      // Rich readable obsidian glass
-    public static final int COLOR_SURFACE_CARD = Color.argb(215, 11, 13, 22);       // Deep card glass backing
-    public static final int COLOR_SURFACE_PILL = Color.argb(175, 14, 16, 26);       // Pill backing
-    public static final int COLOR_BORDER_GLASS = Color.argb(56, 255, 255, 255);     // rgba(255, 255, 255, 0.22)
-    public static final int COLOR_BORDER_THEME = Color.argb(96, 229, 9, 20);        // Subtle crimson-rose border matching radial gradient
-    public static final int COLOR_BORDER_FOCUS = Color.parseColor("#FF3B5C");       // Vibrant crimson-pink focus border
+    public static final int COLOR_SURFACE_GLASS = Color.argb(64, 0, 0, 0);        // rgba(0, 0, 0, 0.25)
+    public static final int COLOR_SURFACE_CARD = Color.argb(64, 0, 0, 0);         // rgba(0, 0, 0, 0.25)
+    public static final int COLOR_BORDER_GLASS = Color.argb(41, 255, 255, 255);   // rgba(255, 255, 255, 0.16)
+    public static final int COLOR_BTN_FOCUSED = Color.argb(44, 255, 255, 255);    // Subtle luminous glass on TV focus
     public static final int COLOR_ACCENT_RED = Color.parseColor("#E50914");
     public static final int COLOR_ACCENT_PINK = Color.parseColor("#D50055");
-    public static final int COLOR_BTN_THEME_NORMAL = Color.argb(48, 229, 9, 20);    // Subtle red-pink tinted glass button
-    public static final int COLOR_BTN_THEME_FOCUSED = Color.argb(115, 213, 0, 85);  // Active crimson-magenta focus fill
     public static final int COLOR_TEXT_PRIMARY = Color.parseColor("#F5F6FA");
     public static final int COLOR_TEXT_MUTED = Color.parseColor("#B0B8C8");
     public static final int COLOR_GREEN = Color.parseColor("#30D158");
@@ -106,7 +102,7 @@ public final class UiHelper {
     }
 
     /**
-     * Translucent ambient backdrop for Overlay Menu matching the radial-gradient theme.
+     * Translucent ambient backdrop for Settings & Update overlays matching the radial-gradient theme.
      */
     public static Drawable createOverlayBackdropDrawable() {
         return new Drawable() {
@@ -125,14 +121,14 @@ public final class UiHelper {
                 if (w != lastW || h != lastH) {
                     lastW = w;
                     lastH = h;
-                    basePaint.setColor(Color.argb(226, 7, 9, 15));
-                    float radius = Math.max(w, h) * 0.55f;
+                    basePaint.setColor(Color.argb(230, 7, 9, 15));
+                    float radius = Math.max(w, h) * 0.54f;
                     g1Paint.setShader(new RadialGradient(
                             w * 0.20f, h * 0.20f, radius,
-                            Color.argb(46, 229, 9, 20), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+                            Color.argb(44, 229, 9, 20), Color.TRANSPARENT, Shader.TileMode.CLAMP));
                     g2Paint.setShader(new RadialGradient(
                             w * 0.80f, h * 0.80f, radius,
-                            Color.argb(36, 213, 0, 85), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+                            Color.argb(34, 213, 0, 85), Color.TRANSPARENT, Shader.TileMode.CLAMP));
                 }
                 canvas.drawRect(b, basePaint);
                 canvas.drawRect(b, g1Paint);
@@ -163,18 +159,8 @@ public final class UiHelper {
         return d;
     }
 
-    public static GradientDrawable createThemeGradientRect(Context ctx, int radiusDp, int alpha, int strokeColor, int strokeDp) {
-        int c1 = Color.argb(alpha, 229, 9, 20);
-        int c2 = Color.argb(alpha, 213, 0, 85);
-        GradientDrawable d = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{c1, c2});
-        d.setShape(GradientDrawable.RECTANGLE);
-        d.setCornerRadius(dp(ctx, radiusDp));
-        d.setStroke(dp(ctx, strokeDp), strokeColor);
-        return d;
-    }
-
     public static void applyGlassCardStyle(final View view, final Context ctx, final int radiusDp, int fillColor, int shadowDp) {
-        view.setBackground(createGlassRect(ctx, radiusDp, fillColor, COLOR_BORDER_THEME, 1));
+        view.setBackground(createGlassRect(ctx, radiusDp, fillColor, COLOR_BORDER_GLASS, 1));
         view.setElevation(dp(ctx, shadowDp));
         view.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -186,9 +172,9 @@ public final class UiHelper {
     }
 
     public static void applyFocusableTileStyle(final View view, final Context ctx, final int radiusDp, int normalFill, int focusedFill) {
-        GradientDrawable normal = createGlassRect(ctx, radiusDp, normalFill, COLOR_BORDER_THEME, 1);
-        GradientDrawable focused = createThemeGradientRect(ctx, radiusDp, 115, COLOR_BORDER_FOCUS, 2);
-        GradientDrawable pressed = createThemeGradientRect(ctx, radiusDp, 150, Color.WHITE, 2);
+        GradientDrawable normal = createGlassRect(ctx, radiusDp, normalFill, COLOR_BORDER_GLASS, 1);
+        GradientDrawable focused = createGlassRect(ctx, radiusDp, focusedFill, Color.WHITE, 2);
+        GradientDrawable pressed = createGlassRect(ctx, radiusDp, focusedFill, Color.WHITE, 2);
 
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, pressed);
@@ -197,7 +183,7 @@ public final class UiHelper {
         view.setBackground(states);
         view.setFocusable(true);
         view.setClickable(true);
-        view.setElevation(dp(ctx, 6));
+        view.setElevation(dp(ctx, 10));
         view.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View v, Outline outline) {
@@ -258,21 +244,24 @@ public final class UiHelper {
     }
 
     /**
-     * Smooth animated iOS/Apple-style rotating arc spinner.
+     * Smooth animated iOS/Apple-style rotating arc spinner without 0/360 SweepGradient cap seam.
      */
     public static class SpinnerView extends View {
         private final Paint trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint arcPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF arcRect = new RectF();
+        private final float safeMarginPx;
         private float angle = 0f;
         private boolean spinning = true;
 
         public SpinnerView(Context context) {
             super(context);
-            float stroke = dp(context, 3.2f);
+            float stroke = dp(context, 2.5f);
+            safeMarginPx = stroke / 2f + dp(context, 2f);
+
             trackPaint.setStyle(Paint.Style.STROKE);
             trackPaint.setStrokeWidth(stroke);
-            trackPaint.setColor(Color.argb(38, 255, 255, 255));
+            trackPaint.setColor(Color.argb(34, 255, 255, 255));
 
             arcPaint.setStyle(Paint.Style.STROKE);
             arcPaint.setStrokeWidth(stroke);
@@ -287,24 +276,33 @@ public final class UiHelper {
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
-            float pad = trackPaint.getStrokeWidth();
-            arcRect.set(pad, pad, w - pad, h - pad);
+            arcRect.set(safeMarginPx, safeMarginPx, w - safeMarginPx, h - safeMarginPx);
             arcPaint.setShader(new SweepGradient(
                     w / 2f, h / 2f,
-                    new int[]{Color.TRANSPARENT, COLOR_ACCENT_PINK, COLOR_ACCENT_RED, Color.WHITE},
-                    new float[]{0f, 0.35f, 0.75f, 1f}));
+                    new int[]{
+                            Color.TRANSPARENT,
+                            Color.TRANSPARENT,
+                            COLOR_ACCENT_PINK,
+                            COLOR_ACCENT_RED,
+                            Color.WHITE,
+                            Color.WHITE,
+                            Color.TRANSPARENT
+                    },
+                    new float[]{0f, 0.06f, 0.35f, 0.65f, 0.80f, 0.90f, 1f}));
         }
 
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            if (arcRect.width() <= 0 || arcRect.height() <= 0) return;
             canvas.drawOval(arcRect, trackPaint);
             canvas.save();
             canvas.rotate(angle, getWidth() / 2f, getHeight() / 2f);
-            canvas.drawArc(arcRect, 0, 290, false, arcPaint);
+            // Start at 22 deg and sweep 255 deg so both round caps stay safely away from 0/360 seam
+            canvas.drawArc(arcRect, 22f, 255f, false, arcPaint);
             canvas.restore();
             if (spinning && getVisibility() == View.VISIBLE) {
-                angle = (angle + 7.5f) % 360f;
+                angle = (angle + 7.2f) % 360f;
                 postInvalidateOnAnimation();
             }
         }

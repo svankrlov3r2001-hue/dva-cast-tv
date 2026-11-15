@@ -117,8 +117,8 @@ public class UpdateManager {
 
         mainCard = new LinearLayout(activity);
         mainCard.setOrientation(LinearLayout.VERTICAL);
-        mainCard.setPadding(UiHelper.dp(activity, 32), UiHelper.dp(activity, 28),
-                UiHelper.dp(activity, 32), UiHelper.dp(activity, 28));
+        mainCard.setPadding(UiHelper.dp(activity, 32), UiHelper.dp(activity, 30),
+                UiHelper.dp(activity, 32), UiHelper.dp(activity, 30));
         UiHelper.applyGlassCardStyle(mainCard, activity, 40, UiHelper.COLOR_SURFACE_GLASS, 24);
 
         FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(
@@ -212,7 +212,7 @@ public class UpdateManager {
         btnUpdateNow.setPadding(UiHelper.dp(activity, 18), UiHelper.dp(activity, 14),
                 UiHelper.dp(activity, 18), UiHelper.dp(activity, 14));
         UiHelper.applyFocusableTileStyle(btnUpdateNow, activity, 24,
-                Color.argb(95, 229, 9, 20), Color.argb(190, 229, 9, 20));
+                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BTN_FOCUSED);
         btnUpdateNow.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -230,7 +230,7 @@ public class UpdateManager {
         btnLater.setPadding(UiHelper.dp(activity, 18), UiHelper.dp(activity, 14),
                 UiHelper.dp(activity, 18), UiHelper.dp(activity, 14));
         UiHelper.applyFocusableTileStyle(btnLater, activity, 24,
-                UiHelper.COLOR_SURFACE_GLASS, Color.argb(72, 255, 255, 255));
+                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BTN_FOCUSED);
         btnLater.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -334,7 +334,7 @@ public class UpdateManager {
         btnCancelDownload.setPadding(UiHelper.dp(activity, 24), UiHelper.dp(activity, 12),
                 UiHelper.dp(activity, 24), UiHelper.dp(activity, 12));
         UiHelper.applyFocusableTileStyle(btnCancelDownload, activity, 24,
-                UiHelper.COLOR_SURFACE_GLASS, Color.argb(80, 255, 255, 255));
+                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BTN_FOCUSED);
         btnCancelDownload.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -384,6 +384,39 @@ public class UpdateManager {
         return tile;
     }
 
+    public void fetchHistoryAsync(final Runnable onComplete) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                HttpURLConnection conn = null;
+                try {
+                    URL url = new URL(VERSION_JSON_URL + "?t=" + System.currentTimeMillis());
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(6000);
+                    conn.setReadTimeout(6000);
+                    conn.setUseCaches(false);
+                    if (conn.getResponseCode() == 200) {
+                        BufferedReader reader = new BufferedReader(
+                                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            sb.append(line);
+                        }
+                        reader.close();
+                        UpdateHistoryStore.saveServerPayload(activity, sb.toString());
+                    }
+                } catch (Exception ignored) {
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+                if (onComplete != null) {
+                    mainHandler.post(onComplete);
+                }
+            }
+        }).start();
+    }
+
     public void checkForUpdates(final boolean userInitiated) {
         if (isDownloading) return;
         if (userInitiated) {
@@ -414,7 +447,9 @@ public class UpdateManager {
                     }
                     reader.close();
 
-                    JSONObject json = new JSONObject(sb.toString());
+                    String rawJson = sb.toString();
+                    UpdateHistoryStore.saveServerPayload(activity, rawJson);
+                    JSONObject json = new JSONObject(rawJson);
                     final long remoteCode = json.optLong("versionCode", 0);
                     final String remoteName = json.optString("versionName", String.valueOf(remoteCode));
                     final String apkUrl = json.optString("apkUrl", DEFAULT_APK_URL);
