@@ -1,7 +1,6 @@
 package com.dangvietanh.cast;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -12,7 +11,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-import androidx.annotation.NonNull;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
@@ -242,7 +240,7 @@ public class NativePlayerController {
             }
 
             @Override
-            public void onVideoSizeChanged(@NonNull VideoSize videoSize) {
+            public void onVideoSizeChanged(VideoSize videoSize) {
                 videoWidth = videoSize.width;
                 videoHeight = videoSize.height;
                 if (videoSize.width > 0 && videoSize.height > 0) {
@@ -258,7 +256,7 @@ public class NativePlayerController {
             }
 
             @Override
-            public void onTracksChanged(@NonNull Tracks tracks) {
+            public void onTracksChanged(Tracks tracks) {
                 if (!isActive) return;
                 boolean foundVideoGroup = false;
                 boolean anyVideoSupportedOrSelected = false;
@@ -283,8 +281,8 @@ public class NativePlayerController {
             }
 
             @Override
-            public void onPositionDiscontinuity(@NonNull Player.PositionInfo oldPosition,
-                                                @NonNull Player.PositionInfo newPosition,
+            public void onPositionDiscontinuity(Player.PositionInfo oldPosition,
+                                                Player.PositionInfo newPosition,
                                                 int reason) {
                 if (!isActive) return;
                 if (reason == Player.DISCONTINUITY_REASON_SEEK) {
@@ -293,7 +291,7 @@ public class NativePlayerController {
             }
 
             @Override
-            public void onPlayerError(@NonNull PlaybackException error) {
+            public void onPlayerError(PlaybackException error) {
                 if (!isActive) return;
                 stopTicking();
                 int code = error.errorCode;
