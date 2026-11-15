@@ -272,13 +272,18 @@ public class MainActivity extends Activity {
         splashOverlay = new FrameLayout(this);
         splashOverlay.setBackground(UiHelper.createCastBackgroundDrawable());
         splashOverlay.setClickable(true);
+        splashOverlay.setClipChildren(false);
+        splashOverlay.setClipToPadding(false);
 
         splashContent = new LinearLayout(this);
         splashContent.setOrientation(LinearLayout.VERTICAL);
         splashContent.setGravity(Gravity.CENTER_HORIZONTAL);
-        splashContent.setPadding(UiHelper.dp(this, 40), UiHelper.dp(this, 36),
-                UiHelper.dp(this, 40), UiHelper.dp(this, 36));
-        UiHelper.applyGlassCardStyle(splashContent, this, 40, UiHelper.COLOR_SURFACE_GLASS, 24);
+        splashContent.setMinimumWidth(UiHelper.dp(this, 360));
+        splashContent.setClipChildren(false);
+        splashContent.setClipToPadding(false);
+        splashContent.setPadding(UiHelper.dp(this, 48), UiHelper.dp(this, 38),
+                UiHelper.dp(this, 48), UiHelper.dp(this, 38));
+        UiHelper.applyGlassCardStyle(splashContent, this, 36, UiHelper.COLOR_SURFACE_CARD, 24);
 
         FrameLayout.LayoutParams contentLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -299,22 +304,24 @@ public class MainActivity extends Activity {
         appTitle.setText("Đặng Việt Anh");
         appTitle.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
         appTitle.setTextSize(24);
+        appTitle.setSingleLine(true);
         appTitle.setTypeface(Typeface.DEFAULT_BOLD);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        titleLp.bottomMargin = UiHelper.dp(this, 20);
+        titleLp.bottomMargin = UiHelper.dp(this, 22);
         splashContent.addView(appTitle, titleLp);
 
         LinearLayout statusPill = new LinearLayout(this);
         statusPill.setOrientation(LinearLayout.HORIZONTAL);
-        statusPill.setGravity(Gravity.CENTER_VERTICAL);
-        statusPill.setPadding(UiHelper.dp(this, 20), UiHelper.dp(this, 12),
-                UiHelper.dp(this, 22), UiHelper.dp(this, 12));
-        UiHelper.applyGlassCardStyle(statusPill, this, 24, UiHelper.COLOR_SURFACE_GLASS, 8);
+        statusPill.setGravity(Gravity.CENTER);
+        statusPill.setMinimumWidth(UiHelper.dp(this, 232));
+        statusPill.setPadding(UiHelper.dp(this, 26), UiHelper.dp(this, 13),
+                UiHelper.dp(this, 28), UiHelper.dp(this, 13));
+        UiHelper.applyGlassCardStyle(statusPill, this, 999, UiHelper.COLOR_SURFACE_PILL, 8);
 
         splashSpinner = new UiHelper.SpinnerView(this);
         LinearLayout.LayoutParams spinLp = new LinearLayout.LayoutParams(
-                UiHelper.dp(this, 24), UiHelper.dp(this, 24));
+                UiHelper.dp(this, 22), UiHelper.dp(this, 22));
         spinLp.rightMargin = UiHelper.dp(this, 12);
         statusPill.addView(splashSpinner, spinLp);
 
@@ -322,21 +329,28 @@ public class MainActivity extends Activity {
         splashStatusTv.setText("Đang kết nối...");
         splashStatusTv.setTextColor(Color.WHITE);
         splashStatusTv.setTextSize(15);
+        splashStatusTv.setSingleLine(true);
+        splashStatusTv.setIncludeFontPadding(true);
         splashStatusTv.setTypeface(Typeface.DEFAULT_BOLD);
-        statusPill.addView(splashStatusTv);
+        LinearLayout.LayoutParams statusTextLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        statusPill.addView(splashStatusTv, statusTextLp);
 
-        splashContent.addView(statusPill);
+        LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        splashContent.addView(statusPill, pillLp);
 
         splashRetryBtn = new TextView(this);
         splashRetryBtn.setText("Thử lại ngay");
         splashRetryBtn.setTextColor(Color.WHITE);
         splashRetryBtn.setTextSize(14);
+        splashRetryBtn.setSingleLine(true);
         splashRetryBtn.setTypeface(Typeface.DEFAULT_BOLD);
         splashRetryBtn.setGravity(Gravity.CENTER);
-        splashRetryBtn.setPadding(UiHelper.dp(this, 22), UiHelper.dp(this, 12),
-                UiHelper.dp(this, 22), UiHelper.dp(this, 12));
+        splashRetryBtn.setPadding(UiHelper.dp(this, 26), UiHelper.dp(this, 12),
+                UiHelper.dp(this, 26), UiHelper.dp(this, 12));
         UiHelper.applyFocusableTileStyle(splashRetryBtn, this, 24,
-                Color.argb(95, 229, 9, 20), Color.argb(190, 229, 9, 20));
+                UiHelper.COLOR_BTN_THEME_NORMAL, UiHelper.COLOR_BTN_THEME_FOCUSED);
         splashRetryBtn.setVisibility(View.GONE);
         splashRetryBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -718,10 +732,22 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    private static class NativeBridge {
+    private class NativeBridge {
         @JavascriptInterface
         public boolean isNativeApp() {
             return true;
+        }
+
+        @JavascriptInterface
+        public void openOverlayMenu() {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (splashDismissed && !updateManager.isShowing() && !overlayMenu.isShowing()) {
+                        overlayMenu.show();
+                    }
+                }
+            });
         }
     }
 }

@@ -31,11 +31,16 @@ import java.util.Locale;
 public final class UiHelper {
 
     public static final int COLOR_BG_BASE = Color.parseColor("#07090F");
-    public static final int COLOR_SURFACE_GLASS = Color.argb(64, 0, 0, 0);        // rgba(0, 0, 0, 0.25)
-    public static final int COLOR_SURFACE_CARD = Color.argb(140, 10, 12, 18);     // readable glass backing
-    public static final int COLOR_BORDER_GLASS = Color.argb(46, 255, 255, 255);   // rgba(255, 255, 255, 0.18)
+    public static final int COLOR_SURFACE_GLASS = Color.argb(145, 10, 12, 20);      // Rich readable obsidian glass
+    public static final int COLOR_SURFACE_CARD = Color.argb(215, 11, 13, 22);       // Deep card glass backing
+    public static final int COLOR_SURFACE_PILL = Color.argb(175, 14, 16, 26);       // Pill backing
+    public static final int COLOR_BORDER_GLASS = Color.argb(56, 255, 255, 255);     // rgba(255, 255, 255, 0.22)
+    public static final int COLOR_BORDER_THEME = Color.argb(96, 229, 9, 20);        // Subtle crimson-rose border matching radial gradient
+    public static final int COLOR_BORDER_FOCUS = Color.parseColor("#FF3B5C");       // Vibrant crimson-pink focus border
     public static final int COLOR_ACCENT_RED = Color.parseColor("#E50914");
     public static final int COLOR_ACCENT_PINK = Color.parseColor("#D50055");
+    public static final int COLOR_BTN_THEME_NORMAL = Color.argb(48, 229, 9, 20);    // Subtle red-pink tinted glass button
+    public static final int COLOR_BTN_THEME_FOCUSED = Color.argb(115, 213, 0, 85);  // Active crimson-magenta focus fill
     public static final int COLOR_TEXT_PRIMARY = Color.parseColor("#F5F6FA");
     public static final int COLOR_TEXT_MUTED = Color.parseColor("#B0B8C8");
     public static final int COLOR_GREEN = Color.parseColor("#30D158");
@@ -100,6 +105,55 @@ public final class UiHelper {
         };
     }
 
+    /**
+     * Translucent ambient backdrop for Overlay Menu matching the radial-gradient theme.
+     */
+    public static Drawable createOverlayBackdropDrawable() {
+        return new Drawable() {
+            private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private final Paint g1Paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private final Paint g2Paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private int lastW = -1;
+            private int lastH = -1;
+
+            @Override
+            public void draw(Canvas canvas) {
+                Rect b = getBounds();
+                int w = b.width();
+                int h = b.height();
+                if (w <= 0 || h <= 0) return;
+                if (w != lastW || h != lastH) {
+                    lastW = w;
+                    lastH = h;
+                    basePaint.setColor(Color.argb(226, 7, 9, 15));
+                    float radius = Math.max(w, h) * 0.55f;
+                    g1Paint.setShader(new RadialGradient(
+                            w * 0.20f, h * 0.20f, radius,
+                            Color.argb(46, 229, 9, 20), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+                    g2Paint.setShader(new RadialGradient(
+                            w * 0.80f, h * 0.80f, radius,
+                            Color.argb(36, 213, 0, 85), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+                }
+                canvas.drawRect(b, basePaint);
+                canvas.drawRect(b, g1Paint);
+                canvas.drawRect(b, g2Paint);
+            }
+
+            @Override
+            public void setAlpha(int alpha) {
+            }
+
+            @Override
+            public void setColorFilter(ColorFilter colorFilter) {
+            }
+
+            @Override
+            public int getOpacity() {
+                return PixelFormat.TRANSLUCENT;
+            }
+        };
+    }
+
     public static GradientDrawable createGlassRect(Context ctx, int radiusDp, int fillColor, int strokeColor, int strokeDp) {
         GradientDrawable d = new GradientDrawable();
         d.setShape(GradientDrawable.RECTANGLE);
@@ -109,8 +163,18 @@ public final class UiHelper {
         return d;
     }
 
+    public static GradientDrawable createThemeGradientRect(Context ctx, int radiusDp, int alpha, int strokeColor, int strokeDp) {
+        int c1 = Color.argb(alpha, 229, 9, 20);
+        int c2 = Color.argb(alpha, 213, 0, 85);
+        GradientDrawable d = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{c1, c2});
+        d.setShape(GradientDrawable.RECTANGLE);
+        d.setCornerRadius(dp(ctx, radiusDp));
+        d.setStroke(dp(ctx, strokeDp), strokeColor);
+        return d;
+    }
+
     public static void applyGlassCardStyle(final View view, final Context ctx, final int radiusDp, int fillColor, int shadowDp) {
-        view.setBackground(createGlassRect(ctx, radiusDp, fillColor, COLOR_BORDER_GLASS, 1));
+        view.setBackground(createGlassRect(ctx, radiusDp, fillColor, COLOR_BORDER_THEME, 1));
         view.setElevation(dp(ctx, shadowDp));
         view.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -118,13 +182,13 @@ public final class UiHelper {
                 outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(ctx, radiusDp));
             }
         });
-        view.setClipToOutline(true);
+        view.setClipToOutline(false);
     }
 
     public static void applyFocusableTileStyle(final View view, final Context ctx, final int radiusDp, int normalFill, int focusedFill) {
-        GradientDrawable normal = createGlassRect(ctx, radiusDp, normalFill, COLOR_BORDER_GLASS, 1);
-        GradientDrawable focused = createGlassRect(ctx, radiusDp, focusedFill, Color.WHITE, 2);
-        GradientDrawable pressed = createGlassRect(ctx, radiusDp, focusedFill, Color.WHITE, 2);
+        GradientDrawable normal = createGlassRect(ctx, radiusDp, normalFill, COLOR_BORDER_THEME, 1);
+        GradientDrawable focused = createThemeGradientRect(ctx, radiusDp, 115, COLOR_BORDER_FOCUS, 2);
+        GradientDrawable pressed = createThemeGradientRect(ctx, radiusDp, 150, Color.WHITE, 2);
 
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, pressed);
@@ -133,7 +197,7 @@ public final class UiHelper {
         view.setBackground(states);
         view.setFocusable(true);
         view.setClickable(true);
-        view.setElevation(dp(ctx, 8));
+        view.setElevation(dp(ctx, 6));
         view.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View v, Outline outline) {
@@ -144,11 +208,11 @@ public final class UiHelper {
         view.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
-                float targetScale = hasFocus ? 1.035f : 1.0f;
+                float targetScale = hasFocus ? 1.025f : 1.0f;
                 v.animate()
                         .scaleX(targetScale)
                         .scaleY(targetScale)
-                        .setDuration(150)
+                        .setDuration(140)
                         .setInterpolator(new DecelerateInterpolator())
                         .start();
             }

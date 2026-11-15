@@ -6,6 +6,8 @@ import android.graphics.RenderEffect;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.Build;
+import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -14,6 +16,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 public class OverlayMenuController {
@@ -54,11 +57,17 @@ public class OverlayMenuController {
     }
 
     private void buildUi() {
+        DisplayMetrics dm = context.getResources().getDisplayMetrics();
+        int screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(context, 960);
+        int cardWidth = Math.min(UiHelper.dp(context, 610), Math.round(screenW * 0.90f));
+
         overlayRoot = new FrameLayout(context);
         overlayRoot.setVisibility(View.GONE);
-        overlayRoot.setBackgroundColor(Color.argb(198, 5, 7, 12));
+        overlayRoot.setBackground(UiHelper.createOverlayBackdropDrawable());
         overlayRoot.setClickable(true);
         overlayRoot.setFocusable(false);
+        overlayRoot.setClipChildren(false);
+        overlayRoot.setClipToPadding(false);
         overlayRoot.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -66,80 +75,147 @@ public class OverlayMenuController {
             }
         });
 
+        // ScrollView wrapper so small projector viewports never clip top or bottom
+        ScrollView scrollWrapper = new ScrollView(context);
+        scrollWrapper.setVerticalScrollBarEnabled(false);
+        scrollWrapper.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        scrollWrapper.setClipChildren(false);
+        scrollWrapper.setClipToPadding(false);
+        FrameLayout.LayoutParams scrollLp = new FrameLayout.LayoutParams(
+                cardWidth,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER);
+        scrollLp.setMargins(UiHelper.dp(context, 16), UiHelper.dp(context, 12),
+                UiHelper.dp(context, 16), UiHelper.dp(context, 12));
+
+        FrameLayout cardContainer = new FrameLayout(context);
+        cardContainer.setClipChildren(false);
+        cardContainer.setClipToPadding(false);
+        int outerPad = UiHelper.dp(context, 6);
+        cardContainer.setPadding(outerPad, outerPad, outerPad, outerPad);
+
         mainCard = new LinearLayout(context);
         mainCard.setOrientation(LinearLayout.VERTICAL);
-        int padH = UiHelper.dp(context, 30);
-        int padV = UiHelper.dp(context, 28);
+        int padH = UiHelper.dp(context, 22);
+        int padV = UiHelper.dp(context, 18);
         mainCard.setPadding(padH, padV, padH, padV);
         mainCard.setClickable(true);
-        UiHelper.applyGlassCardStyle(mainCard, context, 40, UiHelper.COLOR_SURFACE_GLASS, 24);
+        mainCard.setClipChildren(false);
+        mainCard.setClipToPadding(false);
+        UiHelper.applyGlassCardStyle(mainCard, context, 28, UiHelper.COLOR_SURFACE_CARD, 20);
 
-        FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(
-                UiHelper.dp(context, 640),
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardLp.gravity = Gravity.CENTER;
-        cardLp.setMargins(UiHelper.dp(context, 24), UiHelper.dp(context, 20),
-                UiHelper.dp(context, 24), UiHelper.dp(context, 20));
-
-        // 1. Header
+        // 1. Compact Apple TV / Netflix TV Header Row
         LinearLayout headerRow = new LinearLayout(context);
         headerRow.setOrientation(LinearLayout.HORIZONTAL);
         headerRow.setGravity(Gravity.CENTER_VERTICAL);
+        headerRow.setClipChildren(false);
+        headerRow.setClipToPadding(false);
         LinearLayout.LayoutParams headerLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        headerLp.bottomMargin = UiHelper.dp(context, 18);
+        headerLp.bottomMargin = UiHelper.dp(context, 12);
+
+        ImageView brandLogo = new ImageView(context);
+        brandLogo.setImageResource(R.drawable.splash_logo);
+        brandLogo.setAdjustViewBounds(true);
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(
+                UiHelper.dp(context, 36), UiHelper.dp(context, 36));
+        logoLp.rightMargin = UiHelper.dp(context, 12);
+        headerRow.addView(brandLogo, logoLp);
 
         LinearLayout titleCol = new LinearLayout(context);
         titleCol.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams titleColLp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
 
+        LinearLayout titleBadgeRow = new LinearLayout(context);
+        titleBadgeRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleBadgeRow.setGravity(Gravity.CENTER_VERTICAL);
+
         TextView titleTv = new TextView(context);
         titleTv.setText("Tiện ích & Bảo trì");
         titleTv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
-        titleTv.setTextSize(22);
+        titleTv.setTextSize(18);
+        titleTv.setSingleLine(true);
         titleTv.setTypeface(Typeface.DEFAULT_BOLD);
-
-        TextView subTv = new TextView(context);
-        subTv.setText("Đặng Việt Anh · Nhấn Menu hoặc giữ OK để mở nhanh");
-        subTv.setTextColor(UiHelper.COLOR_TEXT_MUTED);
-        subTv.setTextSize(12);
-        subTv.setPadding(0, UiHelper.dp(context, 3), 0, 0);
-
-        titleCol.addView(titleTv);
-        titleCol.addView(subTv);
-        headerRow.addView(titleCol, titleColLp);
+        titleBadgeRow.addView(titleTv);
 
         TextView verPill = new TextView(context);
         verPill.setText("v" + actions.getVersionName());
-        verPill.setTextColor(Color.WHITE);
-        verPill.setTextSize(12);
+        verPill.setTextColor(Color.parseColor("#FF8A9B"));
+        verPill.setTextSize(11);
+        verPill.setSingleLine(true);
         verPill.setTypeface(Typeface.DEFAULT_BOLD);
-        verPill.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 7),
-                UiHelper.dp(context, 14), UiHelper.dp(context, 7));
-        UiHelper.applyGlassCardStyle(verPill, context, 24, UiHelper.COLOR_SURFACE_GLASS, 6);
-        headerRow.addView(verPill);
+        verPill.setPadding(UiHelper.dp(context, 9), UiHelper.dp(context, 3),
+                UiHelper.dp(context, 9), UiHelper.dp(context, 3));
+        verPill.setBackground(UiHelper.createGlassRect(context, 999,
+                UiHelper.COLOR_BTN_THEME_NORMAL, UiHelper.COLOR_BORDER_THEME, 1));
+        LinearLayout.LayoutParams verLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        verLp.leftMargin = UiHelper.dp(context, 8);
+        titleBadgeRow.addView(verPill, verLp);
+
+        TextView subTv = new TextView(context);
+        subTv.setText("DVA Cast TV · Trung tâm điều khiển & chẩn đoán");
+        subTv.setTextColor(UiHelper.COLOR_TEXT_MUTED);
+        subTv.setTextSize(11.5f);
+        subTv.setSingleLine(true);
+        subTv.setEllipsize(TextUtils.TruncateAt.END);
+        subTv.setPadding(0, UiHelper.dp(context, 2), 0, 0);
+
+        titleCol.addView(titleBadgeRow);
+        titleCol.addView(subTv);
+        headerRow.addView(titleCol, titleColLp);
+
+        // Top-right Close Button (saves vertical height)
+        TextView closeBtn = new TextView(context);
+        closeBtn.setId(View.generateViewId());
+        closeBtn.setText("✕  Đóng");
+        closeBtn.setTextColor(Color.WHITE);
+        closeBtn.setTextSize(13);
+        closeBtn.setSingleLine(true);
+        closeBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        closeBtn.setGravity(Gravity.CENTER);
+        closeBtn.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 8),
+                UiHelper.dp(context, 16), UiHelper.dp(context, 8));
+        UiHelper.applyFocusableTileStyle(closeBtn, context, 999,
+                UiHelper.COLOR_BTN_THEME_NORMAL, UiHelper.COLOR_BTN_THEME_FOCUSED);
+        closeBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                hide();
+            }
+        });
+        LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        closeLp.leftMargin = UiHelper.dp(context, 10);
+        headerRow.addView(closeBtn, closeLp);
 
         mainCard.addView(headerRow, headerLp);
 
-        // 2. Wi-Fi IP Info Banner (rounded 24dp)
+        // 2. Compact Wi-Fi IP & ADB Status Banner
         LinearLayout ipCard = new LinearLayout(context);
         ipCard.setOrientation(LinearLayout.HORIZONTAL);
         ipCard.setGravity(Gravity.CENTER_VERTICAL);
-        ipCard.setPadding(UiHelper.dp(context, 18), UiHelper.dp(context, 14),
-                UiHelper.dp(context, 18), UiHelper.dp(context, 14));
-        UiHelper.applyGlassCardStyle(ipCard, context, 24, UiHelper.COLOR_SURFACE_GLASS, 8);
+        ipCard.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 10),
+                UiHelper.dp(context, 14), UiHelper.dp(context, 10));
+        ipCard.setBackground(UiHelper.createGlassRect(context, 18,
+                UiHelper.COLOR_SURFACE_PILL, UiHelper.COLOR_BORDER_THEME, 1));
         LinearLayout.LayoutParams ipLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        ipLp.bottomMargin = UiHelper.dp(context, 16);
+        ipLp.bottomMargin = UiHelper.dp(context, 12);
 
+        FrameLayout wifiBox = new FrameLayout(context);
+        wifiBox.setBackground(UiHelper.createThemeGradientRect(context, 12, 55,
+                UiHelper.COLOR_BORDER_THEME, 1));
         ImageView wifiIcon = new ImageView(context);
         wifiIcon.setImageResource(R.drawable.ic_wifi);
-        wifiIcon.setColorFilter(Color.parseColor("#64D2FF"));
-        LinearLayout.LayoutParams wifiIconLp = new LinearLayout.LayoutParams(
-                UiHelper.dp(context, 24), UiHelper.dp(context, 24));
-        wifiIconLp.rightMargin = UiHelper.dp(context, 14);
-        ipCard.addView(wifiIcon, wifiIconLp);
+        wifiIcon.setColorFilter(Color.parseColor("#FF4D6D"));
+        wifiBox.addView(wifiIcon, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 18), UiHelper.dp(context, 18), Gravity.CENTER));
+        LinearLayout.LayoutParams wifiBoxLp = new LinearLayout.LayoutParams(
+                UiHelper.dp(context, 34), UiHelper.dp(context, 34));
+        wifiBoxLp.rightMargin = UiHelper.dp(context, 12);
+        ipCard.addView(wifiBox, wifiBoxLp);
 
         LinearLayout ipTextCol = new LinearLayout(context);
         ipTextCol.setOrientation(LinearLayout.VERTICAL);
@@ -147,15 +223,18 @@ public class OverlayMenuController {
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
 
         TextView ipLabel = new TextView(context);
-        ipLabel.setText("Địa chỉ IP Wi-Fi của máy chiếu");
-        ipLabel.setTextColor(UiHelper.COLOR_TEXT_MUTED);
+        ipLabel.setText("Địa chỉ IP mạng của máy chiếu");
+        ipLabel.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
         ipLabel.setTextSize(12);
+        ipLabel.setSingleLine(true);
+        ipLabel.setTypeface(Typeface.DEFAULT_BOLD);
 
         adbHintView = new TextView(context);
         adbHintView.setText("adb connect ...:5555");
-        adbHintView.setTextColor(Color.argb(180, 176, 184, 200));
+        adbHintView.setTextColor(UiHelper.COLOR_TEXT_MUTED);
         adbHintView.setTextSize(11);
-        adbHintView.setPadding(0, UiHelper.dp(context, 2), 0, 0);
+        adbHintView.setSingleLine(true);
+        adbHintView.setEllipsize(TextUtils.TruncateAt.END);
 
         ipTextCol.addView(ipLabel);
         ipTextCol.addView(adbHintView);
@@ -164,27 +243,36 @@ public class OverlayMenuController {
         ipValueView = new TextView(context);
         ipValueView.setText("...");
         ipValueView.setTextColor(Color.WHITE);
-        ipValueView.setTextSize(16);
+        ipValueView.setTextSize(13.5f);
+        ipValueView.setSingleLine(true);
         ipValueView.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        ipValueView.setPadding(UiHelper.dp(context, 12), UiHelper.dp(context, 5),
+                UiHelper.dp(context, 12), UiHelper.dp(context, 5));
+        ipValueView.setBackground(UiHelper.createGlassRect(context, 999,
+                UiHelper.COLOR_BTN_THEME_NORMAL, UiHelper.COLOR_BORDER_THEME, 1));
         ipCard.addView(ipValueView);
 
         mainCard.addView(ipCard, ipLp);
 
-        // 3. 2x2 Action Tiles (rounded 24dp)
+        // 3. 2x2 Sleek Horizontal Action Cards (Apple TV / Netflix TV Control Center style)
         LinearLayout row1 = new LinearLayout(context);
         row1.setOrientation(LinearLayout.HORIZONTAL);
+        row1.setClipChildren(false);
+        row1.setClipToPadding(false);
         LinearLayout.LayoutParams row1Lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        row1Lp.bottomMargin = UiHelper.dp(context, 12);
+        row1Lp.bottomMargin = UiHelper.dp(context, 10);
 
         LinearLayout row2 = new LinearLayout(context);
         row2.setOrientation(LinearLayout.HORIZONTAL);
+        row2.setClipChildren(false);
+        row2.setClipToPadding(false);
         LinearLayout.LayoutParams row2Lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        row2Lp.bottomMargin = UiHelper.dp(context, 18);
+        row2Lp.bottomMargin = UiHelper.dp(context, 10);
 
-        View tileReload = createActionTile(
-                R.drawable.ic_reload, "#64D2FF",
+        View tileReload = createHorizontalActionTile(
+                R.drawable.ic_reload, "#FF4D6D",
                 "Tải lại trang", "Làm mới mã QR & kết nối",
                 null,
                 new View.OnClickListener() {
@@ -195,7 +283,7 @@ public class OverlayMenuController {
                     }
                 });
 
-        View tileCache = createActionTile(
+        View tileCache = createHorizontalActionTile(
                 R.drawable.ic_clean, "#FFD60A",
                 "Xóa Cache", "Dọn bộ nhớ đệm & tải lại",
                 null,
@@ -208,14 +296,15 @@ public class OverlayMenuController {
                 });
 
         autoStartBadge = new TextView(context);
-        autoStartBadge.setTextSize(11);
+        autoStartBadge.setTextSize(10);
+        autoStartBadge.setSingleLine(true);
         autoStartBadge.setTypeface(Typeface.DEFAULT_BOLD);
-        autoStartBadge.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 4),
-                UiHelper.dp(context, 10), UiHelper.dp(context, 4));
+        autoStartBadge.setPadding(UiHelper.dp(context, 8), UiHelper.dp(context, 3),
+                UiHelper.dp(context, 8), UiHelper.dp(context, 3));
 
-        View tileAutoStart = createActionTile(
+        View tileAutoStart = createHorizontalActionTile(
                 R.drawable.ic_power, "#30D158",
-                "Tự khởi động", "Mở app khi bật máy chiếu",
+                "Tự khởi động", "Mở khi bật máy",
                 autoStartBadge,
                 new View.OnClickListener() {
                     @Override
@@ -226,9 +315,9 @@ public class OverlayMenuController {
                     }
                 });
 
-        View tileUpdate = createActionTile(
-                R.drawable.ic_update, "#FF453A",
-                "Kiểm tra cập nhật", "Tải & cài đặt bản mới qua Wi-Fi",
+        View tileUpdate = createHorizontalActionTile(
+                R.drawable.ic_update, "#E50914",
+                "Cập nhật OTA", "Kiểm tra & tải bản mới",
                 null,
                 new View.OnClickListener() {
                     @Override
@@ -238,10 +327,12 @@ public class OverlayMenuController {
                     }
                 });
 
-        LinearLayout.LayoutParams leftTileLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        leftTileLp.rightMargin = UiHelper.dp(context, 6);
-        LinearLayout.LayoutParams rightTileLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        rightTileLp.leftMargin = UiHelper.dp(context, 6);
+        LinearLayout.LayoutParams leftTileLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        leftTileLp.rightMargin = UiHelper.dp(context, 5);
+        LinearLayout.LayoutParams rightTileLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        rightTileLp.leftMargin = UiHelper.dp(context, 5);
 
         row1.addView(tileReload, leftTileLp);
         row1.addView(tileCache, rightTileLp);
@@ -251,29 +342,16 @@ public class OverlayMenuController {
         mainCard.addView(row1, row1Lp);
         mainCard.addView(row2, row2Lp);
 
-        // 4. Close Button (rounded 24dp)
-        TextView closeBtn = new TextView(context);
-        closeBtn.setId(View.generateViewId());
-        closeBtn.setText("Đóng menu");
-        closeBtn.setTextColor(Color.WHITE);
-        closeBtn.setTextSize(14);
-        closeBtn.setTypeface(Typeface.DEFAULT_BOLD);
-        closeBtn.setGravity(Gravity.CENTER);
-        closeBtn.setPadding(UiHelper.dp(context, 24), UiHelper.dp(context, 12),
-                UiHelper.dp(context, 24), UiHelper.dp(context, 12));
-        UiHelper.applyFocusableTileStyle(closeBtn, context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, Color.argb(90, 255, 255, 255));
-        closeBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                hide();
-            }
-        });
-
-        LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        closeLp.gravity = Gravity.CENTER_HORIZONTAL;
-        mainCard.addView(closeBtn, closeLp);
+        // 4. Compact Footer Hint
+        TextView footerHint = new TextView(context);
+        footerHint.setText("Nhấn phím Back / Menu để đóng · Giữ phím OK bất kỳ lúc nào để mở lại");
+        footerHint.setTextColor(Color.argb(165, 176, 184, 200));
+        footerHint.setTextSize(11);
+        footerHint.setSingleLine(true);
+        footerHint.setEllipsize(TextUtils.TruncateAt.END);
+        footerHint.setGravity(Gravity.CENTER_HORIZONTAL);
+        mainCard.addView(footerHint, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // Wire explicit D-Pad navigation so focus never escapes behind the overlay
         tileReload.setId(View.generateViewId());
@@ -283,12 +361,12 @@ public class OverlayMenuController {
 
         tileReload.setNextFocusRightId(tileCache.getId());
         tileReload.setNextFocusLeftId(tileReload.getId());
-        tileReload.setNextFocusUpId(tileReload.getId());
+        tileReload.setNextFocusUpId(closeBtn.getId());
         tileReload.setNextFocusDownId(tileAutoStart.getId());
 
         tileCache.setNextFocusLeftId(tileReload.getId());
-        tileCache.setNextFocusRightId(tileCache.getId());
-        tileCache.setNextFocusUpId(tileCache.getId());
+        tileCache.setNextFocusRightId(closeBtn.getId());
+        tileCache.setNextFocusUpId(closeBtn.getId());
         tileCache.setNextFocusDownId(tileUpdate.getId());
 
         tileAutoStart.setNextFocusUpId(tileReload.getId());
@@ -298,37 +376,36 @@ public class OverlayMenuController {
 
         tileUpdate.setNextFocusUpId(tileCache.getId());
         tileUpdate.setNextFocusLeftId(tileAutoStart.getId());
-        tileUpdate.setNextFocusRightId(tileUpdate.getId());
+        tileUpdate.setNextFocusRightId(closeBtn.getId());
         tileUpdate.setNextFocusDownId(closeBtn.getId());
 
-        closeBtn.setNextFocusUpId(tileAutoStart.getId());
-        closeBtn.setNextFocusDownId(closeBtn.getId());
-        closeBtn.setNextFocusLeftId(closeBtn.getId());
+        closeBtn.setNextFocusDownId(tileCache.getId());
+        closeBtn.setNextFocusLeftId(tileReload.getId());
+        closeBtn.setNextFocusUpId(closeBtn.getId());
         closeBtn.setNextFocusRightId(closeBtn.getId());
 
         firstTile = tileReload;
-        overlayRoot.addView(mainCard, cardLp);
+        cardContainer.addView(mainCard, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scrollWrapper.addView(cardContainer, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        overlayRoot.addView(scrollWrapper, scrollLp);
     }
 
-    private View createActionTile(int iconRes, String iconTintHex, String title, String subtitle,
-                                  TextView optionalBadge, View.OnClickListener listener) {
+    private View createHorizontalActionTile(int iconRes, String iconTintHex, String title, String subtitle,
+                                            TextView optionalBadge, View.OnClickListener listener) {
         LinearLayout tile = new LinearLayout(context);
-        tile.setOrientation(LinearLayout.VERTICAL);
-        tile.setPadding(UiHelper.dp(context, 18), UiHelper.dp(context, 16),
-                UiHelper.dp(context, 18), UiHelper.dp(context, 16));
-        UiHelper.applyFocusableTileStyle(tile, context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, Color.argb(64, 255, 255, 255));
+        tile.setOrientation(LinearLayout.HORIZONTAL);
+        tile.setGravity(Gravity.CENTER_VERTICAL);
+        tile.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 12),
+                UiHelper.dp(context, 14), UiHelper.dp(context, 12));
+        UiHelper.applyFocusableTileStyle(tile, context, 20,
+                UiHelper.COLOR_SURFACE_PILL, UiHelper.COLOR_BTN_THEME_FOCUSED);
         tile.setOnClickListener(listener);
 
-        LinearLayout topRow = new LinearLayout(context);
-        topRow.setOrientation(LinearLayout.HORIZONTAL);
-        topRow.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams topLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        topLp.bottomMargin = UiHelper.dp(context, 12);
-
         FrameLayout iconBox = new FrameLayout(context);
-        UiHelper.applyGlassCardStyle(iconBox, context, 14, Color.argb(72, 0, 0, 0), 2);
+        iconBox.setBackground(UiHelper.createThemeGradientRect(context, 14, 52,
+                UiHelper.COLOR_BORDER_THEME, 1));
         ImageView iv = new ImageView(context);
         iv.setImageResource(iconRes);
         iv.setColorFilter(Color.parseColor(iconTintHex));
@@ -337,30 +414,49 @@ public class OverlayMenuController {
         iconBox.addView(iv, ivLp);
 
         LinearLayout.LayoutParams iconBoxLp = new LinearLayout.LayoutParams(
-                UiHelper.dp(context, 38), UiHelper.dp(context, 38));
-        topRow.addView(iconBox, iconBoxLp);
+                UiHelper.dp(context, 40), UiHelper.dp(context, 40));
+        iconBoxLp.rightMargin = UiHelper.dp(context, 12);
+        tile.addView(iconBox, iconBoxLp);
 
-        if (optionalBadge != null) {
-            View spacer = new View(context);
-            topRow.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
-            topRow.addView(optionalBadge);
-        }
+        LinearLayout textCol = new LinearLayout(context);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams textColLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+
+        LinearLayout titleRow = new LinearLayout(context);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView titleTv = new TextView(context);
         titleTv.setText(title);
         titleTv.setTextColor(Color.WHITE);
-        titleTv.setTextSize(15);
+        titleTv.setTextSize(14);
+        titleTv.setSingleLine(true);
+        titleTv.setEllipsize(TextUtils.TruncateAt.END);
         titleTv.setTypeface(Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams titleTvLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titleRow.addView(titleTv, titleTvLp);
+
+        if (optionalBadge != null) {
+            LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            badgeLp.leftMargin = UiHelper.dp(context, 6);
+            titleRow.addView(optionalBadge, badgeLp);
+        }
 
         TextView subTv = new TextView(context);
         subTv.setText(subtitle);
         subTv.setTextColor(UiHelper.COLOR_TEXT_MUTED);
-        subTv.setTextSize(12);
-        subTv.setPadding(0, UiHelper.dp(context, 3), 0, 0);
+        subTv.setTextSize(11.5f);
+        subTv.setSingleLine(true);
+        subTv.setEllipsize(TextUtils.TruncateAt.END);
+        subTv.setPadding(0, UiHelper.dp(context, 2), 0, 0);
 
-        tile.addView(topRow, topLp);
-        tile.addView(titleTv);
-        tile.addView(subTv);
+        textCol.addView(titleRow);
+        textCol.addView(subTv);
+        tile.addView(textCol, textColLp);
+
         return tile;
     }
 
@@ -368,18 +464,19 @@ public class OverlayMenuController {
         String ip = UiHelper.getWifiIpAddress(context);
         ipValueView.setText(ip);
         if (ip.contains(".")) {
-            adbHintView.setText("Cài qua mạng: adb connect " + ip + ":5555");
+            adbHintView.setText("ADB mạng LAN: adb connect " + ip + ":5555");
         } else {
-            adbHintView.setText("Kiểm tra lại kết nối Wi-Fi / LAN trên máy chiếu");
+            adbHintView.setText("Kiểm tra kết nối Wi-Fi / LAN trên máy chiếu");
         }
     }
 
     private void refreshAutoStartBadge() {
         boolean on = Prefs.isAutoStartEnabled(context);
-        autoStartBadge.setText(on ? "ĐANG BẬT" : "ĐANG TẮT");
+        autoStartBadge.setText(on ? "BẬT" : "TẮT");
         autoStartBadge.setTextColor(on ? UiHelper.COLOR_GREEN : UiHelper.COLOR_TEXT_MUTED);
-        UiHelper.applyGlassCardStyle(autoStartBadge, context, 12,
-                on ? Color.argb(46, 48, 209, 88) : UiHelper.COLOR_SURFACE_GLASS, 0);
+        autoStartBadge.setBackground(UiHelper.createGlassRect(context, 999,
+                on ? Color.argb(52, 48, 209, 88) : Color.argb(90, 20, 24, 36),
+                on ? Color.argb(120, 48, 209, 88) : UiHelper.COLOR_BORDER_GLASS, 1));
     }
 
     public void show() {
@@ -395,11 +492,11 @@ public class OverlayMenuController {
 
         overlayRoot.setAlpha(0f);
         overlayRoot.setVisibility(View.VISIBLE);
-        mainCard.setScaleX(0.94f);
-        mainCard.setScaleY(0.94f);
+        mainCard.setScaleX(0.95f);
+        mainCard.setScaleY(0.95f);
 
-        overlayRoot.animate().alpha(1f).setDuration(220).start();
-        mainCard.animate().scaleX(1f).scaleY(1f).setDuration(240)
+        overlayRoot.animate().alpha(1f).setDuration(200).start();
+        mainCard.animate().scaleX(1f).scaleY(1f).setDuration(220)
                 .setInterpolator(new DecelerateInterpolator()).start();
 
         firstTile.post(new Runnable() {
@@ -418,7 +515,7 @@ public class OverlayMenuController {
             backgroundToBlur.setRenderEffect(null);
         }
 
-        overlayRoot.animate().alpha(0f).setDuration(180).withEndAction(new Runnable() {
+        overlayRoot.animate().alpha(0f).setDuration(170).withEndAction(new Runnable() {
             @Override
             public void run() {
                 overlayRoot.setVisibility(View.GONE);
