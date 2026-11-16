@@ -143,6 +143,9 @@ public class MainActivity extends Activity {
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setDefaultFocusHighlightEnabled(false);
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -717,16 +720,33 @@ public class MainActivity extends Activity {
                     longPressTriggered = false;
                     handler.removeCallbacks(longPressMenuRunnable);
                     handler.postDelayed(longPressMenuRunnable, LONG_PRESS_MENU_MS);
-                } else if (longPressTriggered) {
-                    return true;
                 }
+                return true;
             } else if (action == KeyEvent.ACTION_UP) {
                 handler.removeCallbacks(longPressMenuRunnable);
                 if (longPressTriggered) {
                     longPressTriggered = false;
                     return true;
                 }
+                if (splashDismissed) {
+                    evalVideoJs("if(window.__dvaHandleTvKey)window.__dvaHandleTvKey('Enter');");
+                    return true;
+                }
             }
+        }
+
+        // Route D-Pad directional keys directly to WebView JS to avoid Android WebView orange spatial-navigation box
+        if (splashDismissed && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                || keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) {
+            if (action == KeyEvent.ACTION_DOWN) {
+                String jsKey = keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? "ArrowLeft"
+                        : (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? "ArrowRight"
+                        : (keyCode == KeyEvent.KEYCODE_DPAD_UP ? "ArrowUp" : "ArrowDown"));
+                evalVideoJs("if(window.__dvaHandleTvKey)window.__dvaHandleTvKey('" + jsKey + "');");
+            }
+            return true;
         }
 
         // Hardware Media Keys forwarding

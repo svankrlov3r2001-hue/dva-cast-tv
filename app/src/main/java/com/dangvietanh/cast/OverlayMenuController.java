@@ -186,7 +186,7 @@ public class OverlayMenuController {
         verPill.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 3),
                 UiHelper.dp(context, 10), UiHelper.dp(context, 3));
         verPill.setBackground(UiHelper.createGlassRect(context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BORDER_GLASS, 1));
+                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
         LinearLayout.LayoutParams verLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         verLp.leftMargin = UiHelper.dp(context, 8);
@@ -233,14 +233,14 @@ public class OverlayMenuController {
         ipCard.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 10),
                 UiHelper.dp(context, 14), UiHelper.dp(context, 10));
         ipCard.setBackground(UiHelper.createGlassRect(context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BORDER_GLASS, 1));
+                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
         LinearLayout.LayoutParams ipLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ipLp.bottomMargin = UiHelper.dp(context, 12);
 
         FrameLayout wifiBox = new FrameLayout(context);
         wifiBox.setBackground(UiHelper.createGlassRect(context, 14,
-                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BORDER_GLASS, 1));
+                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
         ImageView wifiIcon = new ImageView(context);
         wifiIcon.setImageResource(R.drawable.ic_wifi);
         wifiIcon.setColorFilter(Color.parseColor("#64D2FF"));
@@ -283,7 +283,7 @@ public class OverlayMenuController {
         ipValueView.setPadding(UiHelper.dp(context, 12), UiHelper.dp(context, 5),
                 UiHelper.dp(context, 12), UiHelper.dp(context, 5));
         ipValueView.setBackground(UiHelper.createGlassRect(context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BORDER_GLASS, 1));
+                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
         ipCard.addView(ipValueView);
 
         settingsSection.addView(ipCard, ipLp);
@@ -385,7 +385,7 @@ public class OverlayMenuController {
         changelogBadge.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 4),
                 UiHelper.dp(context, 10), UiHelper.dp(context, 4));
         changelogBadge.setBackground(UiHelper.createGlassRect(context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BORDER_GLASS, 1));
+                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
 
         tileChangelog = createHorizontalActionTile(
                 R.drawable.ic_update, "#BF5AF2",
@@ -514,7 +514,7 @@ public class OverlayMenuController {
 
         FrameLayout iconBox = new FrameLayout(context);
         iconBox.setBackground(UiHelper.createGlassRect(context, 14,
-                UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BORDER_GLASS, 1));
+                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
         ImageView iv = new ImageView(context);
         iv.setImageResource(iconRes);
         iv.setColorFilter(Color.parseColor(iconTintHex));
@@ -647,7 +647,7 @@ public class OverlayMenuController {
             verBadge.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 3),
                     UiHelper.dp(context, 10), UiHelper.dp(context, 3));
             verBadge.setBackground(UiHelper.createGlassRect(context, 24,
-                    UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BORDER_GLASS, 1));
+                    UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
             topRow.addView(verBadge);
 
             if (entry.versionCode == localCode) {
@@ -659,7 +659,7 @@ public class OverlayMenuController {
                 curBadge.setPadding(UiHelper.dp(context, 8), UiHelper.dp(context, 3),
                         UiHelper.dp(context, 8), UiHelper.dp(context, 3));
                 curBadge.setBackground(UiHelper.createGlassRect(context, 24,
-                        Color.argb(40, 48, 209, 88), Color.argb(110, 48, 209, 88), 1));
+                        Color.argb(40, 48, 209, 88), Color.TRANSPARENT, 0));
                 LinearLayout.LayoutParams cbLp = new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 cbLp.leftMargin = UiHelper.dp(context, 8);
@@ -673,7 +673,7 @@ public class OverlayMenuController {
                 newBadge.setPadding(UiHelper.dp(context, 8), UiHelper.dp(context, 3),
                         UiHelper.dp(context, 8), UiHelper.dp(context, 3));
                 newBadge.setBackground(UiHelper.createGlassRect(context, 24,
-                        Color.argb(40, 255, 214, 10), Color.argb(110, 255, 214, 10), 1));
+                        Color.argb(40, 255, 214, 10), Color.TRANSPARENT, 0));
                 LinearLayout.LayoutParams nbLp = new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 nbLp.leftMargin = UiHelper.dp(context, 8);
@@ -736,7 +736,7 @@ public class OverlayMenuController {
         autoStartBadge.setTextColor(on ? UiHelper.COLOR_GREEN : UiHelper.COLOR_TEXT_MUTED);
         autoStartBadge.setBackground(UiHelper.createGlassRect(context, 24,
                 on ? Color.argb(46, 48, 209, 88) : UiHelper.COLOR_SURFACE_GLASS,
-                on ? Color.argb(120, 48, 209, 88) : UiHelper.COLOR_BORDER_GLASS, 1));
+                Color.TRANSPARENT, 0));
     }
 
     private void refreshChangelogBadge() {

@@ -34,7 +34,7 @@ public final class UiHelper {
     public static final int COLOR_SURFACE_GLASS = Color.argb(64, 0, 0, 0);        // rgba(0, 0, 0, 0.25)
     public static final int COLOR_SURFACE_CARD = Color.argb(64, 0, 0, 0);         // rgba(0, 0, 0, 0.25)
     public static final int COLOR_BORDER_GLASS = Color.argb(41, 255, 255, 255);   // rgba(255, 255, 255, 0.16)
-    public static final int COLOR_BTN_FOCUSED = Color.argb(44, 255, 255, 255);    // Subtle luminous glass on TV focus
+    public static final int COLOR_BTN_FOCUSED = Color.argb(72, 255, 255, 255);    // Luminous glass highlight on TV focus
     public static final int COLOR_ACCENT_RED = Color.parseColor("#E50914");
     public static final int COLOR_ACCENT_PINK = Color.parseColor("#D50055");
     public static final int COLOR_TEXT_PRIMARY = Color.parseColor("#F5F6FA");
@@ -155,7 +155,9 @@ public final class UiHelper {
         d.setShape(GradientDrawable.RECTANGLE);
         d.setCornerRadius(dp(ctx, radiusDp));
         d.setColor(fillColor);
-        d.setStroke(dp(ctx, strokeDp), strokeColor);
+        if (strokeDp > 0 && strokeColor != Color.TRANSPARENT) {
+            d.setStroke(dp(ctx, strokeDp), strokeColor);
+        }
         return d;
     }
 
@@ -172,9 +174,9 @@ public final class UiHelper {
     }
 
     public static void applyFocusableTileStyle(final View view, final Context ctx, final int radiusDp, int normalFill, int focusedFill) {
-        GradientDrawable normal = createGlassRect(ctx, radiusDp, normalFill, COLOR_BORDER_GLASS, 1);
-        GradientDrawable focused = createGlassRect(ctx, radiusDp, focusedFill, Color.WHITE, 2);
-        GradientDrawable pressed = createGlassRect(ctx, radiusDp, focusedFill, Color.WHITE, 2);
+        GradientDrawable normal = createGlassRect(ctx, radiusDp, normalFill, Color.TRANSPARENT, 0);
+        GradientDrawable focused = createGlassRect(ctx, radiusDp, focusedFill, Color.TRANSPARENT, 0);
+        GradientDrawable pressed = createGlassRect(ctx, radiusDp, focusedFill, Color.TRANSPARENT, 0);
 
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, pressed);
@@ -183,6 +185,9 @@ public final class UiHelper {
         view.setBackground(states);
         view.setFocusable(true);
         view.setClickable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            view.setDefaultFocusHighlightEnabled(false);
+        }
         view.setElevation(dp(ctx, 10));
         view.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -194,7 +199,7 @@ public final class UiHelper {
         view.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
-                float targetScale = hasFocus ? 1.025f : 1.0f;
+                float targetScale = hasFocus ? 1.03f : 1.0f;
                 v.animate()
                         .scaleX(targetScale)
                         .scaleY(targetScale)

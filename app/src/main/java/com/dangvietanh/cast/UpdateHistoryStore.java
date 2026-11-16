@@ -125,6 +125,13 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v6 = new ArrayList<>();
+        v6.add("Bỏ toàn bộ viền (border) các nút/khung chức năng bên trong Cài đặt, chỉ giữ viền khung ngoài cùng");
+        v6.add("Khắc phục triệt để khung vuông màu cam mặc định trên máy chiếu khi điều khiển bằng remote");
+        v6.add("Nâng cấp hiệu ứng hover & focus cho các nút điều khiển trên màn hình chiếu chuyên nghiệp hơn");
+        v6.add("Sửa lỗi logo đỏ và chữ DVA Cast bị dính sát nhau trên máy chiếu / TV Android");
+        list.add(new HistoryEntry(6L, "3.3", "16/11/2026", "Tối ưu Giao diện Cài đặt & Điều khiển Máy chiếu", v6));
+
         List<String> v5 = new ArrayList<>();
         v5.add("Tích hợp trình phát Native ExoPlayer (Media3) & SurfaceView giải mã phần cứng 4K 60fps HDR");
         v5.add("Tự động phát hiện lỗi giải mã / màn hình đen và hiển thị popup thông báo rõ ràng");
