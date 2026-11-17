@@ -84,6 +84,7 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private long lastBackPressMs = 0L;
     private boolean longPressTriggered = false;
+    private volatile boolean webModalOpen = false;
 
     private final AudioManager.OnAudioFocusChangeListener audioFocusListener =
             new AudioManager.OnAudioFocusChangeListener() {
@@ -203,6 +204,7 @@ public class MainActivity extends Activity {
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 pageHasError = false;
+                webModalOpen = false;
                 if (nativePlayer != null) {
                     nativePlayer.stopMedia();
                 }
@@ -299,6 +301,11 @@ public class MainActivity extends Activity {
             @Override
             public void onCheckUpdates() {
                 updateManager.checkForUpdates(true);
+            }
+
+            @Override
+            public void onOpenSubtitleSettings() {
+                evalVideoJs("if(window.__dvaOpenSubtitleSettings)window.__dvaOpenSubtitleSettings();");
             }
 
             @Override
@@ -765,6 +772,10 @@ public class MainActivity extends Activity {
 
         // Back key handling
         if (keyCode == KeyEvent.KEYCODE_BACK && action == KeyEvent.ACTION_DOWN) {
+            if (webModalOpen) {
+                evalVideoJs("if(window.__dvaHandleTvKey)window.__dvaHandleTvKey('Escape');");
+                return true;
+            }
             if (customView != null && chromeClient != null) {
                 chromeClient.onHideCustomView();
                 return true;
@@ -838,6 +849,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean hasNativePlayer() {
             return nativePlayer != null;
+        }
+
+        @JavascriptInterface
+        public void setWebModalOpen(final boolean open) {
+            webModalOpen = open;
         }
 
         @JavascriptInterface

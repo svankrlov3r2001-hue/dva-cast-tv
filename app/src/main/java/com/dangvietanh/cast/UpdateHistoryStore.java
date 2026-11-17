@@ -78,7 +78,7 @@ public final class UpdateHistoryStore {
                 return entry.date;
             }
         }
-        return "16/11/2026";
+        return "17/11/2026";
     }
 
     private static List<HistoryEntry> parseServerJson(String rawJson) {
@@ -124,6 +124,13 @@ public final class UpdateHistoryStore {
 
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
+
+        List<String> v7 = new ArrayList<>();
+        v7.add("Bổ sung bảng Tuỳ chỉnh phụ đề đầy đủ chuẩn subtitleST (Phông chữ, Màu sắc, Cỡ chữ, Vị trí, Tự động, Viền chữ, Độ trễ, Kéo dài, Ngôn ngữ dịch 108 thứ tiếng & Thuyết minh AI)");
+        v7.add("Nâng cấp hiển thị phụ đề song ngữ Việt/Anh/Dịch chuẩn subtitleUI: hỗ trợ đảo vị trí 2 dòng, dải phân cách, phụ đề trên đỉnh & tự ngắt dòng cân bằng");
+        v7.add("Đồng bộ 2 chiều theo thời gian thực giữa điện thoại/web điều khiển, trình chiếu Web và App TV");
+        v7.add("Hỗ trợ điều hướng D-Pad và nút Back trên remote TV để đóng/mở nhanh menu tuỳ chỉnh phụ đề");
+        list.add(new HistoryEntry(7L, "3.4", "17/11/2026", "Tuỳ Chỉnh Phụ Đề Toàn Diện & Song Ngữ Chuẩn SubtitleUI", v7));
 
         List<String> v6 = new ArrayList<>();
         v6.add("Bỏ toàn bộ viền (border) các nút/khung chức năng bên trong Cài đặt, chỉ giữ viền khung ngoài cùng");

@@ -27,6 +27,7 @@ public class OverlayMenuController {
         void onReloadPage();
         void onClearCache();
         void onCheckUpdates();
+        void onOpenSubtitleSettings();
         void onFetchHistory(Runnable onComplete);
         String getVersionName();
         long getVersionCode();
@@ -376,6 +377,23 @@ public class OverlayMenuController {
         settingsSection.addView(row1, row1Lp);
         settingsSection.addView(row2, row2Lp);
 
+        // Full-width Subtitle Customization Row
+        View tileSubtitle = createHorizontalActionTile(
+                R.drawable.ic_subtitles, "#FF375F",
+                "Tuỳ chỉnh phụ đề", "Phông chữ, màu sắc, cỡ chữ, vị trí, viền chữ & dịch",
+                null,
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        hide();
+                        actions.onOpenSubtitleSettings();
+                    }
+                });
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        subLp.bottomMargin = UiHelper.dp(context, 10);
+        settingsSection.addView(tileSubtitle, subLp);
+
         // Full-width Changelog Row
         changelogBadge = new TextView(context);
         changelogBadge.setTextSize(10.5f);
@@ -443,6 +461,7 @@ public class OverlayMenuController {
         tileCache.setId(View.generateViewId());
         tileAutoStart.setId(View.generateViewId());
         tileUpdate.setId(View.generateViewId());
+        tileSubtitle.setId(View.generateViewId());
         tileChangelog.setId(View.generateViewId());
 
         tileReload.setNextFocusRightId(tileCache.getId());
@@ -458,14 +477,19 @@ public class OverlayMenuController {
         tileAutoStart.setNextFocusUpId(tileReload.getId());
         tileAutoStart.setNextFocusRightId(tileUpdate.getId());
         tileAutoStart.setNextFocusLeftId(tileAutoStart.getId());
-        tileAutoStart.setNextFocusDownId(tileChangelog.getId());
+        tileAutoStart.setNextFocusDownId(tileSubtitle.getId());
 
         tileUpdate.setNextFocusUpId(tileCache.getId());
         tileUpdate.setNextFocusLeftId(tileAutoStart.getId());
         tileUpdate.setNextFocusRightId(closeBtn.getId());
-        tileUpdate.setNextFocusDownId(tileChangelog.getId());
+        tileUpdate.setNextFocusDownId(tileSubtitle.getId());
 
-        tileChangelog.setNextFocusUpId(tileAutoStart.getId());
+        tileSubtitle.setNextFocusUpId(tileAutoStart.getId());
+        tileSubtitle.setNextFocusDownId(tileChangelog.getId());
+        tileSubtitle.setNextFocusLeftId(tileSubtitle.getId());
+        tileSubtitle.setNextFocusRightId(tileSubtitle.getId());
+
+        tileChangelog.setNextFocusUpId(tileSubtitle.getId());
         tileChangelog.setNextFocusDownId(closeBtn.getId());
         tileChangelog.setNextFocusLeftId(tileChangelog.getId());
         tileChangelog.setNextFocusRightId(tileChangelog.getId());
