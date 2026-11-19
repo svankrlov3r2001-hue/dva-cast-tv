@@ -125,54 +125,61 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v8 = new ArrayList<>();
+        v8.add("Tối ưu tốc độ ghép nối mã QR giữa điện thoại, máy tính và màn hình TV / máy chiếu");
+        v8.add("Hỗ trợ kết nối tương thích liền mạch cho cả các thiết bị TV đang dùng phiên bản trước");
+        v8.add("Cải thiện tốc độ kiểm tra và tự động tải bản cập nhật ứng dụng mới qua mạng Wi-Fi");
+        v8.add("Đồng bộ thông tin phiên bản với trang Tải Ứng Dụng dành cho thành viên trên dangvietanh.com");
+        list.add(new HistoryEntry(8L, "3.5", "19/11/2026", "Tăng Tốc Kết Nối Mã QR & Nâng Cấp Tự Động Cập Nhật Trên TV", v8));
+
         List<String> v7 = new ArrayList<>();
-        v7.add("Bổ sung bảng Tuỳ chỉnh phụ đề đầy đủ chuẩn subtitleST (Phông chữ, Màu sắc, Cỡ chữ, Vị trí, Tự động, Viền chữ, Độ trễ, Kéo dài, Ngôn ngữ dịch 108 thứ tiếng & Thuyết minh AI)");
-        v7.add("Nâng cấp hiển thị phụ đề song ngữ Việt/Anh/Dịch chuẩn subtitleUI: hỗ trợ đảo vị trí 2 dòng, dải phân cách, phụ đề trên đỉnh & tự ngắt dòng cân bằng");
-        v7.add("Đồng bộ 2 chiều theo thời gian thực giữa điện thoại/web điều khiển, trình chiếu Web và App TV");
-        v7.add("Hỗ trợ điều hướng D-Pad và nút Back trên remote TV để đóng/mở nhanh menu tuỳ chỉnh phụ đề");
-        list.add(new HistoryEntry(7L, "3.4", "17/11/2026", "Tuỳ Chỉnh Phụ Đề Toàn Diện & Song Ngữ Chuẩn SubtitleUI", v7));
+        v7.add("Bổ sung bảng Tùy chỉnh phụ đề đầy đủ: Phông chữ, Màu sắc, Cỡ chữ, Vị trí, Viền chữ, Độ trễ, Dịch tự động 108 ngôn ngữ và Thuyết minh thông minh");
+        v7.add("Nâng cấp hiển thị phụ đề song ngữ Việt - Anh sắc nét: hỗ trợ đảo vị trí 2 dòng, thanh phân cách và tự ngắt dòng cân đối dễ đọc từ xa");
+        v7.add("Đồng bộ cài đặt phụ đề tức thì hai chiều giữa điện thoại điều khiển và màn hình TV");
+        v7.add("Hỗ trợ dùng phím điều hướng và nút Quay lại trên remote TV để đóng mở nhanh bảng tùy chỉnh phụ đề");
+        list.add(new HistoryEntry(7L, "3.4", "17/11/2026", "Tùy Chỉnh Phụ Đề Toàn Diện, Phụ Đề Song Ngữ & Thuyết Minh Đa Ngôn Ngữ", v7));
 
         List<String> v6 = new ArrayList<>();
-        v6.add("Bỏ toàn bộ viền (border) các nút/khung chức năng bên trong Cài đặt, chỉ giữ viền khung ngoài cùng");
-        v6.add("Khắc phục triệt để khung vuông màu cam mặc định trên máy chiếu khi điều khiển bằng remote");
-        v6.add("Nâng cấp hiệu ứng hover & focus cho các nút điều khiển trên màn hình chiếu chuyên nghiệp hơn");
-        v6.add("Sửa lỗi logo đỏ và chữ DVA Cast bị dính sát nhau trên máy chiếu / TV Android");
-        list.add(new HistoryEntry(6L, "3.3", "16/11/2026", "Tối ưu Giao diện Cài đặt & Điều khiển Máy chiếu", v6));
+        v6.add("Làm phẳng các thẻ chức năng bên trong bảng Cài đặt giúp giao diện thanh thoát và hiện đại hơn");
+        v6.add("Loại bỏ khung viền màu cam mặc định khi di chuyển chọn mục bằng remote trên máy chiếu và TV");
+        v6.add("Nâng cấp hiệu ứng sáng nổi bật cho nút đang được chọn trên màn hình trình chiếu");
+        v6.add("Căn chỉnh lại khoảng cách giữa biểu trưng và tên ứng dụng cân đối trên mọi dòng TV và máy chiếu");
+        list.add(new HistoryEntry(6L, "3.3", "16/11/2026", "Tối Ưu Giao Diện Cài Đặt & Điều Khiển Bằng Remote Trên Máy Chiếu", v6));
 
         List<String> v5 = new ArrayList<>();
-        v5.add("Tích hợp trình phát Native ExoPlayer (Media3) & SurfaceView giải mã phần cứng 4K 60fps HDR");
-        v5.add("Tự động phát hiện lỗi giải mã / màn hình đen và hiển thị popup thông báo rõ ràng");
-        v5.add("Tắt hiệu ứng blur khi phát video, tối ưu giảm tải GPU và hạn chế render HUD dư thừa");
-        v5.add("Ẩn nút toàn màn hình khi chạy trên App TV; tối giản nút Ngắt kết nối thành icon");
-        v5.add("Bổ sung hiệu ứng chuyển cảnh mượt mà từ màn hình QR sang trình phát phim");
-        v5.add("Đổi nút Quay lại & Đóng trong Cài đặt thành nút icon tối giản chuyên nghiệp");
-        list.add(new HistoryEntry(5L, "3.2", "16/11/2026", "Trình phát Native 4K HDR & Tối ưu Hiệu năng TV", v5));
+        v5.add("Nâng cấp trình phát phim 4K 60fps HDR cho hình ảnh sắc nét và chuyển động mượt mà trên màn hình lớn");
+        v5.add("Tự động nhận biết sự cố luồng phát và hiển thị bảng thông báo hướng dẫn rõ ràng trên màn hình");
+        v5.add("Tối ưu hiệu năng hiển thị trong lúc đang phát phim giúp thiết bị hoạt động mát và ổn định hơn");
+        v5.add("Ẩn các nút không cần thiết trên màn hình TV và thu gọn nút Ngắt kết nối thành biểu tượng tinh tế");
+        v5.add("Bổ sung hiệu ứng chuyển cảnh êm ái từ màn hình chờ quét mã QR sang màn hình chiếu phim");
+        v5.add("Thiết kế lại nút Quay lại và nút Đóng trong bảng Cài đặt theo phong cách biểu tượng tối giản");
+        list.add(new HistoryEntry(5L, "3.2", "16/11/2026", "Phát Phim 4K HDR 60fps Siêu Mượt & Tối Ưu Hiệu Năng TV", v5));
 
         List<String> v4 = new ArrayList<>();
-        v4.add("Sửa lỗi đồ họa vòng xoay Spinner trên màn hình khởi động");
-        v4.add("Ẩn nút Quay lại trang chủ khi chạy trực tiếp trên App DVA Cast TV");
-        v4.add("Hiển thị ảnh poster của phim thay vì icon mặc định khi tải bộ nhớ đệm");
-        v4.add("Đổi tên Tiện ích thành Cài đặt, tối ưu ngôn ngữ chuẩn app xem phim");
-        v4.add("Đồng bộ kính trong suốt rgba(0, 0, 0, 0.25) và viền sáng mảnh giữa App và Web");
-        v4.add("Bổ sung Nhật ký cập nhật chi tiết theo từng phiên bản trong Cài đặt");
-        list.add(new HistoryEntry(4L, "3.1", "15/11/2026", "Nâng cấp Giao diện Rạp phim & Cài đặt Apple Glass", v4));
+        v4.add("Làm mượt hiệu ứng vòng xoay kết nối trên màn hình khởi động ứng dụng");
+        v4.add("Tối giản giao diện màn hình chờ khi sử dụng trực tiếp trên ứng dụng TV");
+        v4.add("Hiển thị ảnh áp phích của bộ phim đang xem trong lúc nạp dữ liệu phát");
+        v4.add("Chuẩn hóa tên gọi mục Cài đặt và câu từ thân thiện với trải nghiệm xem phim gia đình");
+        v4.add("Đồng bộ hiệu ứng nền kính mờ trong suốt sang trọng trên toàn bộ các bảng điều khiển");
+        v4.add("Bổ sung mục xem thông tin các tính năng mới ngay trong phần Cài đặt của TV");
+        list.add(new HistoryEntry(4L, "3.1", "15/11/2026", "Nâng Cấp Giao Diện Rạp Phim & Bảng Cài Đặt Kính Mờ", v4));
 
         List<String> v3 = new ArrayList<>();
-        v3.add("Thiết kế lại giao diện trình phát với Top Bar, Dock trái & Timeline đáy");
-        v3.add("Mở rộng khung trạng thái Đang kết nối... trên màn hình khởi động");
-        v3.add("Kết nối nút Cài đặt trên trình phát để mở nhanh menu điều khiển trên App");
-        list.add(new HistoryEntry(3L, "3.0", "15/11/2026", "HUD Trình phát Mới & Menu Cài đặt Apple TV", v3));
+        v3.add("Thiết kế lại giao diện điều khiển khi xem phim với thanh thông tin phía trên, cụm nút nhanh bên trái và thanh thời gian phía dưới");
+        v3.add("Mở rộng khung hiển thị trạng thái kết nối rõ ràng hơn trên màn hình khởi động");
+        v3.add("Kết nối nút Cài đặt ngay trên màn hình phát phim để mở nhanh bảng tùy chỉnh bằng remote TV");
+        list.add(new HistoryEntry(3L, "3.0", "15/11/2026", "Giao Diện Điều Khiển Trình Phát Mới & Menu Cài Đặt Nhanh", v3));
 
         List<String> v2 = new ArrayList<>();
-        v2.add("Bổ sung màn hình khởi động UX, menu điều khiển & bảo trì");
-        v2.add("Hỗ trợ tự khởi động cùng máy chiếu, tối ưu MediaSession / AudioFocus");
-        v2.add("Tích hợp hệ thống tự cập nhật APK qua Wi-Fi");
-        list.add(new HistoryEntry(2L, "2.0", "14/11/2026", "UX Khởi động & Tự cập nhật OTA", v2));
+        v2.add("Bổ sung màn hình khởi động rạp phim cùng bảng điều khiển và dọn bộ nhớ đệm tiện lợi");
+        v2.add("Hỗ trợ tùy chọn tự động mở ứng dụng khi bật TV hoặc máy chiếu và tối ưu âm thanh");
+        v2.add("Tích hợp tính năng tự động kiểm tra và cập nhật phiên bản mới trực tiếp qua mạng Wi-Fi");
+        list.add(new HistoryEntry(2L, "2.0", "14/11/2026", "Màn Hình Khởi Động Mới & Tự Động Cập Nhật Qua Wi-Fi", v2));
 
         List<String> v1 = new ArrayList<>();
-        v1.add("Ra mắt ứng dụng nhận trình chiếu DVA Cast dành cho Android TV & Máy chiếu");
-        v1.add("Hỗ trợ ghép nối nhanh bằng mã QR và mã 6 ký tự, đồng bộ thời gian thực");
-        list.add(new HistoryEntry(1L, "1.0", "10/11/2026", "Phiên bản DVA Cast TV đầu tiên", v1));
+        v1.add("Ra mắt ứng dụng trình chiếu phim màn hình lớn dành riêng cho Android TV, Google TV và Máy chiếu");
+        v1.add("Hỗ trợ kết nối nhanh bằng mã QR hoặc mã 6 ký tự, đồng bộ phát phim và phụ đề theo thời gian thực");
+        list.add(new HistoryEntry(1L, "1.0", "10/11/2026", "Phiên Bản Chính Thức Đầu Tiên Cho Android TV & Máy Chiếu", v1));
 
         return list;
     }

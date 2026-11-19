@@ -38,8 +38,8 @@ import java.util.Locale;
 
 public class UpdateManager {
 
-    private static final String VERSION_JSON_URL = "https://dangvietanh.com/cast/app-version.json";
-    private static final String DEFAULT_APK_URL = "https://dangvietanh.com/cast/dva_cast.apk";
+    private static final String VERSION_JSON_URL = "https://dangvietanh.com/dva_cast/app-version.json";
+    private static final String DEFAULT_APK_URL = "https://dangvietanh.com/dva_cast/dva_cast.apk";
 
     private final Activity activity;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());

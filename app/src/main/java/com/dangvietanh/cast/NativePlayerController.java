@@ -167,7 +167,7 @@ public class NativePlayerController {
                 .setAllowCrossProtocolRedirects(true)
                 .setConnectTimeoutMs(12_000)
                 .setReadTimeoutMs(20_000)
-                .setUserAgent(userAgent != null && !userAgent.isEmpty() ? userAgent : "DVACastTV/3.4");
+                .setUserAgent(userAgent != null && !userAgent.isEmpty() ? userAgent : "DVACastTV/3.5");
         dataSourceFactory = new DefaultDataSource.Factory(context, httpFactory);
 
         DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(context)

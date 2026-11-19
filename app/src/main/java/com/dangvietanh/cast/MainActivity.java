@@ -48,7 +48,7 @@ import org.json.JSONObject;
 
 public class MainActivity extends Activity {
 
-    private static final String CAST_URL = "https://dangvietanh.com/cast/screen";
+    private static final String CAST_URL = "https://dangvietanh.com/dva_cast/screen";
     private static final long SPLASH_MIN_DURATION_MS = 3000L;
     private static final long LONG_PRESS_MENU_MS = 650L;
 
