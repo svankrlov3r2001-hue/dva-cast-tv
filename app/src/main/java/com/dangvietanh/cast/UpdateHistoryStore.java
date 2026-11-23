@@ -125,6 +125,12 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v13 = new ArrayList<>();
+        v13.add("Nâng cấp hiệu ứng chọn bằng remote TV: mục đang chọn tự động phóng to mượt mà, nổi khối 3D và phát sáng viền hồng rực rỡ trên mọi dòng tivi");
+        v13.add("Tối ưu điều hướng 4 hướng liền mạch xuyên suốt từ thanh menu trái, thanh công cụ góc trên đến từng thẻ phim ở Trang chủ");
+        v13.add("Hoàn thiện điều hướng từ xa cho màn hình Thông tin phim và thanh điều khiển Trình phát giúp di chuyển chính xác qua mọi nút bấm, thanh tua và thẻ tập tiếp theo");
+        list.add(new HistoryEntry(13L, "4.4", "24/11/2026", "Tối Ưu Điều Khiển Remote TV & Hiệu Ứng Phóng To Phát Sáng Rực Rỡ", v13));
+
         List<String> v12 = new ArrayList<>();
         v12.add("Thiết kế lại toàn bộ thanh điều khiển trình phát tối giản tinh tế với thanh thời gian mảnh không viền, không che phụ đề");
         v12.add("Nhóm biểu tượng Máy chủ, Thuyết minh, Phụ đề, Thông tin và Tải lại gọn gàng trên góc phải kèm thanh tiện ích dọc chuyển nhanh Độ tương phản, Tự chuyển tập và Tràn viền");

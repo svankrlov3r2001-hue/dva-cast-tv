@@ -71,9 +71,13 @@ public class TvNavigationRail extends FrameLayout {
                 dockedW, FrameLayout.LayoutParams.MATCH_PARENT);
         selfLp.setMargins(UiHelper.dp(context, 10), UiHelper.dp(context, 10), 0, UiHelper.dp(context, 10));
         setLayoutParams(selfLp);
+        setClipChildren(false);
+        setClipToPadding(false);
 
         railCard = new LinearLayout(context);
         railCard.setOrientation(LinearLayout.VERTICAL);
+        railCard.setClipChildren(false);
+        railCard.setClipToPadding(false);
         railCard.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 14),
                 UiHelper.dp(context, 10), UiHelper.dp(context, 12));
         railCard.setBackground(UiHelper.createPillDrawable(
@@ -107,9 +111,11 @@ public class TvNavigationRail extends FrameLayout {
         ScrollView navScroll = new ScrollView(context);
         navScroll.setVerticalScrollBarEnabled(false);
         navScroll.setClipChildren(false);
+        navScroll.setClipToPadding(false);
         LinearLayout navCol = new LinearLayout(context);
         navCol.setOrientation(LinearLayout.VERTICAL);
         navCol.setClipChildren(false);
+        navCol.setClipToPadding(false);
         navScroll.addView(navCol, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
         railCard.addView(navScroll, new LinearLayout.LayoutParams(
@@ -194,6 +200,10 @@ public class TvNavigationRail extends FrameLayout {
             }
         });
         statusChip.setOnKeyListener(rightMoveKeyListener());
+        settingsRow.setId(View.generateViewId());
+        statusChip.setId(View.generateViewId());
+        settingsRow.setNextFocusDownId(statusChip.getId());
+        statusChip.setNextFocusUpId(settingsRow.getId());
         LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 40));
         scLp.topMargin = UiHelper.dp(context, 6);
@@ -261,8 +271,7 @@ public class TvNavigationRail extends FrameLayout {
         row.setOnFocusChangeListener(new OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
-                float sc = hasFocus ? 1.02f : 1.0f;
-                v.animate().scaleX(sc).scaleY(sc).setDuration(110).setInterpolator(new DecelerateInterpolator()).start();
+                UiHelper.applyFocusVisualEffects(v, v.getContext(), hasFocus, 1.06f, 4, UiHelper.COLOR_FOCUS_GLOW);
                 boolean bright = hasFocus || isActive;
                 iv.setColorFilter(bright ? Color.WHITE : UiHelper.COLOR_TEXT_MUTED, PorterDuff.Mode.SRC_IN);
                 tv.setTextColor(bright ? Color.WHITE : UiHelper.COLOR_TEXT_SECONDARY);

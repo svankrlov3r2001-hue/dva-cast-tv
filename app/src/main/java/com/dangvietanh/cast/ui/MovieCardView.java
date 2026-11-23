@@ -163,6 +163,8 @@ public final class MovieCardView {
 
         LinearLayout cardBody = new LinearLayout(ctx);
         cardBody.setOrientation(LinearLayout.VERTICAL);
+        cardBody.setClipChildren(false);
+        cardBody.setClipToPadding(false);
         outer.addView(cardBody, new LinearLayout.LayoutParams(posterW, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         final FrameLayout posterContainer = new FrameLayout(ctx);
@@ -262,10 +264,10 @@ public final class MovieCardView {
         ptLp.gravity = Gravity.BOTTOM;
         posterContainer.addView(progressTrack, ptLp);
 
-        // Luminous Focus Border Overlay (only visible when focused)
+        // Luminous Focus Border Overlay (double-layer neon halo + core rim)
         final View focusBorderOverlay = new View(ctx);
-        focusBorderOverlay.setBackground(UiHelper.createFocusRingDrawable(
-                ctx, radiusDp, Color.parseColor("#FF4070"), 2.2f));
+        focusBorderOverlay.setBackground(UiHelper.createGlowingFocusRingDrawable(
+                ctx, radiusDp, UiHelper.COLOR_FOCUS_GLOW, 2.6f));
         focusBorderOverlay.setAlpha(0f);
         posterContainer.addView(focusBorderOverlay, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -311,20 +313,24 @@ public final class MovieCardView {
         });
 
         final float baseElev = UiHelper.dp(ctx, 6);
-        final float focusElev = UiHelper.dp(ctx, 16);
+        final float focusElev = UiHelper.dp(ctx, 22);
+        final Context fCtx = ctx;
         final TextView refTitleTv = titleTv;
         outer.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
-                float sc = hasFocus ? 1.045f : 1.0f;
-                v.animate()
-                        .scaleX(sc)
-                        .scaleY(sc)
-                        .setDuration(135)
-                        .setInterpolator(new DecelerateInterpolator())
-                        .start();
+                UiHelper.applyFocusVisualEffects(v, fCtx, hasFocus, 1.085f, 6, UiHelper.COLOR_FOCUS_GLOW);
                 posterContainer.setElevation(hasFocus ? focusElev : baseElev);
-                focusBorderOverlay.animate().alpha(hasFocus ? 1f : 0f).setDuration(120).start();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    if (hasFocus) {
+                        posterContainer.setOutlineSpotShadowColor(UiHelper.COLOR_FOCUS_GLOW);
+                        posterContainer.setOutlineAmbientShadowColor(Color.argb(195, 255, 46, 99));
+                    } else {
+                        posterContainer.setOutlineSpotShadowColor(Color.argb(190, 0, 0, 0));
+                        posterContainer.setOutlineAmbientShadowColor(Color.argb(145, 0, 0, 0));
+                    }
+                }
+                focusBorderOverlay.animate().alpha(hasFocus ? 1f : 0f).setDuration(130).start();
                 if (refTitleTv != null) {
                     refTitleTv.setTextColor(hasFocus ? Color.WHITE : UiHelper.COLOR_TEXT_PRIMARY);
                 }

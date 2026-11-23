@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -49,6 +50,7 @@ public class HomeScreenView extends FrameLayout {
         void onOpenSettings();
         void onOpenAccount();
         void onOpenExploreCategory(String sectionTitle);
+        void onMoveFocusToRail();
     }
 
     private static final class RowEntry {
@@ -76,6 +78,10 @@ public class HomeScreenView extends FrameLayout {
 
     private final ImageView ambientBackdropIv;
     private final RecyclerView verticalRv;
+    private final FrameLayout btnTopSearch;
+    private final FrameLayout btnTopLibrary;
+    private final FrameLayout btnTopSettings;
+    private final FrameLayout btnTopAccount;
     private final ImageView topAvatarIv;
     private final TextView clockTv;
     private final LinearLayout loadingBox;
@@ -95,6 +101,30 @@ public class HomeScreenView extends FrameLayout {
     private Runnable pendingBackdropRunnable;
     private HeroHolder activeHeroHolder;
     private int requestSeq = 0;
+
+    private final OnKeyListener moveFocusToRailLeftListener = new OnKeyListener() {
+        @Override
+        public boolean onKey(View v, int keyCode, KeyEvent event) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                if (listener != null) {
+                    listener.onMoveFocusToRail();
+                    return true;
+                }
+            }
+            return false;
+        }
+    };
+
+    private final OnKeyListener topUtilDownListener = new OnKeyListener() {
+        @Override
+        public boolean onKey(View v, int keyCode, KeyEvent event) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                focusFirstMainContent();
+                return true;
+            }
+            return false;
+        }
+    };
 
     private final Runnable heroAutoSlideRunnable = new Runnable() {
         @Override
@@ -124,6 +154,8 @@ public class HomeScreenView extends FrameLayout {
 
         setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setClipChildren(false);
+        setClipToPadding(false);
 
         // 1. Full-bleed edge-to-edge cinema backdrop
         ambientBackdropIv = new ImageView(context);
@@ -182,8 +214,11 @@ public class HomeScreenView extends FrameLayout {
         topUtilBar.setOrientation(LinearLayout.HORIZONTAL);
         topUtilBar.setGravity(Gravity.CENTER_VERTICAL);
         topUtilBar.setClipChildren(false);
+        topUtilBar.setClipToPadding(false);
+        topUtilBar.setElevation(UiHelper.dp(context, 16));
 
-        FrameLayout btnTopSearch = makeCircleUtilIcon(context, R.drawable.ic_search);
+        btnTopSearch = makeCircleUtilIcon(context, R.drawable.ic_search);
+        btnTopSearch.setId(View.generateViewId());
         btnTopSearch.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -192,7 +227,8 @@ public class HomeScreenView extends FrameLayout {
         });
         topUtilBar.addView(btnTopSearch, utilMarginLp(context, 7));
 
-        FrameLayout btnTopLibrary = makeCircleUtilIcon(context, R.drawable.ic_bookmark);
+        btnTopLibrary = makeCircleUtilIcon(context, R.drawable.ic_bookmark);
+        btnTopLibrary.setId(View.generateViewId());
         btnTopLibrary.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -201,7 +237,8 @@ public class HomeScreenView extends FrameLayout {
         });
         topUtilBar.addView(btnTopLibrary, utilMarginLp(context, 7));
 
-        FrameLayout btnTopSettings = makeCircleUtilIcon(context, R.drawable.ic_settings);
+        btnTopSettings = makeCircleUtilIcon(context, R.drawable.ic_settings);
+        btnTopSettings.setId(View.generateViewId());
         btnTopSettings.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -210,13 +247,14 @@ public class HomeScreenView extends FrameLayout {
         });
         topUtilBar.addView(btnTopSettings, utilMarginLp(context, 7));
 
-        FrameLayout avatarWrap = new FrameLayout(context);
-        UiHelper.applyCircularIconButtonStyle(avatarWrap, context, 32);
+        btnTopAccount = new FrameLayout(context);
+        btnTopAccount.setId(View.generateViewId());
+        UiHelper.applyCircularIconButtonStyle(btnTopAccount, context, 32);
         topAvatarIv = new ImageView(context);
         topAvatarIv.setImageResource(R.drawable.ic_person);
-        avatarWrap.addView(topAvatarIv, new FrameLayout.LayoutParams(
+        btnTopAccount.addView(topAvatarIv, new FrameLayout.LayoutParams(
                 UiHelper.dp(context, 26), UiHelper.dp(context, 26), Gravity.CENTER));
-        avatarWrap.setOnClickListener(new OnClickListener() {
+        btnTopAccount.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (listener != null) listener.onOpenAccount();
@@ -224,7 +262,34 @@ public class HomeScreenView extends FrameLayout {
         });
         LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 32), UiHelper.dp(context, 32));
         avLp.rightMargin = UiHelper.dp(context, 12);
-        topUtilBar.addView(avatarWrap, avLp);
+        topUtilBar.addView(btnTopAccount, avLp);
+
+        // Deterministic D-Pad routing inside Top Utility Bar
+        btnTopSearch.setNextFocusRightId(btnTopLibrary.getId());
+        btnTopLibrary.setNextFocusLeftId(btnTopSearch.getId());
+        btnTopLibrary.setNextFocusRightId(btnTopSettings.getId());
+        btnTopSettings.setNextFocusLeftId(btnTopLibrary.getId());
+        btnTopSettings.setNextFocusRightId(btnTopAccount.getId());
+        btnTopAccount.setNextFocusLeftId(btnTopSettings.getId());
+
+        btnTopSearch.setOnKeyListener(new OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && listener != null) {
+                    listener.onMoveFocusToRail();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    focusFirstMainContent();
+                    return true;
+                }
+                return false;
+            }
+        });
+        btnTopLibrary.setOnKeyListener(topUtilDownListener);
+        btnTopSettings.setOnKeyListener(topUtilDownListener);
+        btnTopAccount.setOnKeyListener(topUtilDownListener);
 
         clockTv = new TextView(context);
         clockTv.setText(clockFormat.format(new Date()));
@@ -353,13 +418,18 @@ public class HomeScreenView extends FrameLayout {
         verticalRv.post(new Runnable() {
             @Override
             public void run() {
-                if (activeHeroHolder != null && activeHeroHolder.btnPlay != null) {
-                    activeHeroHolder.btnPlay.requestFocus();
-                } else {
-                    verticalRv.requestFocus();
-                }
+                focusFirstMainContent();
             }
         });
+    }
+
+    private void focusFirstMainContent() {
+        if (activeHeroHolder != null && activeHeroHolder.btnPlay != null
+                && activeHeroHolder.itemView.getParent() != null) {
+            activeHeroHolder.btnPlay.requestFocus();
+        } else {
+            verticalRv.requestFocus();
+        }
     }
 
     private void rebuildRows(Models.HomeHubResponse data) {
@@ -597,6 +667,8 @@ public class HomeScreenView extends FrameLayout {
             btnRow.setOrientation(LinearLayout.HORIZONTAL);
             btnRow.setGravity(Gravity.CENTER_VERTICAL);
             btnRow.setClipChildren(false);
+            btnRow.setClipToPadding(false);
+            contentCol.setClipToPadding(false);
             contentCol.addView(btnRow);
 
             btnPlay = makeHeroPill(ctx, "▶  Xem ngay", true);
@@ -604,6 +676,30 @@ public class HomeScreenView extends FrameLayout {
             btnInfo = makeHeroPill(ctx, "ℹ  Thông tin", false);
             btnPrev = makeCompactCircleArrow(ctx, "‹");
             btnNext = makeCompactCircleArrow(ctx, "›");
+
+            btnPlay.setId(View.generateViewId());
+            btnWishlist.setId(View.generateViewId());
+            btnInfo.setId(View.generateViewId());
+            btnPrev.setId(View.generateViewId());
+            btnNext.setId(View.generateViewId());
+
+            btnPlay.setNextFocusRightId(btnWishlist.getId());
+            btnWishlist.setNextFocusLeftId(btnPlay.getId());
+            btnWishlist.setNextFocusRightId(btnInfo.getId());
+            btnInfo.setNextFocusLeftId(btnWishlist.getId());
+            btnInfo.setNextFocusRightId(btnPrev.getId());
+            btnPrev.setNextFocusLeftId(btnInfo.getId());
+            btnPrev.setNextFocusRightId(btnNext.getId());
+            btnNext.setNextFocusLeftId(btnPrev.getId());
+
+            if (btnTopSearch != null) {
+                btnPlay.setNextFocusUpId(btnTopSearch.getId());
+                btnWishlist.setNextFocusUpId(btnTopSearch.getId());
+                btnInfo.setNextFocusUpId(btnTopLibrary.getId());
+                btnPrev.setNextFocusUpId(btnTopSettings.getId());
+                btnNext.setNextFocusUpId(btnTopAccount.getId());
+            }
+            btnPlay.setOnKeyListener(moveFocusToRailLeftListener);
 
             btnRow.addView(btnPlay, heroBtnLp(ctx, 10));
             btnRow.addView(btnWishlist, heroBtnLp(ctx, 10));
@@ -784,6 +880,7 @@ public class HomeScreenView extends FrameLayout {
             super(new HorizontalScrollView(ctx));
             HorizontalScrollView hsv = (HorizontalScrollView) itemView;
             hsv.setHorizontalScrollBarEnabled(false);
+            hsv.setClipChildren(false);
             hsv.setClipToPadding(false);
             hsv.setPadding(UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 6));
             hsv.setLayoutParams(new RecyclerView.LayoutParams(
@@ -791,19 +888,20 @@ public class HomeScreenView extends FrameLayout {
             row = new LinearLayout(ctx);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setClipChildren(false);
+            row.setClipToPadding(false);
             hsv.addView(row);
         }
 
         void bind() {
             Context ctx = itemView.getContext();
             row.removeAllViews();
-            addChip(ctx, "", "Tất cả thể loại");
+            addChip(ctx, "", "Tất cả thể loại", true);
             for (Models.FilterOption g : genres) {
-                addChip(ctx, String.valueOf(g.id), g.name);
+                addChip(ctx, String.valueOf(g.id), g.name, false);
             }
         }
 
-        private void addChip(Context ctx, final String gid, String label) {
+        private void addChip(Context ctx, final String gid, String label, boolean isFirst) {
             boolean selected = gid.equals(currentGenreId);
             TextView chip = new TextView(ctx);
             chip.setText(label);
@@ -812,6 +910,9 @@ public class HomeScreenView extends FrameLayout {
             chip.setTypeface(null, Typeface.BOLD);
             chip.setPadding(UiHelper.dp(ctx, 13), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 13), UiHelper.dp(ctx, 6));
             UiHelper.applyCompactChipStyle(chip, ctx, 14, selected);
+            if (isFirst) {
+                chip.setOnKeyListener(moveFocusToRailLeftListener);
+            }
             chip.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -908,6 +1009,7 @@ public class HomeScreenView extends FrameLayout {
                         scrollToSectionId(t.targetSection);
                     }
                 });
+                box.setOnKeyListener(position == 0 ? moveFocusToRailLeftListener : null);
             }
 
             @Override
@@ -947,11 +1049,13 @@ public class HomeScreenView extends FrameLayout {
             root.addView(hdr);
 
             rv = new RecyclerView(ctx);
+            rv.setId(View.generateViewId());
             rv.setLayoutManager(new LinearLayoutManager(ctx, LinearLayoutManager.HORIZONTAL, false));
             rv.setClipToPadding(false);
             rv.setClipChildren(false);
             rv.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 10));
             rv.setAdapter(adapter);
+            seeAllTv.setNextFocusDownId(rv.getId());
             root.addView(rv, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         }
@@ -993,6 +1097,7 @@ public class HomeScreenView extends FrameLayout {
             @Override
             public void onBindViewHolder(@NonNull MovieCardView.Holder holder, int position) {
                 MovieCardView.bind(holder, items.get(position), cardType, position);
+                holder.itemView.setOnKeyListener(position == 0 ? moveFocusToRailLeftListener : null);
             }
 
             @Override
@@ -1006,6 +1111,8 @@ public class HomeScreenView extends FrameLayout {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setClipChildren(false);
+        row.setClipToPadding(false);
         row.setPadding(UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 4));
 
         View bar = new View(ctx);
@@ -1023,19 +1130,14 @@ public class HomeScreenView extends FrameLayout {
 
         TextView seeAll = new TextView(ctx);
         seeAll.setText("Xem tất cả  ›");
-        seeAll.setTextColor(UiHelper.COLOR_TEXT_MUTED);
+        seeAll.setTextColor(Color.WHITE);
         seeAll.setTextSize(11.5f);
-        seeAll.setPadding(UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 3), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 3));
+        seeAll.setTypeface(null, Typeface.BOLD);
+        seeAll.setPadding(UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 5), UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 5));
         if (onSeeAll != null) {
-            seeAll.setFocusable(true);
-            seeAll.setClickable(true);
+            UiHelper.applyCompactChipStyle(seeAll, ctx, 12, false);
             seeAll.setOnClickListener(onSeeAll);
-            seeAll.setOnFocusChangeListener(new OnFocusChangeListener() {
-                @Override
-                public void onFocusChange(View v, boolean hasFocus) {
-                    ((TextView) v).setTextColor(hasFocus ? Color.WHITE : UiHelper.COLOR_TEXT_MUTED);
-                }
-            });
+            seeAll.setOnKeyListener(moveFocusToRailLeftListener);
         } else {
             seeAll.setVisibility(GONE);
         }

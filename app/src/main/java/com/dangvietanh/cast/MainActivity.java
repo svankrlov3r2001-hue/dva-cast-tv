@@ -314,6 +314,13 @@ public class MainActivity extends Activity {
             public void onOpenExploreCategory(String sectionTitle) {
                 switchMainTab("explore");
             }
+
+            @Override
+            public void onMoveFocusToRail() {
+                if (navRail != null) {
+                    navRail.focusActiveTab();
+                }
+            }
         });
         contentHost.addView(homeScreen);
 

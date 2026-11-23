@@ -63,6 +63,7 @@ public class MovieDetailScreenView extends FrameLayout {
 
     private final ImageView backdropIv;
     private final LinearLayout leftIconRail;
+    private FrameLayout firstRailIcon;
     private final ScrollView scrollView;
     private final LinearLayout contentCol;
     private final LinearLayout loadingBox;
@@ -144,9 +145,12 @@ public class MovieDetailScreenView extends FrameLayout {
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
         // 2. Main Content ScrollView (to the right of 56dp left icon rail)
+        setClipChildren(false);
+        setClipToPadding(false);
         scrollView = new ScrollView(context);
         scrollView.setVerticalScrollBarEnabled(false);
         scrollView.setClipChildren(false);
+        scrollView.setClipToPadding(false);
         FrameLayout.LayoutParams svLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
         svLp.leftMargin = UiHelper.dp(context, 56);
@@ -157,11 +161,13 @@ public class MovieDetailScreenView extends FrameLayout {
         contentCol.setPadding(UiHelper.dp(context, 24), UiHelper.dp(context, 22),
                 UiHelper.dp(context, 24), UiHelper.dp(context, 28));
         contentCol.setClipChildren(false);
+        contentCol.setClipToPadding(false);
         scrollView.addView(contentCol, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
 
         // 3. Slim Left Icon-Only Rail (56dp)
         leftIconRail = buildLeftIconRail(context);
+        leftIconRail.setElevation(UiHelper.dp(context, 24));
         addView(leftIconRail, new FrameLayout.LayoutParams(
                 UiHelper.dp(context, 56), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START));
 
@@ -170,6 +176,7 @@ public class MovieDetailScreenView extends FrameLayout {
         heroRow.setOrientation(LinearLayout.HORIZONTAL);
         heroRow.setGravity(Gravity.TOP);
         heroRow.setClipChildren(false);
+        heroRow.setClipToPadding(false);
         LinearLayout.LayoutParams hrLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         hrLp.bottomMargin = UiHelper.dp(context, 20);
@@ -261,10 +268,12 @@ public class MovieDetailScreenView extends FrameLayout {
         infoCol.addView(descTv, dLp);
 
         // Capsule Icon-Text CTA Buttons Row
+        infoCol.setClipToPadding(false);
         LinearLayout actionsRow = new LinearLayout(context);
         actionsRow.setOrientation(LinearLayout.HORIZONTAL);
         actionsRow.setGravity(Gravity.CENTER_VERTICAL);
         actionsRow.setClipChildren(false);
+        actionsRow.setClipToPadding(false);
 
         btnPlay = makeCapsuleCta(context, R.drawable.ic_play, "Xem ngay", true);
         btnPlayText = (TextView) btnPlay.getChildAt(1);
@@ -276,6 +285,24 @@ public class MovieDetailScreenView extends FrameLayout {
         btnLike = makeCapsuleCta(context, R.drawable.ic_thumb_up, "Thích", false);
         btnDislike = makeCapsuleCta(context, R.drawable.ic_thumb_down, "Không thích", false);
         btnBack = makeCapsuleCta(context, R.drawable.ic_back, "Quay lại", false);
+
+        btnPlay.setId(View.generateViewId());
+        btnWishlist.setId(View.generateViewId());
+        btnLike.setId(View.generateViewId());
+        btnDislike.setId(View.generateViewId());
+        btnBack.setId(View.generateViewId());
+
+        if (firstRailIcon != null) {
+            btnPlay.setNextFocusLeftId(firstRailIcon.getId());
+        }
+        btnPlay.setNextFocusRightId(btnWishlist.getId());
+        btnWishlist.setNextFocusLeftId(btnPlay.getId());
+        btnWishlist.setNextFocusRightId(btnLike.getId());
+        btnLike.setNextFocusLeftId(btnWishlist.getId());
+        btnLike.setNextFocusRightId(btnDislike.getId());
+        btnDislike.setNextFocusLeftId(btnLike.getId());
+        btnDislike.setNextFocusRightId(btnBack.getId());
+        btnBack.setNextFocusLeftId(btnDislike.getId());
 
         actionsRow.addView(btnPlay, marginRightLp(context, 9));
         actionsRow.addView(btnWishlist, marginRightLp(context, 9));
@@ -290,11 +317,13 @@ public class MovieDetailScreenView extends FrameLayout {
         seasonSection = new LinearLayout(context);
         seasonSection.setOrientation(LinearLayout.VERTICAL);
         seasonSection.setClipChildren(false);
+        seasonSection.setClipToPadding(false);
         seasonSection.setVisibility(GONE);
 
         LinearLayout epHdrRow = new LinearLayout(context);
         epHdrRow.setOrientation(LinearLayout.HORIZONTAL);
         epHdrRow.setGravity(Gravity.CENTER_VERTICAL);
+        epHdrRow.setClipChildren(false);
         LinearLayout.LayoutParams ehrLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         ehrLp.bottomMargin = UiHelper.dp(context, 10);
@@ -314,8 +343,12 @@ public class MovieDetailScreenView extends FrameLayout {
 
         HorizontalScrollView seasonScroll = new HorizontalScrollView(context);
         seasonScroll.setHorizontalScrollBarEnabled(false);
+        seasonScroll.setClipChildren(false);
+        seasonScroll.setClipToPadding(false);
         seasonTabsRow = new LinearLayout(context);
         seasonTabsRow.setOrientation(LinearLayout.HORIZONTAL);
+        seasonTabsRow.setClipChildren(false);
+        seasonTabsRow.setClipToPadding(false);
         seasonScroll.addView(seasonTabsRow);
         epHdrRow.addView(seasonScroll, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -329,6 +362,7 @@ public class MovieDetailScreenView extends FrameLayout {
         episodeGridWrap = new LinearLayout(context);
         episodeGridWrap.setOrientation(LinearLayout.VERTICAL);
         episodeGridWrap.setClipChildren(false);
+        episodeGridWrap.setClipToPadding(false);
         seasonSection.addView(episodeGridWrap);
         LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -338,12 +372,16 @@ public class MovieDetailScreenView extends FrameLayout {
         // 6. Sources Section (Movies)
         sourcesSection = new LinearLayout(context);
         sourcesSection.setOrientation(LinearLayout.VERTICAL);
+        sourcesSection.setClipChildren(false);
         sourcesSection.setVisibility(GONE);
         sourcesSection.addView(makeSectionHeader(context, "Nguồn phát khả dụng"));
         HorizontalScrollView srcScroll = new HorizontalScrollView(context);
         srcScroll.setHorizontalScrollBarEnabled(false);
+        srcScroll.setClipChildren(false);
+        srcScroll.setClipToPadding(false);
         sourcesRow = new LinearLayout(context);
         sourcesRow.setOrientation(LinearLayout.HORIZONTAL);
+        sourcesRow.setClipChildren(false);
         srcScroll.addView(sourcesRow);
         sourcesSection.addView(srcScroll);
         contentCol.addView(sourcesSection, secLp);
@@ -351,12 +389,16 @@ public class MovieDetailScreenView extends FrameLayout {
         // 7. Cast & Crew Section
         castSection = new LinearLayout(context);
         castSection.setOrientation(LinearLayout.VERTICAL);
+        castSection.setClipChildren(false);
         castSection.setVisibility(GONE);
         castSection.addView(makeSectionHeader(context, "Đạo diễn & Diễn viên"));
         HorizontalScrollView castScroll = new HorizontalScrollView(context);
         castScroll.setHorizontalScrollBarEnabled(false);
+        castScroll.setClipChildren(false);
+        castScroll.setClipToPadding(false);
         castRow = new LinearLayout(context);
         castRow.setOrientation(LinearLayout.HORIZONTAL);
+        castRow.setClipChildren(false);
         castScroll.addView(castRow);
         castSection.addView(castScroll);
         contentCol.addView(castSection, secLp);
@@ -365,6 +407,7 @@ public class MovieDetailScreenView extends FrameLayout {
         relatedSection = new LinearLayout(context);
         relatedSection.setOrientation(LinearLayout.VERTICAL);
         relatedSection.setClipChildren(false);
+        relatedSection.setClipToPadding(false);
         relatedSection.setVisibility(GONE);
         relatedSection.addView(makeSectionHeader(context, "Có thể bạn cũng thích"));
         relatedRv = new RecyclerView(context);
@@ -418,10 +461,14 @@ public class MovieDetailScreenView extends FrameLayout {
     private LinearLayout buildLeftIconRail(Context ctx) {
         LinearLayout rail = new LinearLayout(ctx);
         rail.setOrientation(LinearLayout.HORIZONTAL);
+        rail.setClipChildren(false);
+        rail.setClipToPadding(false);
 
         LinearLayout inner = new LinearLayout(ctx);
         inner.setOrientation(LinearLayout.VERTICAL);
         inner.setGravity(Gravity.CENTER);
+        inner.setClipChildren(false);
+        inner.setClipToPadding(false);
         inner.setBackgroundColor(Color.argb(228, 12, 14, 22));
         inner.setPadding(0, UiHelper.dp(ctx, 18), 0, UiHelper.dp(ctx, 18));
 
@@ -484,18 +531,29 @@ public class MovieDetailScreenView extends FrameLayout {
         return rail;
     }
 
-    private void addRailIcon(Context ctx, LinearLayout parent, int iconRes, boolean accentActive, final Runnable action) {
+    private void addRailIcon(final Context ctx, LinearLayout parent, int iconRes, final boolean accentActive, final Runnable action) {
         FrameLayout btn = new FrameLayout(ctx);
+        btn.setId(View.generateViewId());
+        if (firstRailIcon == null) {
+            firstRailIcon = btn;
+        }
         if (accentActive) {
             UiHelper.applyFocusableGlassButton(btn, ctx, 18, true);
         } else {
             UiHelper.applyCircularIconButtonStyle(btn, ctx, 36);
             btn.setBackground(UiHelper.createSidebarItemStateDrawable(ctx, 18, false));
         }
-        ImageView iv = new ImageView(ctx);
+        final ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
         iv.setColorFilter(accentActive ? Color.WHITE : UiHelper.COLOR_TEXT_MUTED, PorterDuff.Mode.SRC_IN);
         btn.addView(iv, new FrameLayout.LayoutParams(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 18), Gravity.CENTER));
+        btn.setOnFocusChangeListener(new OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                UiHelper.applyFocusVisualEffects(v, ctx, hasFocus, 1.16f, 6, UiHelper.COLOR_FOCUS_GLOW);
+                iv.setColorFilter((hasFocus || accentActive) ? Color.WHITE : UiHelper.COLOR_TEXT_MUTED, PorterDuff.Mode.SRC_IN);
+            }
+        });
         btn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -673,8 +731,12 @@ public class MovieDetailScreenView extends FrameLayout {
         sourcesRow.removeAllViews();
         if (!m.sources.isEmpty() && m.isTvSeries == 0) {
             sourcesSection.setVisibility(VISIBLE);
-            for (final Models.SourceItem src : m.sources) {
+            for (int sIdx = 0; sIdx < m.sources.size(); sIdx++) {
+                final Models.SourceItem src = m.sources.get(sIdx);
                 LinearLayout sBtn = makeCapsuleCta(ctx, R.drawable.ic_play, src.label, false);
+                if (sIdx == 0 && firstRailIcon != null) {
+                    sBtn.setNextFocusLeftId(firstRailIcon.getId());
+                }
                 sBtn.setOnClickListener(new OnClickListener() {
                     @Override
                     public void onClick(View v) {
@@ -694,12 +756,16 @@ public class MovieDetailScreenView extends FrameLayout {
         people.addAll(m.stars);
         if (!people.isEmpty()) {
             castSection.setVisibility(VISIBLE);
-            for (Models.StarItem st : people) {
+            for (int pIdx = 0; pIdx < people.size(); pIdx++) {
+                Models.StarItem st = people.get(pIdx);
                 LinearLayout personCard = new LinearLayout(ctx);
                 personCard.setOrientation(LinearLayout.VERTICAL);
                 personCard.setGravity(Gravity.CENTER_HORIZONTAL);
                 personCard.setPadding(UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 8));
                 UiHelper.applyFocusableGlassButton(personCard, ctx, 14, false);
+                if (pIdx == 0 && firstRailIcon != null) {
+                    personCard.setNextFocusLeftId(firstRailIcon.getId());
+                }
 
                 ImageView iv = new ImageView(ctx);
                 UiHelper.safeLoadAvatar(iv, st.imageUrl);
@@ -788,15 +854,21 @@ public class MovieDetailScreenView extends FrameLayout {
             }
             Context ctx = getContext();
             if (m.seasons.size() > 1) {
-                for (final Models.SeasonItem s : m.seasons) {
+                for (int sIdx = 0; sIdx < m.seasons.size(); sIdx++) {
+                    final Models.SeasonItem s = m.seasons.get(sIdx);
                     boolean active = s.seasonsId == selectedSeasonId;
                     TextView tab = new TextView(ctx);
+                    tab.setId(View.generateViewId());
                     tab.setText(s.seasonsName);
                     tab.setTextColor(Color.WHITE);
                     tab.setTextSize(11f);
                     tab.setTypeface(null, Typeface.BOLD);
                     tab.setPadding(UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 4));
                     UiHelper.applyCompactChipStyle(tab, ctx, 12, active);
+                    tab.setNextFocusUpId(btnPlay.getId());
+                    if (sIdx == 0 && firstRailIcon != null) {
+                        tab.setNextFocusLeftId(firstRailIcon.getId());
+                    }
                     tab.setOnClickListener(new OnClickListener() {
                         @Override
                         public void onClick(View v) {
@@ -824,6 +896,9 @@ public class MovieDetailScreenView extends FrameLayout {
         seasonSection.setVisibility(VISIBLE);
         epTotalCountTv.setText("Tổng " + displayEps.size() + " tập  ›");
 
+        final int firstSeasonTabId = seasonTabsRow.getChildCount() > 0
+                ? seasonTabsRow.getChildAt(0).getId()
+                : View.NO_ID;
         Context ctx = getContext();
         int cols = 5;
         LinearLayout currentRow = null;
@@ -832,6 +907,7 @@ public class MovieDetailScreenView extends FrameLayout {
                 currentRow = new LinearLayout(ctx);
                 currentRow.setOrientation(LinearLayout.HORIZONTAL);
                 currentRow.setClipChildren(false);
+                currentRow.setClipToPadding(false);
                 LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
                 rLp.bottomMargin = UiHelper.dp(ctx, 10);
@@ -847,6 +923,13 @@ public class MovieDetailScreenView extends FrameLayout {
             }
 
             FrameLayout epCard = buildThumbnailEpisodeCard(ctx, ep, epNum, isActiveEp, fallbackThumbUrl);
+            epCard.setId(View.generateViewId());
+            if ((i % cols) == 0 && firstRailIcon != null) {
+                epCard.setNextFocusLeftId(firstRailIcon.getId());
+            }
+            if (i < cols) {
+                epCard.setNextFocusUpId(firstSeasonTabId != View.NO_ID ? firstSeasonTabId : btnPlay.getId());
+            }
             epCard.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -973,21 +1056,29 @@ public class MovieDetailScreenView extends FrameLayout {
 
         // Luminous Crimson-Pink Focus Frame Overlay
         final View focusFrame = new View(ctx);
-        focusFrame.setBackground(UiHelper.createFocusRingDrawable(
-                ctx, radiusDp, Color.parseColor("#FF4078"), 2.2f));
-        focusFrame.setAlpha(isActiveEp ? 0.60f : 0f);
+        focusFrame.setBackground(UiHelper.createGlowingFocusRingDrawable(
+                ctx, radiusDp, Color.parseColor("#FF2E63"), 2.6f));
+        focusFrame.setAlpha(isActiveEp ? 0.65f : 0f);
         card.addView(focusFrame, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-        final float baseElev = UiHelper.dp(ctx, isActiveEp ? 12 : 6);
-        final float focusElev = UiHelper.dp(ctx, 18);
+        final int baseElevDp = isActiveEp ? 12 : 6;
+        final float baseElev = UiHelper.dp(ctx, baseElevDp);
+        final float focusElev = UiHelper.dp(ctx, 22);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && isActiveEp) {
+            card.setOutlineSpotShadowColor(UiHelper.COLOR_FOCUS_GLOW);
+            card.setOutlineAmbientShadowColor(Color.argb(180, 255, 46, 99));
+        }
         card.setOnFocusChangeListener(new OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
-                float sc = hasFocus ? 1.045f : 1.0f;
-                v.animate().scaleX(sc).scaleY(sc).setDuration(130).setInterpolator(new DecelerateInterpolator()).start();
+                UiHelper.applyFocusVisualEffects(v, ctx, hasFocus, 1.085f, baseElevDp, UiHelper.COLOR_FOCUS_GLOW);
                 card.setElevation(hasFocus ? focusElev : baseElev);
-                focusFrame.animate().alpha(hasFocus ? 1f : (isActiveEp ? 0.60f : 0f)).setDuration(120).start();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && !hasFocus && isActiveEp) {
+                    card.setOutlineSpotShadowColor(UiHelper.COLOR_FOCUS_GLOW);
+                    card.setOutlineAmbientShadowColor(Color.argb(180, 255, 46, 99));
+                }
+                focusFrame.animate().alpha(hasFocus ? 1f : (isActiveEp ? 0.65f : 0f)).setDuration(130).start();
             }
         });
 
@@ -1255,6 +1346,7 @@ public class MovieDetailScreenView extends FrameLayout {
         @Override
         public void onBindViewHolder(@NonNull MovieCardView.Holder holder, int position) {
             MovieCardView.bind(holder, relatedMovies.get(position), MovieCardView.TYPE_VERTICAL, position);
+            holder.itemView.setNextFocusLeftId(position == 0 && firstRailIcon != null ? firstRailIcon.getId() : View.NO_ID);
         }
 
         @Override

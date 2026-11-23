@@ -2,6 +2,7 @@ package com.dangvietanh.cast.player;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.PorterDuff;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -14,6 +15,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -415,6 +417,8 @@ public class PlayerScreenController {
         // 7. Auto-Next Episode Countdown Card
         nextEpCard = new LinearLayout(context);
         nextEpCard.setOrientation(LinearLayout.VERTICAL);
+        nextEpCard.setClipChildren(false);
+        nextEpCard.setClipToPadding(false);
         nextEpCard.setPadding(UiHelper.dp(context, 22), UiHelper.dp(context, 18),
                 UiHelper.dp(context, 22), UiHelper.dp(context, 18));
         UiHelper.applyGlassCardStyle(nextEpCard, context, 32, UiHelper.COLOR_SURFACE_GLASS, 24);
@@ -448,7 +452,10 @@ public class PlayerScreenController {
 
         LinearLayout nxBtns = new LinearLayout(context);
         nxBtns.setOrientation(LinearLayout.HORIZONTAL);
+        nxBtns.setClipChildren(false);
+        nxBtns.setClipToPadding(false);
         btnNextPlayNow = makeTextPill(context, "▶  Phát ngay", true);
+        btnNextPlayNow.setId(View.generateViewId());
         btnNextPlayNow.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -462,6 +469,9 @@ public class PlayerScreenController {
         nxBtns.addView(btnNextPlayNow, npLp);
 
         btnNextCancel = makeTextPill(context, "Huỷ", false);
+        btnNextCancel.setId(View.generateViewId());
+        btnNextPlayNow.setNextFocusRightId(btnNextCancel.getId());
+        btnNextCancel.setNextFocusLeftId(btnNextPlayNow.getId());
         btnNextCancel.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -480,6 +490,8 @@ public class PlayerScreenController {
         // 8. Main HUD Layer (Matching iOS Minimalist Frosted Player Layout)
         hudLayer = new FrameLayout(context);
         hudLayer.setClipChildren(false);
+        hudLayer.setClipToPadding(false);
+        rootFrame.setClipChildren(false);
         rootFrame.addView(hudLayer, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -500,10 +512,12 @@ public class PlayerScreenController {
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setClipChildren(false);
+        topBar.setClipToPadding(false);
         topBar.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 12),
                 UiHelper.dp(context, 20), UiHelper.dp(context, 6));
 
         btnBackHud = makeHudCircleIcon(context, R.drawable.ic_back, 36);
+        btnBackHud.setId(View.generateViewId());
         btnBackHud.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -553,6 +567,7 @@ public class PlayerScreenController {
         // Top-Right Icon Groups (NO bulky text labels)
         LinearLayout topGroup1 = makeFrostedCapsuleGroup(context);
         FrameLayout btnServerTop = makeGroupSlotIcon(context, R.drawable.ic_server);
+        btnServerTop.setId(View.generateViewId());
         btnServerTop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -562,6 +577,7 @@ public class PlayerScreenController {
         topGroup1.addView(btnServerTop);
 
         btnDubTop = makeGroupSlotIcon(context, R.drawable.ic_voice);
+        btnDubTop.setId(View.generateViewId());
         dubTopIcon = (ImageView) btnDubTop.getChildAt(0);
         btnDubTop.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -577,6 +593,7 @@ public class PlayerScreenController {
         topGroup1.addView(btnDubTop);
 
         FrameLayout btnSubTop = makeGroupSlotIcon(context, R.drawable.ic_subtitles);
+        btnSubTop.setId(View.generateViewId());
         btnSubTop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -588,6 +605,7 @@ public class PlayerScreenController {
 
         LinearLayout topGroup2 = makeFrostedCapsuleGroup(context);
         FrameLayout btnInfoTop = makeGroupSlotIcon(context, R.drawable.ic_info);
+        btnInfoTop.setId(View.generateViewId());
         btnInfoTop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -597,6 +615,7 @@ public class PlayerScreenController {
         topGroup2.addView(btnInfoTop);
 
         FrameLayout btnReloadTop = makeGroupSlotIcon(context, R.drawable.ic_reload);
+        btnReloadTop.setId(View.generateViewId());
         btnReloadTop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -607,6 +626,7 @@ public class PlayerScreenController {
         topBar.addView(topGroup2, rightMarginLp(8));
 
         FrameLayout btnSettingsTop = makeHudCircleIcon(context, R.drawable.ic_settings, 36);
+        btnSettingsTop.setId(View.generateViewId());
         btnSettingsTop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -671,8 +691,10 @@ public class PlayerScreenController {
         rightDock.setBackground(UiHelper.createPillDrawable(
                 context, 20, Color.argb(156, 22, 24, 34), Color.argb(30, 255, 255, 255), 1.0f));
         rightDock.setClipChildren(false);
+        rightDock.setClipToPadding(false);
 
         btnDockContrast = makeGroupSlotIcon(context, R.drawable.ic_contrast);
+        btnDockContrast.setId(View.generateViewId());
         dockContrastIcon = (ImageView) btnDockContrast.getChildAt(0);
         btnDockContrast.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -683,6 +705,7 @@ public class PlayerScreenController {
         rightDock.addView(btnDockContrast);
 
         btnDockAutoNext = makeGroupSlotIcon(context, R.drawable.ic_skip_next);
+        btnDockAutoNext.setId(View.generateViewId());
         dockAutoNextIcon = (ImageView) btnDockAutoNext.getChildAt(0);
         btnDockAutoNext.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -697,6 +720,7 @@ public class PlayerScreenController {
         rightDock.addView(btnDockAutoNext);
 
         btnDockFill = makeGroupSlotIcon(context, R.drawable.ic_fullscreen);
+        btnDockFill.setId(View.generateViewId());
         dockFillIcon = (ImageView) btnDockFill.getChildAt(0);
         btnDockFill.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -721,8 +745,10 @@ public class PlayerScreenController {
         centerTransport.setOrientation(LinearLayout.HORIZONTAL);
         centerTransport.setGravity(Gravity.CENTER);
         centerTransport.setClipChildren(false);
+        centerTransport.setClipToPadding(false);
 
         FrameLayout btnRew = makeClearTransportIcon(context, R.drawable.ic_rewind_10);
+        btnRew.setId(View.generateViewId());
         btnRew.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -734,12 +760,16 @@ public class PlayerScreenController {
         centerTransport.addView(btnRew, rwLp);
 
         FrameLayout centerPlayWrap = new FrameLayout(context);
+        centerPlayWrap.setId(View.generateViewId());
         centerPlayWrap.setBackground(makeSquircleSelectorDrawable(context));
-        centerPlayWrap.setFocusable(true);
-        centerPlayWrap.setClickable(true);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            centerPlayWrap.setDefaultFocusHighlightEnabled(false);
-        }
+        centerPlayWrap.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline outline) {
+                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), 16));
+            }
+        });
+        centerPlayWrap.setClipToOutline(true);
+        UiHelper.applyTvFocusZoomGlow(centerPlayWrap, context, 1.14f, 10, UiHelper.COLOR_FOCUS_GLOW);
         playPauseIcon = new ImageView(context);
         playPauseIcon.setImageResource(R.drawable.ic_pause);
         playPauseIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
@@ -755,6 +785,7 @@ public class PlayerScreenController {
         centerTransport.addView(centerPlayWrap, new LinearLayout.LayoutParams(UiHelper.dp(context, 62), UiHelper.dp(context, 62)));
 
         FrameLayout btnFwd = makeClearTransportIcon(context, R.drawable.ic_forward_10);
+        btnFwd.setId(View.generateViewId());
         btnFwd.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -772,6 +803,7 @@ public class PlayerScreenController {
         LinearLayout bottomHudCol = new LinearLayout(context);
         bottomHudCol.setOrientation(LinearLayout.VERTICAL);
         bottomHudCol.setClipChildren(false);
+        bottomHudCol.setClipToPadding(false);
         bottomHudCol.setPadding(UiHelper.dp(context, 20), 0,
                 UiHelper.dp(context, 20), UiHelper.dp(context, 16));
 
@@ -787,20 +819,25 @@ public class PlayerScreenController {
         bottomHudCol.addView(timeCombinedTv, tcLp);
 
         seekBarFocusBox = new FrameLayout(context);
+        seekBarFocusBox.setId(View.generateViewId());
         seekBarFocusBox.setFocusable(true);
         seekBarFocusBox.setClickable(true);
+        seekBarFocusBox.setClipChildren(false);
+        seekBarFocusBox.setClipToPadding(false);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             seekBarFocusBox.setDefaultFocusHighlightEnabled(false);
         }
-        seekBarFocusBox.setPadding(UiHelper.dp(context, 2), UiHelper.dp(context, 5),
-                UiHelper.dp(context, 2), UiHelper.dp(context, 5));
+        seekBarFocusBox.setPadding(UiHelper.dp(context, 4), UiHelper.dp(context, 6),
+                UiHelper.dp(context, 4), UiHelper.dp(context, 6));
         android.graphics.drawable.StateListDrawable seekFocusStates = new android.graphics.drawable.StateListDrawable();
         seekFocusStates.addState(new int[]{android.R.attr.state_focused},
-                UiHelper.createFocusRingDrawable(context, 8, Color.argb(185, 255, 255, 255), 1.4f));
+                UiHelper.createGlowingFocusRingDrawable(context, 10, UiHelper.COLOR_FOCUS_GLOW, 1.8f));
         seekFocusStates.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         seekBarFocusBox.setBackground(seekFocusStates);
 
         seekTrackContainer = new FrameLayout(context);
+        seekTrackContainer.setClipChildren(false);
+        seekTrackContainer.setClipToPadding(false);
         View trackBg = new View(context);
         trackBg.setBackground(UiHelper.createGlassRect(context, 2, Color.argb(72, 255, 255, 255), Color.TRANSPARENT, 0));
         seekTrackContainer.addView(trackBg, new FrameLayout.LayoutParams(
@@ -829,9 +866,19 @@ public class PlayerScreenController {
                 UiHelper.dp(context, 6), UiHelper.dp(context, 6), Gravity.CENTER_VERTICAL));
 
         seekThumbDot = new View(context);
-        seekThumbDot.setBackground(UiHelper.createGlassRect(context, 6, UiHelper.COLOR_ACCENT_RED, Color.TRANSPARENT, 0));
+        seekThumbDot.setBackground(UiHelper.createGlassRect(context, 6, UiHelper.COLOR_ACCENT_RED, Color.WHITE, 1));
         seekTrackContainer.addView(seekThumbDot, new FrameLayout.LayoutParams(
                 UiHelper.dp(context, 12), UiHelper.dp(context, 12), Gravity.CENTER_VERTICAL));
+
+        seekBarFocusBox.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                float sc = hasFocus ? 1.55f : 1.0f;
+                seekThumbDot.animate().scaleX(sc).scaleY(sc).setDuration(130).start();
+                UiHelper.applyFocusVisualEffects(v, PlayerScreenController.this.context,
+                        hasFocus, 1.015f, 4, UiHelper.COLOR_FOCUS_GLOW);
+            }
+        });
 
         seekBarFocusBox.addView(seekTrackContainer, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 14)));
@@ -879,8 +926,10 @@ public class PlayerScreenController {
         bottomRow.setOrientation(LinearLayout.HORIZONTAL);
         bottomRow.setGravity(Gravity.CENTER_VERTICAL);
         bottomRow.setClipChildren(false);
+        bottomRow.setClipToPadding(false);
 
         btnMemberPill = new LinearLayout(context);
+        btnMemberPill.setId(View.generateViewId());
         btnMemberPill.setOrientation(LinearLayout.HORIZONTAL);
         btnMemberPill.setGravity(Gravity.CENTER_VERTICAL);
         btnMemberPill.setPadding(UiHelper.dp(context, 5), UiHelper.dp(context, 4),
@@ -909,6 +958,7 @@ public class PlayerScreenController {
         bottomRow.addView(btnMemberPill, mpLp);
 
         btnWishlistBar = makeHudCircleIcon(context, R.drawable.ic_bookmark_outline, 36);
+        btnWishlistBar.setId(View.generateViewId());
         wishlistIconBar = (ImageView) btnWishlistBar.getChildAt(0);
         btnWishlistBar.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -919,6 +969,7 @@ public class PlayerScreenController {
         bottomRow.addView(btnWishlistBar, fixedSquareMarginLp(36, 8));
 
         FrameLayout btnEpisodesBar = makeHudCircleIcon(context, R.drawable.ic_episodes, 36);
+        btnEpisodesBar.setId(View.generateViewId());
         btnEpisodesBar.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -928,6 +979,7 @@ public class PlayerScreenController {
         bottomRow.addView(btnEpisodesBar, fixedSquareMarginLp(36, 8));
 
         btnLikeBar = makeHudCircleIcon(context, R.drawable.ic_thumb_up, 36);
+        btnLikeBar.setId(View.generateViewId());
         likeIconBar = (ImageView) btnLikeBar.getChildAt(0);
         btnLikeBar.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -938,6 +990,7 @@ public class PlayerScreenController {
         bottomRow.addView(btnLikeBar, fixedSquareMarginLp(36, 8));
 
         btnDislikeBar = makeHudCircleIcon(context, R.drawable.ic_thumb_down, 36);
+        btnDislikeBar.setId(View.generateViewId());
         dislikeIconBar = (ImageView) btnDislikeBar.getChildAt(0);
         btnDislikeBar.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -951,6 +1004,7 @@ public class PlayerScreenController {
         bottomRow.addView(new View(context), new LinearLayout.LayoutParams(0, 1, 1f));
 
         btnSpeedBar = makeIconTextPill(context, R.drawable.ic_play, "1.0x");
+        btnSpeedBar.setId(View.generateViewId());
         ((ImageView) btnSpeedBar.getChildAt(0)).getLayoutParams().width = UiHelper.dp(context, 12);
         ((ImageView) btnSpeedBar.getChildAt(0)).getLayoutParams().height = UiHelper.dp(context, 12);
         speedTextBar = (TextView) btnSpeedBar.getChildAt(1);
@@ -964,6 +1018,7 @@ public class PlayerScreenController {
         bottomRow.addView(btnSpeedBar, rightMarginLp(8));
 
         TextView btnMoreBar = makeTextPill(context, "Tùy chọn khác  ⌄", false);
+        btnMoreBar.setId(View.generateViewId());
         btnMoreBar.setTextSize(12.5f);
         btnMoreBar.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -976,6 +1031,77 @@ public class PlayerScreenController {
         bottomHudCol.addView(bottomRow);
         hudLayer.addView(bottomHudCol, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+
+        // Deterministic 5-Zone D-Pad Focus Matrix across Player HUD (zero dead ends)
+        btnBackHud.setNextFocusRightId(btnServerTop.getId());
+        btnServerTop.setNextFocusLeftId(btnBackHud.getId());
+        btnServerTop.setNextFocusRightId(btnDubTop.getId());
+        btnDubTop.setNextFocusLeftId(btnServerTop.getId());
+        btnDubTop.setNextFocusRightId(btnSubTop.getId());
+        btnSubTop.setNextFocusLeftId(btnDubTop.getId());
+        btnSubTop.setNextFocusRightId(btnInfoTop.getId());
+        btnInfoTop.setNextFocusLeftId(btnSubTop.getId());
+        btnInfoTop.setNextFocusRightId(btnReloadTop.getId());
+        btnReloadTop.setNextFocusLeftId(btnInfoTop.getId());
+        btnReloadTop.setNextFocusRightId(btnSettingsTop.getId());
+        btnSettingsTop.setNextFocusLeftId(btnReloadTop.getId());
+
+        btnBackHud.setNextFocusDownId(btnRew.getId());
+        btnServerTop.setNextFocusDownId(centerPlayWrap.getId());
+        btnDubTop.setNextFocusDownId(centerPlayWrap.getId());
+        btnSubTop.setNextFocusDownId(btnFwd.getId());
+        btnInfoTop.setNextFocusDownId(btnFwd.getId());
+        btnReloadTop.setNextFocusDownId(btnDockContrast.getId());
+        btnSettingsTop.setNextFocusDownId(btnDockContrast.getId());
+
+        btnRew.setNextFocusUpId(btnBackHud.getId());
+        btnRew.setNextFocusRightId(centerPlayWrap.getId());
+        btnRew.setNextFocusDownId(seekBarFocusBox.getId());
+
+        centerPlayWrap.setNextFocusUpId(btnDubTop.getId());
+        centerPlayWrap.setNextFocusLeftId(btnRew.getId());
+        centerPlayWrap.setNextFocusRightId(btnFwd.getId());
+        centerPlayWrap.setNextFocusDownId(seekBarFocusBox.getId());
+
+        btnFwd.setNextFocusUpId(btnSubTop.getId());
+        btnFwd.setNextFocusLeftId(centerPlayWrap.getId());
+        btnFwd.setNextFocusRightId(btnDockContrast.getId());
+        btnFwd.setNextFocusDownId(seekBarFocusBox.getId());
+
+        btnDockContrast.setNextFocusUpId(btnSettingsTop.getId());
+        btnDockContrast.setNextFocusDownId(btnDockAutoNext.getId());
+        btnDockContrast.setNextFocusLeftId(btnFwd.getId());
+
+        btnDockAutoNext.setNextFocusUpId(btnDockContrast.getId());
+        btnDockAutoNext.setNextFocusDownId(btnDockFill.getId());
+        btnDockAutoNext.setNextFocusLeftId(btnFwd.getId());
+
+        btnDockFill.setNextFocusUpId(btnDockAutoNext.getId());
+        btnDockFill.setNextFocusDownId(seekBarFocusBox.getId());
+        btnDockFill.setNextFocusLeftId(btnFwd.getId());
+
+        seekBarFocusBox.setNextFocusUpId(centerPlayWrap.getId());
+        seekBarFocusBox.setNextFocusDownId(btnMemberPill.getId());
+
+        btnMemberPill.setNextFocusUpId(seekBarFocusBox.getId());
+        btnMemberPill.setNextFocusRightId(btnWishlistBar.getId());
+        btnWishlistBar.setNextFocusUpId(seekBarFocusBox.getId());
+        btnWishlistBar.setNextFocusLeftId(btnMemberPill.getId());
+        btnWishlistBar.setNextFocusRightId(btnEpisodesBar.getId());
+        btnEpisodesBar.setNextFocusUpId(seekBarFocusBox.getId());
+        btnEpisodesBar.setNextFocusLeftId(btnWishlistBar.getId());
+        btnEpisodesBar.setNextFocusRightId(btnLikeBar.getId());
+        btnLikeBar.setNextFocusUpId(seekBarFocusBox.getId());
+        btnLikeBar.setNextFocusLeftId(btnEpisodesBar.getId());
+        btnLikeBar.setNextFocusRightId(btnDislikeBar.getId());
+        btnDislikeBar.setNextFocusUpId(seekBarFocusBox.getId());
+        btnDislikeBar.setNextFocusLeftId(btnLikeBar.getId());
+        btnDislikeBar.setNextFocusRightId(btnSpeedBar.getId());
+        btnSpeedBar.setNextFocusUpId(seekBarFocusBox.getId());
+        btnSpeedBar.setNextFocusLeftId(btnDislikeBar.getId());
+        btnSpeedBar.setNextFocusRightId(btnMoreBar.getId());
+        btnMoreBar.setNextFocusUpId(seekBarFocusBox.getId());
+        btnMoreBar.setNextFocusLeftId(btnSpeedBar.getId());
 
         // 9. Sub-Modal Host (Sleek Frosted Glass 20dp)
         subModalHost = new FrameLayout(context);
@@ -1033,9 +1159,6 @@ public class PlayerScreenController {
         subModalHost.addView(subModalCard, smcLp);
         rootFrame.addView(subModalHost, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-        // Link center play wrap focus nicely
-        centerPlayWrap.setNextFocusDownId(View.NO_ID);
     }
 
     public View getView() {
@@ -1195,6 +1318,11 @@ public class PlayerScreenController {
             if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
                 close();
                 return true;
+            }
+            if ((nextEpCard.getVisibility() == View.VISIBLE && nextEpCard.hasFocus())
+                    || (skipIntroBtn.getVisibility() == View.VISIBLE && skipIntroBtn.hasFocus()
+                    && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER))) {
+                return false;
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 togglePlayPause();
@@ -1582,6 +1710,9 @@ public class PlayerScreenController {
         nextCountdownRemaining = Math.max(3, Prefs.getNextEpisodeDelaySec(context));
         nextEpTitleTv.setText(nextEpisodeTarget.episodesName.isEmpty() ? "Tập tiếp theo" : nextEpisodeTarget.episodesName);
         nextEpCard.setVisibility(View.VISIBLE);
+        if (!hudVisible && activeModal == MODAL_NONE && btnNextPlayNow != null) {
+            btnNextPlayNow.requestFocus();
+        }
         handler.removeCallbacks(nextCountdownRunnable);
         handler.post(nextCountdownRunnable);
     }
@@ -2967,21 +3098,17 @@ public class PlayerScreenController {
 
     private FrameLayout makeHudCircleIcon(Context ctx, int iconRes, int sizeDp) {
         FrameLayout box = new FrameLayout(ctx);
-        box.setFocusable(true);
-        box.setClickable(true);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            box.setDefaultFocusHighlightEnabled(false);
-        }
         int r = sizeDp / 2;
         android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
                 ctx, r, Color.argb(148, 22, 24, 34), Color.argb(30, 255, 255, 255), 1.0f);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, r, Color.argb(215, 42, 46, 66), Color.WHITE, 1.5f);
+                ctx, r, Color.argb(242, 48, 54, 82), Color.WHITE, 2.0f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, normal);
         box.setBackground(states);
+        UiHelper.applyTvFocusZoomGlow(box, ctx, 1.15f, 6, UiHelper.COLOR_FOCUS_GLOW);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -2994,6 +3121,8 @@ public class PlayerScreenController {
         LinearLayout group = new LinearLayout(ctx);
         group.setOrientation(LinearLayout.HORIZONTAL);
         group.setGravity(Gravity.CENTER_VERTICAL);
+        group.setClipChildren(false);
+        group.setClipToPadding(false);
         group.setPadding(UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 2));
         group.setBackground(UiHelper.createPillDrawable(
                 ctx, 18, Color.argb(148, 22, 24, 34), Color.argb(30, 255, 255, 255), 1.0f));
@@ -3004,18 +3133,14 @@ public class PlayerScreenController {
 
     private FrameLayout makeGroupSlotIcon(Context ctx, int iconRes) {
         FrameLayout slot = new FrameLayout(ctx);
-        slot.setFocusable(true);
-        slot.setClickable(true);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            slot.setDefaultFocusHighlightEnabled(false);
-        }
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, 16, Color.argb(190, 56, 62, 86), Color.WHITE, 1.4f);
+                ctx, 16, Color.argb(232, 58, 66, 98), Color.WHITE, 2.0f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         slot.setBackground(states);
+        UiHelper.applyTvFocusZoomGlow(slot, ctx, 1.16f, 6, UiHelper.COLOR_FOCUS_GLOW);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -3027,18 +3152,14 @@ public class PlayerScreenController {
 
     private FrameLayout makeClearTransportIcon(Context ctx, int iconRes) {
         FrameLayout box = new FrameLayout(ctx);
-        box.setFocusable(true);
-        box.setClickable(true);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            box.setDefaultFocusHighlightEnabled(false);
-        }
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, 24, Color.argb(135, 36, 40, 56), Color.WHITE, 1.5f);
+                ctx, 24, Color.argb(195, 48, 54, 82), Color.WHITE, 2.0f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         box.setBackground(states);
+        UiHelper.applyTvFocusZoomGlow(box, ctx, 1.18f, 6, UiHelper.COLOR_FOCUS_GLOW);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -3051,7 +3172,7 @@ public class PlayerScreenController {
         android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
                 ctx, 16, Color.argb(148, 52, 54, 66), Color.argb(42, 255, 255, 255), 1.0f);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, 16, Color.argb(208, 72, 76, 94), Color.WHITE, 1.8f);
+                ctx, 16, Color.argb(238, 76, 82, 110), Color.WHITE, 2.4f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
