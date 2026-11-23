@@ -1007,7 +1007,7 @@ public class MovieDetailScreenView extends FrameLayout {
             } catch (Exception ignored) {
             }
         }
-        String fb = (fallbackThumbUrl != null && !fallbackThumbUrl.trim().isEmpty()) ? fallbackThumbUrl.trim() : "";
+        String fb = (fallbackUrl != null && !fallbackUrl.trim().isEmpty()) ? fallbackUrl.trim() : "";
         if (codeThumb.isEmpty()) {
             UiHelper.safeLoadImage(target, fb, R.drawable.default_poster, 0);
             return;
