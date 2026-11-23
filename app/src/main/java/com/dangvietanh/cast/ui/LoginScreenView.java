@@ -132,14 +132,14 @@ public class LoginScreenView extends FrameLayout {
 
         outerCol.addView(topBar, topLp);
 
-        // Center Borderless Liquid Glass Card (radius 40dp, shadow, zero border)
-        int cardW = Math.min(UiHelper.dp(ctx, 860), Math.round(screenW * 0.90f));
+        // Center Frosted Glass Card (sleek 20dp radius, crisp border)
+        int cardW = Math.min(UiHelper.dp(ctx, 760), Math.round(screenW * 0.88f));
         LinearLayout glassCard = new LinearLayout(ctx);
         glassCard.setOrientation(LinearLayout.HORIZONTAL);
         glassCard.setGravity(Gravity.CENTER_VERTICAL);
-        glassCard.setPadding(UiHelper.dp(ctx, 36), UiHelper.dp(ctx, 34),
-                UiHelper.dp(ctx, 36), UiHelper.dp(ctx, 34));
-        UiHelper.applyGlassCardStyle(glassCard, ctx, 40, UiHelper.COLOR_SURFACE_GLASS, 28);
+        glassCard.setPadding(UiHelper.dp(ctx, 26), UiHelper.dp(ctx, 24),
+                UiHelper.dp(ctx, 26), UiHelper.dp(ctx, 24));
+        UiHelper.applyGlassCardStyle(glassCard, ctx, 20, UiHelper.COLOR_SURFACE_GLASS, 16);
 
         LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(cardW, LinearLayout.LayoutParams.WRAP_CONTENT);
         cardLp.gravity = Gravity.CENTER;
@@ -150,24 +150,24 @@ public class LoginScreenView extends FrameLayout {
         leftCol.setOrientation(LinearLayout.VERTICAL);
         leftCol.setGravity(Gravity.CENTER_HORIZONTAL);
         LinearLayout.LayoutParams leftLp = new LinearLayout.LayoutParams(
-                UiHelper.dp(ctx, 270), LinearLayout.LayoutParams.WRAP_CONTENT);
-        leftLp.rightMargin = UiHelper.dp(ctx, 34);
+                UiHelper.dp(ctx, 232), LinearLayout.LayoutParams.WRAP_CONTENT);
+        leftLp.rightMargin = UiHelper.dp(ctx, 26);
         glassCard.addView(leftCol, leftLp);
 
         // White rounded QR frame
         qrBox = new LinearLayout(ctx);
         qrBox.setOrientation(LinearLayout.VERTICAL);
         qrBox.setGravity(Gravity.CENTER);
-        qrBox.setPadding(UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 16));
+        qrBox.setPadding(UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 12));
         GradientDrawable whiteFrame = new GradientDrawable();
         whiteFrame.setColor(Color.WHITE);
-        whiteFrame.setCornerRadius(UiHelper.dp(ctx, 28));
+        whiteFrame.setCornerRadius(UiHelper.dp(ctx, 16));
         qrBox.setBackground(whiteFrame);
-        qrBox.setElevation(UiHelper.dp(ctx, 16));
+        qrBox.setElevation(UiHelper.dp(ctx, 10));
 
         qrImageView = new ImageView(ctx);
         qrImageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        qrBox.addView(qrImageView, new LinearLayout.LayoutParams(UiHelper.dp(ctx, 210), UiHelper.dp(ctx, 210)));
+        qrBox.addView(qrImageView, new LinearLayout.LayoutParams(UiHelper.dp(ctx, 184), UiHelper.dp(ctx, 184)));
         leftCol.addView(qrBox, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -259,17 +259,17 @@ public class LoginScreenView extends FrameLayout {
         dsLp.bottomMargin = UiHelper.dp(ctx, 18);
         rightCol.addView(descTv, dsLp);
 
-        // 9-Digit Device Code Liquid Glass Box
+        // 9-Digit Device Code Frosted Box
         LinearLayout codePill = new LinearLayout(ctx);
         codePill.setOrientation(LinearLayout.VERTICAL);
         codePill.setGravity(Gravity.CENTER_VERTICAL);
-        codePill.setPadding(UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 14));
-        UiHelper.applyGlassCardStyle(codePill, ctx, 24, UiHelper.COLOR_SURFACE_CARD, 14);
+        codePill.setPadding(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 11));
+        UiHelper.applyGlassCardStyle(codePill, ctx, 14, UiHelper.COLOR_SURFACE_CARD, 10);
 
         TextView codeLabel = new TextView(ctx);
         codeLabel.setText("MÃ THIẾT BỊ");
         codeLabel.setTextColor(UiHelper.COLOR_TEXT_MUTED);
-        codeLabel.setTextSize(11f);
+        codeLabel.setTextSize(10.5f);
         codeLabel.setLetterSpacing(0.10f);
         codeLabel.setTypeface(null, Typeface.BOLD);
         codePill.addView(codeLabel);
@@ -277,7 +277,7 @@ public class LoginScreenView extends FrameLayout {
         codeTv = new TextView(ctx);
         codeTv.setText("--- --- ---");
         codeTv.setTextColor(Color.WHITE);
-        codeTv.setTextSize(34f);
+        codeTv.setTextSize(28f);
         codeTv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         codeTv.setLetterSpacing(0.10f);
         LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(
@@ -287,7 +287,7 @@ public class LoginScreenView extends FrameLayout {
 
         LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        pillLp.bottomMargin = UiHelper.dp(ctx, 16);
+        pillLp.bottomMargin = UiHelper.dp(ctx, 14);
         rightCol.addView(codePill, pillLp);
 
         // Live Polling Status Row
@@ -296,17 +296,17 @@ public class LoginScreenView extends FrameLayout {
         statusRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams srLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        srLp.bottomMargin = UiHelper.dp(ctx, 20);
+        srLp.bottomMargin = UiHelper.dp(ctx, 16);
 
         statusSpinner = new UiHelper.SpinnerView(ctx);
-        LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 20));
-        spLp.rightMargin = UiHelper.dp(ctx, 10);
+        LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 18));
+        spLp.rightMargin = UiHelper.dp(ctx, 9);
         statusRow.addView(statusSpinner, spLp);
 
         statusTv = new TextView(ctx);
         statusTv.setText("Đang khởi tạo mã xác thực...");
         statusTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
-        statusTv.setTextSize(13.5f);
+        statusTv.setTextSize(12.5f);
         statusRow.addView(statusTv);
 
         rightCol.addView(statusRow, srLp);
@@ -319,11 +319,11 @@ public class LoginScreenView extends FrameLayout {
         btnRefreshQr = new TextView(ctx);
         btnRefreshQr.setText("Làm mới mã QR");
         btnRefreshQr.setTextColor(Color.WHITE);
-        btnRefreshQr.setTextSize(14f);
+        btnRefreshQr.setTextSize(13f);
         btnRefreshQr.setTypeface(null, Typeface.BOLD);
         btnRefreshQr.setGravity(Gravity.CENTER);
-        btnRefreshQr.setPadding(UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 12));
-        UiHelper.applyPrimaryGradientButton(btnRefreshQr, ctx, 24);
+        btnRefreshQr.setPadding(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 9), UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 9));
+        UiHelper.applyPrimaryGradientButton(btnRefreshQr, ctx, 16);
         btnRefreshQr.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -332,17 +332,17 @@ public class LoginScreenView extends FrameLayout {
         });
         LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        rLp.rightMargin = UiHelper.dp(ctx, 14);
+        rLp.rightMargin = UiHelper.dp(ctx, 12);
         btnRow.addView(btnRefreshQr, rLp);
 
         btnSettings = new TextView(ctx);
         btnSettings.setText("Cài đặt & Cập nhật");
         btnSettings.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
-        btnSettings.setTextSize(14f);
+        btnSettings.setTextSize(13f);
         btnSettings.setTypeface(null, Typeface.BOLD);
         btnSettings.setGravity(Gravity.CENTER);
-        btnSettings.setPadding(UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 12));
-        UiHelper.applyFocusableGlassButton(btnSettings, ctx, 24, false);
+        btnSettings.setPadding(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 9), UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 9));
+        UiHelper.applyFocusableGlassButton(btnSettings, ctx, 16, false);
         btnSettings.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {

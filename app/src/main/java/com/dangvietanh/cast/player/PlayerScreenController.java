@@ -856,34 +856,34 @@ public class PlayerScreenController {
         hudLayer.addView(bottomHudCol, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
-        // 9. Sub-Modal Host (Borderless Liquid Glass 40dp)
+        // 9. Sub-Modal Host (Sleek Frosted Glass 20dp)
         subModalHost = new FrameLayout(context);
-        subModalHost.setBackgroundColor(Color.argb(180, 7, 9, 15));
+        subModalHost.setBackgroundColor(Color.argb(190, 9, 11, 18));
         subModalHost.setVisibility(View.GONE);
         subModalHost.setClickable(true);
 
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         int screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(context, 960);
         int screenH = dm.heightPixels > 0 ? dm.heightPixels : UiHelper.dp(context, 540);
-        int modalW = Math.min(UiHelper.dp(context, 760), Math.round(screenW * 0.88f));
-        int modalMaxH = Math.round(screenH * 0.84f);
+        int modalW = Math.min(UiHelper.dp(context, 700), Math.round(screenW * 0.84f));
+        int modalMaxH = Math.round(screenH * 0.82f);
 
         subModalCard = new LinearLayout(context);
         subModalCard.setOrientation(LinearLayout.VERTICAL);
-        subModalCard.setPadding(UiHelper.dp(context, 28), UiHelper.dp(context, 24),
-                UiHelper.dp(context, 28), UiHelper.dp(context, 24));
-        UiHelper.applyGlassCardStyle(subModalCard, context, 40, UiHelper.COLOR_SURFACE_GLASS, 28);
+        subModalCard.setPadding(UiHelper.dp(context, 22), UiHelper.dp(context, 18),
+                UiHelper.dp(context, 22), UiHelper.dp(context, 18));
+        UiHelper.applyGlassCardStyle(subModalCard, context, 20, UiHelper.COLOR_SURFACE_GLASS, 18);
 
         LinearLayout smHeader = new LinearLayout(context);
         smHeader.setOrientation(LinearLayout.HORIZONTAL);
         smHeader.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams smhLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        smhLp.bottomMargin = UiHelper.dp(context, 14);
+        smhLp.bottomMargin = UiHelper.dp(context, 12);
 
         subModalTitleTv = new TextView(context);
         subModalTitleTv.setTextColor(Color.WHITE);
-        subModalTitleTv.setTextSize(20f);
+        subModalTitleTv.setTextSize(17.5f);
         subModalTitleTv.setTypeface(null, Typeface.BOLD);
         smHeader.addView(subModalTitleTv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -2764,10 +2764,10 @@ public class PlayerScreenController {
         TextView tv = new TextView(ctx);
         tv.setText(text);
         tv.setTextColor(Color.WHITE);
-        tv.setTextSize(13f);
+        tv.setTextSize(12f);
         tv.setTypeface(null, Typeface.BOLD);
-        tv.setPadding(UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 9), UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 9));
-        UiHelper.applyFocusableGlassButton(tv, ctx, 22, accent);
+        tv.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 7), UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 7));
+        UiHelper.applyFocusableGlassButton(tv, ctx, 14, accent);
         return tv;
     }
 
@@ -2775,8 +2775,8 @@ public class PlayerScreenController {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 9), UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 9));
-        UiHelper.applyFocusableGlassButton(row, ctx, 22, false);
+        row.setPadding(UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 7), UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 7));
+        UiHelper.applyFocusableGlassButton(row, ctx, 14, false);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);

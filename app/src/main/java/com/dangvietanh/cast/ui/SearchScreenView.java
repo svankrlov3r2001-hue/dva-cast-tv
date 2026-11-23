@@ -67,28 +67,28 @@ public class SearchScreenView extends FrameLayout {
 
         LinearLayout root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(UiHelper.dp(context, 28), UiHelper.dp(context, 24),
-                UiHelper.dp(context, 28), UiHelper.dp(context, 20));
+        root.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 16),
+                UiHelper.dp(context, 20), UiHelper.dp(context, 14));
         root.setClipChildren(false);
         addView(root, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-        // Search Bar Liquid Glass Container
+        // Search Bar Frosted Container
         LinearLayout searchBar = new LinearLayout(context);
         searchBar.setOrientation(LinearLayout.HORIZONTAL);
         searchBar.setGravity(Gravity.CENTER_VERTICAL);
-        searchBar.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 10),
-                UiHelper.dp(context, 14), UiHelper.dp(context, 10));
-        UiHelper.applyGlassCardStyle(searchBar, context, 32, UiHelper.COLOR_SURFACE_GLASS, 20);
+        searchBar.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 7),
+                UiHelper.dp(context, 10), UiHelper.dp(context, 7));
+        UiHelper.applyGlassCardStyle(searchBar, context, 14, UiHelper.COLOR_SURFACE_GLASS, 14);
         LinearLayout.LayoutParams sbLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        sbLp.bottomMargin = UiHelper.dp(context, 14);
+        sbLp.bottomMargin = UiHelper.dp(context, 10);
 
         searchInput = new EditText(context);
         searchInput.setHint("Nhập tên phim, diễn viên hoặc từ khoá...");
         searchInput.setHintTextColor(UiHelper.COLOR_TEXT_MUTED);
         searchInput.setTextColor(Color.WHITE);
-        searchInput.setTextSize(16f);
+        searchInput.setTextSize(14f);
         searchInput.setBackgroundColor(Color.TRANSPARENT);
         searchInput.setSingleLine(true);
         searchInput.setImeOptions(EditorInfo.IME_ACTION_SEARCH);

@@ -52,8 +52,8 @@ public class LibraryScreenView extends FrameLayout {
 
         LinearLayout root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(UiHelper.dp(context, 28), UiHelper.dp(context, 24),
-                UiHelper.dp(context, 28), UiHelper.dp(context, 18));
+        root.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 16),
+                UiHelper.dp(context, 20), UiHelper.dp(context, 14));
         root.setClipChildren(false);
         addView(root, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -64,12 +64,12 @@ public class LibraryScreenView extends FrameLayout {
         topRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams trLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        trLp.bottomMargin = UiHelper.dp(context, 16);
+        trLp.bottomMargin = UiHelper.dp(context, 12);
 
         TextView titleTv = new TextView(context);
         titleTv.setText("Danh sách & Đang xem");
         titleTv.setTextColor(Color.WHITE);
-        titleTv.setTextSize(22f);
+        titleTv.setTextSize(18f);
         titleTv.setTypeface(null, Typeface.BOLD);
         topRow.addView(titleTv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 

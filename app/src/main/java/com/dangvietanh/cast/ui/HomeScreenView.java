@@ -9,7 +9,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.view.Gravity;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -27,15 +26,29 @@ import com.dangvietanh.cast.UiHelper;
 import com.dangvietanh.cast.data.ApiClient;
 import com.dangvietanh.cast.data.Models;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
+/**
+ * Full-bleed Netflix / VieON style Android TV Home Screen:
+ * - Edge-to-edge cinematic Hero artwork fading into deep obsidian bottom canvas
+ * - Compact Top-Right utility bar (Search, Danh sách, Cài đặt, Avatar, Clock, Wi-Fi)
+ * - Clean compact carousels ("Tiếp tục xem" 16:9 + portrait rows) without chunky boxes
+ */
 public class HomeScreenView extends FrameLayout {
 
     public interface Listener {
         void onOpenMovieDetail(Models.MovieItem item);
         void onPlayMovie(Models.MovieItem item);
         void onShowToast(String message, int accentColor);
+        void onOpenSearch();
+        void onOpenLibrary();
+        void onOpenSettings();
+        void onOpenAccount();
+        void onOpenExploreCategory(String sectionTitle);
     }
 
     private static final class RowEntry {
@@ -59,9 +72,12 @@ public class HomeScreenView extends FrameLayout {
     private final ApiClient apiClient;
     private final Listener listener;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final SimpleDateFormat clockFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
     private final ImageView ambientBackdropIv;
     private final RecyclerView verticalRv;
+    private final ImageView topAvatarIv;
+    private final TextView clockTv;
     private final LinearLayout loadingBox;
     private final LinearLayout errorBox;
     private final TextView errorTv;
@@ -91,7 +107,17 @@ public class HomeScreenView extends FrameLayout {
         }
     };
 
-    public HomeScreenView(Context context, ApiClient apiClient, Listener listener) {
+    private final Runnable clockTickRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (clockTv != null) {
+                clockTv.setText(clockFormat.format(new Date()));
+            }
+            handler.postDelayed(this, 20000L);
+        }
+    };
+
+    public HomeScreenView(Context context, ApiClient apiClient, final Listener listener) {
         super(context);
         this.apiClient = apiClient;
         this.listener = listener;
@@ -99,55 +125,146 @@ public class HomeScreenView extends FrameLayout {
         setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-        // Crossfading full-bleed cinema backdrop
+        // 1. Full-bleed edge-to-edge cinema backdrop
         ambientBackdropIv = new ImageView(context);
         ambientBackdropIv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        ambientBackdropIv.setAlpha(0.45f);
+        ambientBackdropIv.setAlpha(0.90f);
         addView(ambientBackdropIv, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 420), Gravity.TOP));
 
+        // Left-to-right readability vignette (lets right-side poster artwork stay vibrant)
         View leftScrim = new View(context);
         leftScrim.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.argb(242, 7, 9, 15), Color.argb(196, 7, 9, 15), Color.argb(90, 7, 9, 15)}));
+                new int[]{
+                        Color.argb(246, 9, 11, 18),
+                        Color.argb(198, 9, 11, 18),
+                        Color.argb(72, 9, 11, 18),
+                        Color.TRANSPARENT
+                }));
         addView(leftScrim, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 420), Gravity.TOP));
 
+        // Top subtle vignette for status bar readability
+        View topScrim = new View(context);
+        topScrim.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(150, 9, 11, 18), Color.TRANSPARENT}));
+        addView(topScrim, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 72), Gravity.TOP));
+
+        // Bottom-to-top melt into deep obsidian canvas
         View bottomScrim = new View(context);
         bottomScrim.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.TRANSPARENT, Color.argb(180, 7, 9, 15), UiHelper.COLOR_BG_BASE}));
+                new int[]{
+                        Color.TRANSPARENT,
+                        Color.argb(130, 9, 11, 18),
+                        Color.argb(242, 9, 11, 18),
+                        UiHelper.COLOR_BG_BASE
+                }));
         addView(bottomScrim, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
+        // 2. Main Vertical RecyclerView (Hero + Carousels)
         verticalRv = new RecyclerView(context);
         verticalRv.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
         verticalRv.setClipToPadding(false);
         verticalRv.setClipChildren(false);
-        verticalRv.setPadding(0, UiHelper.dp(context, 14), 0, UiHelper.dp(context, 48));
+        verticalRv.setPadding(0, 0, 0, UiHelper.dp(context, 28));
         verticalAdapter = new VerticalAdapter();
         verticalRv.setAdapter(verticalAdapter);
         addView(verticalRv, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-        // Loading overlay
+        // 3. Top-Right Utility Bar (Search, Library, Settings, User Avatar, Clock, Wi-Fi)
+        LinearLayout topUtilBar = new LinearLayout(context);
+        topUtilBar.setOrientation(LinearLayout.HORIZONTAL);
+        topUtilBar.setGravity(Gravity.CENTER_VERTICAL);
+        topUtilBar.setClipChildren(false);
+
+        FrameLayout btnTopSearch = makeCircleUtilIcon(context, R.drawable.ic_search);
+        btnTopSearch.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (listener != null) listener.onOpenSearch();
+            }
+        });
+        topUtilBar.addView(btnTopSearch, utilMarginLp(context, 7));
+
+        FrameLayout btnTopLibrary = makeCircleUtilIcon(context, R.drawable.ic_bookmark);
+        btnTopLibrary.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (listener != null) listener.onOpenLibrary();
+            }
+        });
+        topUtilBar.addView(btnTopLibrary, utilMarginLp(context, 7));
+
+        FrameLayout btnTopSettings = makeCircleUtilIcon(context, R.drawable.ic_settings);
+        btnTopSettings.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (listener != null) listener.onOpenSettings();
+            }
+        });
+        topUtilBar.addView(btnTopSettings, utilMarginLp(context, 7));
+
+        FrameLayout avatarWrap = new FrameLayout(context);
+        UiHelper.applyCircularIconButtonStyle(avatarWrap, context, 32);
+        topAvatarIv = new ImageView(context);
+        topAvatarIv.setImageResource(R.drawable.ic_person);
+        avatarWrap.addView(topAvatarIv, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 26), UiHelper.dp(context, 26), Gravity.CENTER));
+        avatarWrap.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (listener != null) listener.onOpenAccount();
+            }
+        });
+        LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 32), UiHelper.dp(context, 32));
+        avLp.rightMargin = UiHelper.dp(context, 12);
+        topUtilBar.addView(avatarWrap, avLp);
+
+        clockTv = new TextView(context);
+        clockTv.setText(clockFormat.format(new Date()));
+        clockTv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
+        clockTv.setTextSize(13f);
+        clockTv.setTypeface(null, Typeface.BOLD);
+        LinearLayout.LayoutParams ckLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        ckLp.rightMargin = UiHelper.dp(context, 7);
+        topUtilBar.addView(clockTv, ckLp);
+
+        ImageView wifiIv = new ImageView(context);
+        wifiIv.setImageResource(R.drawable.ic_wifi);
+        wifiIv.setColorFilter(UiHelper.COLOR_TEXT_SECONDARY, PorterDuff.Mode.SRC_IN);
+        topUtilBar.addView(wifiIv, new LinearLayout.LayoutParams(UiHelper.dp(context, 16), UiHelper.dp(context, 16)));
+
+        FrameLayout.LayoutParams tubLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.END);
+        tubLp.setMargins(0, UiHelper.dp(context, 12), UiHelper.dp(context, 20), 0);
+        addView(topUtilBar, tubLp);
+
+        // 4. Loading overlay
         loadingBox = new LinearLayout(context);
         loadingBox.setOrientation(LinearLayout.VERTICAL);
         loadingBox.setGravity(Gravity.CENTER);
         UiHelper.SpinnerView spin = new UiHelper.SpinnerView(context);
-        loadingBox.addView(spin, new LinearLayout.LayoutParams(UiHelper.dp(context, 42), UiHelper.dp(context, 42)));
+        loadingBox.addView(spin, new LinearLayout.LayoutParams(UiHelper.dp(context, 36), UiHelper.dp(context, 36)));
         TextView loadTv = new TextView(context);
         loadTv.setText("Đang tải kho phim...");
         loadTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
-        loadTv.setTextSize(14f);
+        loadTv.setTextSize(13f);
         LinearLayout.LayoutParams ltLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        ltLp.topMargin = UiHelper.dp(context, 12);
+        ltLp.topMargin = UiHelper.dp(context, 10);
         loadingBox.addView(loadTv, ltLp);
         addView(loadingBox, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-        // Error overlay
+        // 5. Error overlay
         errorBox = new LinearLayout(context);
         errorBox.setOrientation(LinearLayout.VERTICAL);
         errorBox.setGravity(Gravity.CENTER);
@@ -155,20 +272,20 @@ public class HomeScreenView extends FrameLayout {
 
         errorTv = new TextView(context);
         errorTv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
-        errorTv.setTextSize(15f);
+        errorTv.setTextSize(14f);
         errorTv.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams errLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        errLp.bottomMargin = UiHelper.dp(context, 16);
+        errLp.bottomMargin = UiHelper.dp(context, 14);
         errorBox.addView(errorTv, errLp);
 
         retryBtn = new TextView(context);
         retryBtn.setText("Thử lại");
         retryBtn.setTextColor(Color.WHITE);
-        retryBtn.setTextSize(14f);
+        retryBtn.setTextSize(13f);
         retryBtn.setTypeface(null, Typeface.BOLD);
-        retryBtn.setPadding(UiHelper.dp(context, 24), UiHelper.dp(context, 11), UiHelper.dp(context, 24), UiHelper.dp(context, 11));
-        UiHelper.applyPrimaryGradientButton(retryBtn, context, 24);
+        retryBtn.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 9), UiHelper.dp(context, 20), UiHelper.dp(context, 9));
+        UiHelper.applyPrimaryGradientButton(retryBtn, context, 17);
         retryBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -178,6 +295,13 @@ public class HomeScreenView extends FrameLayout {
         errorBox.addView(retryBtn);
         addView(errorBox, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+        handler.post(clockTickRunnable);
+    }
+
+    public void setUser(Models.User user) {
+        if (topAvatarIv == null) return;
+        UiHelper.safeLoadAvatar(topAvatarIv, user != null ? user.avatarUrl : "");
     }
 
     public void loadHome(String mode, String genreId, final boolean silent) {
@@ -251,7 +375,8 @@ public class HomeScreenView extends FrameLayout {
         if (!heroMovies.isEmpty()) {
             rows.add(new RowEntry(RowEntry.KIND_HERO));
         }
-        if (!genres.isEmpty()) {
+        // Show category filter strip only on sub-tabs (series, movies, anime, etc.) so Home stays clean like Netflix/VieON
+        if (!"home".equals(currentMode) && !genres.isEmpty()) {
             rows.add(new RowEntry(RowEntry.KIND_GENRES));
         }
 
@@ -306,7 +431,7 @@ public class HomeScreenView extends FrameLayout {
                 UiHelper.safeLoadBackdrop(ambientBackdropIv, url);
             }
         };
-        handler.postDelayed(pendingBackdropRunnable, 160L);
+        handler.postDelayed(pendingBackdropRunnable, 140L);
     }
 
     private void scrollToSectionId(String targetId) {
@@ -318,6 +443,23 @@ public class HomeScreenView extends FrameLayout {
                 return;
             }
         }
+    }
+
+    private FrameLayout makeCircleUtilIcon(Context ctx, int iconRes) {
+        FrameLayout box = new FrameLayout(ctx);
+        UiHelper.applyCircularIconButtonStyle(box, ctx, 32);
+        ImageView iv = new ImageView(ctx);
+        iv.setImageResource(iconRes);
+        iv.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+        box.addView(iv, new FrameLayout.LayoutParams(
+                UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 16), Gravity.CENTER));
+        return box;
+    }
+
+    private static LinearLayout.LayoutParams utilMarginLp(Context ctx, int rightMarginDp) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 32), UiHelper.dp(ctx, 32));
+        lp.rightMargin = UiHelper.dp(ctx, rightMarginDp);
+        return lp;
     }
 
     private class VerticalAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
@@ -366,110 +508,118 @@ public class HomeScreenView extends FrameLayout {
         }
     }
 
-    // ---- Row 0: Hero Showcase ----
+    // ---- Row 0: Open Full-Bleed Cinematic Hero (No Card Box) ----
     private class HeroHolder extends RecyclerView.ViewHolder {
-        final ImageView heroThumbIv;
-        final TextView metaTv;
+        final TextView kickerTv;
         final TextView titleTv;
+        final LinearLayout badgesRow;
         final TextView descTv;
         final TextView btnPlay;
-        final TextView btnInfo;
         final TextView btnWishlist;
+        final TextView btnInfo;
         final TextView btnPrev;
         final TextView btnNext;
         final LinearLayout dotsRow;
 
         HeroHolder(Context ctx) {
             super(new FrameLayout(ctx));
-            FrameLayout wrap = (FrameLayout) itemView;
-            wrap.setClipChildren(false);
-            wrap.setClipToPadding(false);
-            RecyclerView.LayoutParams rLp = new RecyclerView.LayoutParams(
-                    RecyclerView.LayoutParams.MATCH_PARENT, UiHelper.dp(ctx, 372));
-            rLp.setMargins(UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 16));
-            wrap.setLayoutParams(rLp);
-
-            FrameLayout card = new FrameLayout(ctx);
-            UiHelper.applyGlassCardStyle(card, ctx, 36, UiHelper.COLOR_SURFACE_GLASS, 24);
-            wrap.addView(card, new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-            heroThumbIv = new ImageView(ctx);
-            heroThumbIv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            heroThumbIv.setAlpha(0.76f);
-            card.addView(heroThumbIv, new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-            View leftGrad = new View(ctx);
-            leftGrad.setBackground(new GradientDrawable(
-                    GradientDrawable.Orientation.LEFT_RIGHT,
-                    new int[]{Color.argb(238, 8, 10, 16), Color.argb(176, 8, 10, 16), Color.TRANSPARENT}));
-            card.addView(leftGrad, new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+            FrameLayout heroRoot = (FrameLayout) itemView;
+            heroRoot.setClipChildren(false);
+            heroRoot.setClipToPadding(false);
+            heroRoot.setLayoutParams(new RecyclerView.LayoutParams(
+                    RecyclerView.LayoutParams.MATCH_PARENT, UiHelper.dp(ctx, 266)));
 
             LinearLayout contentCol = new LinearLayout(ctx);
             contentCol.setOrientation(LinearLayout.VERTICAL);
             contentCol.setGravity(Gravity.BOTTOM | Gravity.START);
-            contentCol.setPadding(UiHelper.dp(ctx, 34), UiHelper.dp(ctx, 24),
-                    UiHelper.dp(ctx, 34), UiHelper.dp(ctx, 26));
-            card.addView(contentCol, new FrameLayout.LayoutParams(
+            contentCol.setClipChildren(false);
+            contentCol.setPadding(UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 36),
+                    UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 14));
+            heroRoot.addView(contentCol, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-            metaTv = new TextView(ctx);
-            metaTv.setTextColor(UiHelper.COLOR_GOLD);
-            metaTv.setTextSize(12.5f);
-            metaTv.setTypeface(null, Typeface.BOLD);
-            contentCol.addView(metaTv);
+            // Kicker Tag
+            LinearLayout kickerRow = new LinearLayout(ctx);
+            kickerRow.setOrientation(LinearLayout.HORIZONTAL);
+            kickerRow.setGravity(Gravity.CENTER_VERTICAL);
+            View kBar = new View(ctx);
+            kBar.setBackgroundColor(UiHelper.COLOR_ACCENT_RED);
+            LinearLayout.LayoutParams kbLp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 3), UiHelper.dp(ctx, 11));
+            kbLp.rightMargin = UiHelper.dp(ctx, 6);
+            kickerRow.addView(kBar, kbLp);
 
+            kickerTv = new TextView(ctx);
+            kickerTv.setText("NỔI BẬT");
+            kickerTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
+            kickerTv.setTextSize(10f);
+            kickerTv.setTypeface(null, Typeface.BOLD);
+            kickerTv.setLetterSpacing(0.10f);
+            kickerRow.addView(kickerTv);
+            contentCol.addView(kickerRow);
+
+            // Hero Movie Title
             titleTv = new TextView(ctx);
             titleTv.setTextColor(Color.WHITE);
-            titleTv.setTextSize(30f);
+            titleTv.setTextSize(27f);
             titleTv.setTypeface(null, Typeface.BOLD);
             titleTv.setMaxLines(2);
             titleTv.setEllipsize(TextUtils.TruncateAt.END);
+            titleTv.setShadowLayer(8f, 0f, 2f, Color.argb(180, 0, 0, 0));
             LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
-                    UiHelper.dp(ctx, 560), LinearLayout.LayoutParams.WRAP_CONTENT);
-            tLp.topMargin = UiHelper.dp(ctx, 6);
+                    UiHelper.dp(ctx, 430), LinearLayout.LayoutParams.WRAP_CONTENT);
+            tLp.topMargin = UiHelper.dp(ctx, 4);
             contentCol.addView(titleTv, tLp);
 
+            // Sharp Metadata Tags Row (16+, HDR, 4K, IMDb)
+            badgesRow = new LinearLayout(ctx);
+            badgesRow.setOrientation(LinearLayout.HORIZONTAL);
+            badgesRow.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams brLp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            brLp.topMargin = UiHelper.dp(ctx, 7);
+            contentCol.addView(badgesRow, brLp);
+
+            // Description
             descTv = new TextView(ctx);
             descTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
-            descTv.setTextSize(13.5f);
+            descTv.setTextSize(11.5f);
             descTv.setMaxLines(2);
             descTv.setEllipsize(TextUtils.TruncateAt.END);
             descTv.setLineSpacing(UiHelper.dp(ctx, 2), 1f);
             LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(
-                    UiHelper.dp(ctx, 540), LinearLayout.LayoutParams.WRAP_CONTENT);
-            dLp.topMargin = UiHelper.dp(ctx, 8);
-            dLp.bottomMargin = UiHelper.dp(ctx, 18);
+                    UiHelper.dp(ctx, 420), LinearLayout.LayoutParams.WRAP_CONTENT);
+            dLp.topMargin = UiHelper.dp(ctx, 7);
+            dLp.bottomMargin = UiHelper.dp(ctx, 13);
             contentCol.addView(descTv, dLp);
 
+            // Compact Pill Buttons Row
             LinearLayout btnRow = new LinearLayout(ctx);
             btnRow.setOrientation(LinearLayout.HORIZONTAL);
             btnRow.setGravity(Gravity.CENTER_VERTICAL);
             btnRow.setClipChildren(false);
             contentCol.addView(btnRow);
 
-            btnPlay = makeHeroBtn(ctx, "▶  Xem ngay", true);
-            btnInfo = makeHeroBtn(ctx, "ℹ  Thông tin", false);
-            btnWishlist = makeHeroBtn(ctx, "+  Danh sách", false);
-            btnPrev = makeArrowBtn(ctx, "◀");
-            btnNext = makeArrowBtn(ctx, "▶");
+            btnPlay = makeHeroPill(ctx, "▶  Xem ngay", true);
+            btnWishlist = makeHeroPill(ctx, "+  Thêm vào", false);
+            btnInfo = makeHeroPill(ctx, "ℹ  Thông tin", false);
+            btnPrev = makeCompactCircleArrow(ctx, "‹");
+            btnNext = makeCompactCircleArrow(ctx, "›");
 
-            btnRow.addView(btnPlay, heroBtnLp(ctx, 12));
-            btnRow.addView(btnInfo, heroBtnLp(ctx, 12));
-            btnRow.addView(btnWishlist, heroBtnLp(ctx, 16));
-            btnRow.addView(btnPrev, heroBtnLp(ctx, 8));
-            btnRow.addView(btnNext, heroBtnLp(ctx, 0));
+            btnRow.addView(btnPlay, heroBtnLp(ctx, 10));
+            btnRow.addView(btnWishlist, heroBtnLp(ctx, 10));
+            btnRow.addView(btnInfo, heroBtnLp(ctx, 14));
+            btnRow.addView(btnPrev, arrowBtnLp(ctx, 6));
+            btnRow.addView(btnNext, arrowBtnLp(ctx, 0));
 
+            // Bottom-Right Pager Dots
             dotsRow = new LinearLayout(ctx);
             dotsRow.setOrientation(LinearLayout.HORIZONTAL);
             dotsRow.setGravity(Gravity.CENTER_VERTICAL);
             FrameLayout.LayoutParams dotsLp = new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-            dotsLp.gravity = Gravity.BOTTOM | Gravity.END;
-            dotsLp.setMargins(0, 0, UiHelper.dp(ctx, 30), UiHelper.dp(ctx, 28));
-            card.addView(dotsRow, dotsLp);
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM | Gravity.END);
+            dotsLp.setMargins(0, 0, UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 16));
+            heroRoot.addView(dotsRow, dotsLp);
 
             btnPlay.setOnClickListener(new OnClickListener() {
                 @Override
@@ -540,36 +690,33 @@ public class HomeScreenView extends FrameLayout {
             if (m == null) return;
             Context ctx = itemView.getContext();
 
-            String img = !m.thumbnailUrl.isEmpty() ? m.thumbnailUrl : m.posterUrl;
-            UiHelper.safeLoadBackdrop(heroThumbIv, img);
             updateBackdropDebounced(m);
-
-            StringBuilder meta = new StringBuilder();
-            if (!m.videoQuality.isEmpty()) meta.append(m.videoQuality);
-            if (!m.imdbRating.isEmpty() && !"0".equals(m.imdbRating)) meta.append("  •  IMDb ★ ").append(m.imdbRating);
-            if (!m.year.isEmpty()) meta.append("  •  ").append(m.year);
-            if (!m.episodeBadge.isEmpty()) meta.append("  •  ").append(m.episodeBadge);
-            if (!m.genres.isEmpty()) meta.append("  •  ").append(TextUtils.join(", ", m.genres));
-            metaTv.setText(meta.toString());
-
+            kickerTv.setText(m.isTvSeries == 1 ? "PHIM BỘ NỔI BẬT" : "PHIM LẺ ĐỀ XUẤT");
             titleTv.setText(m.getDisplayTitle());
             descTv.setText(m.description != null && !m.description.isEmpty()
                     ? m.description
                     : (m.subtitle != null ? m.subtitle : ""));
 
+            badgesRow.removeAllViews();
+            if (!m.videoQuality.isEmpty()) addHeroTag(ctx, m.videoQuality, Color.WHITE);
+            if (!m.imdbRating.isEmpty() && !"0".equals(m.imdbRating)) addHeroTag(ctx, "IMDb ★ " + m.imdbRating, UiHelper.COLOR_GOLD);
+            if (!m.year.isEmpty()) addHeroTag(ctx, m.year, UiHelper.COLOR_TEXT_SECONDARY);
+            if (!m.episodeBadge.isEmpty()) addHeroTag(ctx, m.episodeBadge, UiHelper.COLOR_CYAN);
+            if (!m.genres.isEmpty()) addHeroTag(ctx, m.genres.get(0), UiHelper.COLOR_TEXT_SECONDARY);
+
             btnPlay.setText(m.progressPercent > 0 ? "▶  Xem tiếp" : "▶  Xem ngay");
-            btnWishlist.setText(m.inWishlist ? "✓  Đã lưu" : "+  Danh sách");
+            btnWishlist.setText(m.inWishlist ? "✓  Đã lưu" : "+  Thêm vào");
 
             dotsRow.removeAllViews();
-            int maxDots = Math.min(heroMovies.size(), 8);
+            int maxDots = Math.min(heroMovies.size(), 9);
             for (int i = 0; i < maxDots; i++) {
                 View dot = new View(ctx);
                 boolean active = i == (heroIndex % maxDots);
                 dot.setBackground(UiHelper.createGlassRect(
-                        ctx, 4, active ? UiHelper.COLOR_ACCENT_RED : Color.argb(90, 255, 255, 255), Color.TRANSPARENT, 0));
+                        ctx, 3, active ? UiHelper.COLOR_ACCENT_RED : Color.argb(95, 255, 255, 255), Color.TRANSPARENT, 0));
                 LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
-                        UiHelper.dp(ctx, active ? 22 : 7), UiHelper.dp(ctx, 7));
-                dlp.leftMargin = UiHelper.dp(ctx, 6);
+                        UiHelper.dp(ctx, active ? 18 : 5), UiHelper.dp(ctx, 5));
+                dlp.leftMargin = UiHelper.dp(ctx, 5);
                 dotsRow.addView(dot, dlp);
             }
             if (focusPlayIfNeeded && !itemView.hasFocus()) {
@@ -577,37 +724,59 @@ public class HomeScreenView extends FrameLayout {
             }
         }
 
-        private TextView makeHeroBtn(Context ctx, String text, boolean accent) {
+        private void addHeroTag(Context ctx, String text, int textColor) {
+            TextView tv = new TextView(ctx);
+            tv.setText(text);
+            tv.setTextColor(textColor);
+            tv.setTextSize(10f);
+            tv.setTypeface(null, Typeface.BOLD);
+            tv.setPadding(UiHelper.dp(ctx, 7), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 7), UiHelper.dp(ctx, 2));
+            tv.setBackground(UiHelper.createPillDrawable(
+                    ctx, 4, Color.argb(175, 24, 27, 40), Color.argb(34, 255, 255, 255), 0.8f));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.rightMargin = UiHelper.dp(ctx, 6);
+            badgesRow.addView(tv, lp);
+        }
+
+        private TextView makeHeroPill(Context ctx, String text, boolean accent) {
+            TextView tv = new TextView(ctx);
+            tv.setText(text);
+            tv.setTextColor(Color.WHITE);
+            tv.setTextSize(12.5f);
+            tv.setTypeface(null, Typeface.BOLD);
+            tv.setGravity(Gravity.CENTER);
+            tv.setPadding(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 8));
+            UiHelper.applyFocusableGlassButton(tv, ctx, 17, accent);
+            return tv;
+        }
+
+        private TextView makeCompactCircleArrow(Context ctx, String text) {
             TextView tv = new TextView(ctx);
             tv.setText(text);
             tv.setTextColor(Color.WHITE);
             tv.setTextSize(14f);
             tv.setTypeface(null, Typeface.BOLD);
-            tv.setPadding(UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 11));
-            UiHelper.applyFocusableGlassButton(tv, ctx, 24, accent);
-            return tv;
-        }
-
-        private TextView makeArrowBtn(Context ctx, String text) {
-            TextView tv = new TextView(ctx);
-            tv.setText(text);
-            tv.setTextColor(Color.WHITE);
-            tv.setTextSize(13f);
             tv.setGravity(Gravity.CENTER);
-            tv.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 11));
-            UiHelper.applyFocusableGlassButton(tv, ctx, 24, false);
+            UiHelper.applyCircularIconButtonStyle(tv, ctx, 30);
             return tv;
         }
 
         private LinearLayout.LayoutParams heroBtnLp(Context ctx, int rightMarginDp) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    LinearLayout.LayoutParams.WRAP_CONTENT, UiHelper.dp(ctx, 34));
+            lp.rightMargin = UiHelper.dp(ctx, rightMarginDp);
+            return lp;
+        }
+
+        private LinearLayout.LayoutParams arrowBtnLp(Context ctx, int rightMarginDp) {
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 30), UiHelper.dp(ctx, 30));
             lp.rightMargin = UiHelper.dp(ctx, rightMarginDp);
             return lp;
         }
     }
 
-    // ---- Genre Filter Chips Row ----
+    // ---- Genre Filter Chips Row (Shown on sub-tabs only) ----
     private class GenreStripHolder extends RecyclerView.ViewHolder {
         final LinearLayout row;
 
@@ -616,7 +785,7 @@ public class HomeScreenView extends FrameLayout {
             HorizontalScrollView hsv = (HorizontalScrollView) itemView;
             hsv.setHorizontalScrollBarEnabled(false);
             hsv.setClipToPadding(false);
-            hsv.setPadding(UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 10));
+            hsv.setPadding(UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 6));
             hsv.setLayoutParams(new RecyclerView.LayoutParams(
                     RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.WRAP_CONTENT));
             row = new LinearLayout(ctx);
@@ -639,10 +808,10 @@ public class HomeScreenView extends FrameLayout {
             TextView chip = new TextView(ctx);
             chip.setText(label);
             chip.setTextColor(Color.WHITE);
-            chip.setTextSize(13f);
+            chip.setTextSize(11.5f);
             chip.setTypeface(null, Typeface.BOLD);
-            chip.setPadding(UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 8));
-            UiHelper.applyFocusableGlassButton(chip, ctx, 24, selected);
+            chip.setPadding(UiHelper.dp(ctx, 13), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 13), UiHelper.dp(ctx, 6));
+            UiHelper.applyCompactChipStyle(chip, ctx, 14, selected);
             chip.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -651,7 +820,7 @@ public class HomeScreenView extends FrameLayout {
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.rightMargin = UiHelper.dp(ctx, 10);
+            lp.rightMargin = UiHelper.dp(ctx, 8);
             row.addView(chip, lp);
         }
     }
@@ -672,18 +841,15 @@ public class HomeScreenView extends FrameLayout {
             root.setLayoutParams(new RecyclerView.LayoutParams(
                     RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.WRAP_CONTENT));
 
-            titleTv = new TextView(ctx);
-            titleTv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
-            titleTv.setTextSize(19f);
-            titleTv.setTypeface(null, Typeface.BOLD);
-            titleTv.setPadding(UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 8));
-            root.addView(titleTv);
+            LinearLayout hdr = buildSectionHeaderRow(ctx, "Chủ đề nổi bật", null);
+            titleTv = (TextView) hdr.getChildAt(1);
+            root.addView(hdr);
 
             rv = new RecyclerView(ctx);
             rv.setLayoutManager(new LinearLayoutManager(ctx, LinearLayoutManager.HORIZONTAL, false));
             rv.setClipToPadding(false);
             rv.setClipChildren(false);
-            rv.setPadding(UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 14));
+            rv.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 8));
             rv.setAdapter(adapter);
             root.addView(rv, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -703,15 +869,15 @@ public class HomeScreenView extends FrameLayout {
                 Context ctx = parent.getContext();
                 LinearLayout box = new LinearLayout(ctx);
                 box.setOrientation(LinearLayout.VERTICAL);
-                box.setPadding(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 14));
-                RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(UiHelper.dp(ctx, 210), UiHelper.dp(ctx, 88));
-                lp.setMargins(UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 6));
+                box.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 10));
+                RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(UiHelper.dp(ctx, 172), UiHelper.dp(ctx, 64));
+                lp.setMargins(UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 4));
                 box.setLayoutParams(lp);
-                UiHelper.applyFocusableGlassButton(box, ctx, 24, false);
+                UiHelper.applyFocusableGlassButton(box, ctx, 12, false);
 
                 TextView t1 = new TextView(ctx);
                 t1.setTextColor(Color.WHITE);
-                t1.setTextSize(15f);
+                t1.setTextSize(13f);
                 t1.setTypeface(null, Typeface.BOLD);
                 t1.setMaxLines(1);
                 t1.setEllipsize(TextUtils.TruncateAt.END);
@@ -719,12 +885,12 @@ public class HomeScreenView extends FrameLayout {
 
                 TextView t2 = new TextView(ctx);
                 t2.setTextColor(UiHelper.COLOR_TEXT_MUTED);
-                t2.setTextSize(12f);
+                t2.setTextSize(10.5f);
                 t2.setMaxLines(1);
                 t2.setEllipsize(TextUtils.TruncateAt.END);
                 LinearLayout.LayoutParams l2 = new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                l2.topMargin = UiHelper.dp(ctx, 6);
+                l2.topMargin = UiHelper.dp(ctx, 3);
                 box.addView(t2, l2);
 
                 return new RecyclerView.ViewHolder(box) {};
@@ -754,9 +920,11 @@ public class HomeScreenView extends FrameLayout {
     // ---- Movie Carousel Row ----
     private class CarouselHolder extends RecyclerView.ViewHolder {
         final TextView titleTv;
+        final TextView seeAllTv;
         final RecyclerView rv;
         final List<Models.MovieItem> items = new ArrayList<>();
         int cardType = MovieCardView.TYPE_VERTICAL;
+        String currentTitle = "";
         final InnerAdapter adapter = new InnerAdapter();
 
         CarouselHolder(Context ctx) {
@@ -768,25 +936,30 @@ public class HomeScreenView extends FrameLayout {
             root.setLayoutParams(new RecyclerView.LayoutParams(
                     RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.WRAP_CONTENT));
 
-            titleTv = new TextView(ctx);
-            titleTv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
-            titleTv.setTextSize(19.5f);
-            titleTv.setTypeface(null, Typeface.BOLD);
-            titleTv.setPadding(UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 6));
-            root.addView(titleTv);
+            LinearLayout hdr = buildSectionHeaderRow(ctx, "", new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (listener != null) listener.onOpenExploreCategory(currentTitle);
+                }
+            });
+            titleTv = (TextView) hdr.getChildAt(1);
+            seeAllTv = (TextView) hdr.getChildAt(2);
+            root.addView(hdr);
 
             rv = new RecyclerView(ctx);
             rv.setLayoutManager(new LinearLayoutManager(ctx, LinearLayoutManager.HORIZONTAL, false));
             rv.setClipToPadding(false);
             rv.setClipChildren(false);
-            rv.setPadding(UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 16));
+            rv.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 10));
             rv.setAdapter(adapter);
             root.addView(rv, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         }
 
         void bind(RowEntry row) {
-            titleTv.setText(row.title);
+            this.currentTitle = row.title != null ? row.title : "";
+            titleTv.setText(currentTitle);
+            seeAllTv.setVisibility(listener != null ? VISIBLE : GONE);
             this.cardType = MovieCardView.resolveCardType(row.layout);
             items.clear();
             items.addAll(row.movies);
@@ -827,5 +1000,46 @@ public class HomeScreenView extends FrameLayout {
                 return items.size();
             }
         }
+    }
+
+    private LinearLayout buildSectionHeaderRow(Context ctx, String title, OnClickListener onSeeAll) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 4));
+
+        View bar = new View(ctx);
+        bar.setBackground(UiHelper.createGlassRect(ctx, 2, UiHelper.COLOR_ACCENT_RED, Color.TRANSPARENT, 0));
+        LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 3), UiHelper.dp(ctx, 14));
+        bLp.rightMargin = UiHelper.dp(ctx, 8);
+        row.addView(bar, bLp);
+
+        TextView titleTv = new TextView(ctx);
+        titleTv.setText(title);
+        titleTv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
+        titleTv.setTextSize(14.5f);
+        titleTv.setTypeface(null, Typeface.BOLD);
+        row.addView(titleTv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView seeAll = new TextView(ctx);
+        seeAll.setText("Xem tất cả  ›");
+        seeAll.setTextColor(UiHelper.COLOR_TEXT_MUTED);
+        seeAll.setTextSize(11.5f);
+        seeAll.setPadding(UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 3), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 3));
+        if (onSeeAll != null) {
+            seeAll.setFocusable(true);
+            seeAll.setClickable(true);
+            seeAll.setOnClickListener(onSeeAll);
+            seeAll.setOnFocusChangeListener(new OnFocusChangeListener() {
+                @Override
+                public void onFocusChange(View v, boolean hasFocus) {
+                    ((TextView) v).setTextColor(hasFocus ? Color.WHITE : UiHelper.COLOR_TEXT_MUTED);
+                }
+            });
+        } else {
+            seeAll.setVisibility(GONE);
+        }
+        row.addView(seeAll);
+        return row;
     }
 }

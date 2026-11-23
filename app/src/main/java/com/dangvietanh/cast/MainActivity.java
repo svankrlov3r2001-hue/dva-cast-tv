@@ -271,7 +271,7 @@ public class MainActivity extends Activity {
         contentHost.setClipChildren(false);
         FrameLayout.LayoutParams chLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        chLp.leftMargin = UiHelper.dp(this, 94);
+        chLp.leftMargin = UiHelper.dp(this, 188);
         mainShell.addView(contentHost, chLp);
 
         homeScreen = new HomeScreenView(this, apiClient, new HomeScreenView.Listener() {
@@ -288,6 +288,31 @@ public class MainActivity extends Activity {
             @Override
             public void onShowToast(String message, int accentColor) {
                 UiHelper.showGlassToast(rootLayout, MainActivity.this, message, accentColor);
+            }
+
+            @Override
+            public void onOpenSearch() {
+                switchMainTab("search");
+            }
+
+            @Override
+            public void onOpenLibrary() {
+                switchMainTab("library");
+            }
+
+            @Override
+            public void onOpenSettings() {
+                if (overlayMenu != null) overlayMenu.show();
+            }
+
+            @Override
+            public void onOpenAccount() {
+                if (accountModal != null) accountModal.show(apiClient.getCachedUser());
+            }
+
+            @Override
+            public void onOpenExploreCategory(String sectionTitle) {
+                switchMainTab("explore");
             }
         });
         contentHost.addView(homeScreen);
@@ -509,7 +534,9 @@ public class MainActivity extends Activity {
         loginScreen.setVisibility(View.GONE);
         detailScreen.setVisibility(View.GONE);
         mainShell.setVisibility(View.VISIBLE);
-        navRail.setUser(user != null ? user : apiClient.getCachedUser());
+        Models.User effUser = user != null ? user : apiClient.getCachedUser();
+        navRail.setUser(effUser);
+        if (homeScreen != null) homeScreen.setUser(effUser);
         switchMainTab("home");
     }
 

@@ -55,14 +55,14 @@ public class AccountProfileModal {
 
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         int screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(context, 960);
-        int cardW = Math.min(UiHelper.dp(context, 480), Math.round(screenW * 0.85f));
+        int cardW = Math.min(UiHelper.dp(context, 420), Math.round(screenW * 0.80f));
 
         mainCard = new LinearLayout(context);
         mainCard.setOrientation(LinearLayout.VERTICAL);
         mainCard.setGravity(Gravity.CENTER_HORIZONTAL);
-        mainCard.setPadding(UiHelper.dp(context, 30), UiHelper.dp(context, 28),
-                UiHelper.dp(context, 30), UiHelper.dp(context, 28));
-        UiHelper.applyGlassCardStyle(mainCard, context, 40, UiHelper.COLOR_SURFACE_GLASS, 28);
+        mainCard.setPadding(UiHelper.dp(context, 24), UiHelper.dp(context, 22),
+                UiHelper.dp(context, 24), UiHelper.dp(context, 22));
+        UiHelper.applyGlassCardStyle(mainCard, context, 20, UiHelper.COLOR_SURFACE_GLASS, 18);
 
         FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(
                 cardW, FrameLayout.LayoutParams.WRAP_CONTENT);

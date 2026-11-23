@@ -62,8 +62,8 @@ public class ExploreScreenView extends FrameLayout {
 
         LinearLayout root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(UiHelper.dp(context, 28), UiHelper.dp(context, 22),
-                UiHelper.dp(context, 28), UiHelper.dp(context, 18));
+        root.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 16),
+                UiHelper.dp(context, 20), UiHelper.dp(context, 14));
         root.setClipChildren(false);
         addView(root, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -74,27 +74,27 @@ public class ExploreScreenView extends FrameLayout {
         TextView hdr = new TextView(context);
         hdr.setText("Khám phá kho phim");
         hdr.setTextColor(Color.WHITE);
-        hdr.setTextSize(22f);
+        hdr.setTextSize(18f);
         hdr.setTypeface(null, Typeface.BOLD);
         hdrRow.addView(hdr, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         spinner = new UiHelper.SpinnerView(context);
         spinner.setVisibility(GONE);
-        hdrRow.addView(spinner, new LinearLayout.LayoutParams(UiHelper.dp(context, 24), UiHelper.dp(context, 24)));
+        hdrRow.addView(spinner, new LinearLayout.LayoutParams(UiHelper.dp(context, 20), UiHelper.dp(context, 20)));
         LinearLayout.LayoutParams hrLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        hrLp.bottomMargin = UiHelper.dp(context, 12);
+        hrLp.bottomMargin = UiHelper.dp(context, 10);
         root.addView(hdrRow, hrLp);
 
-        // Filter Panel (Borderless Liquid Glass)
+        // Filter Panel (Compact Frosted Surface)
         LinearLayout filterCard = new LinearLayout(context);
         filterCard.setOrientation(LinearLayout.VERTICAL);
-        filterCard.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 12),
-                UiHelper.dp(context, 16), UiHelper.dp(context, 12));
-        UiHelper.applyGlassCardStyle(filterCard, context, 28, UiHelper.COLOR_SURFACE_GLASS, 18);
+        filterCard.setPadding(UiHelper.dp(context, 12), UiHelper.dp(context, 8),
+                UiHelper.dp(context, 12), UiHelper.dp(context, 4));
+        UiHelper.applyGlassCardStyle(filterCard, context, 14, UiHelper.COLOR_SURFACE_GLASS, 12);
         LinearLayout.LayoutParams fcLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        fcLp.bottomMargin = UiHelper.dp(context, 12);
+        fcLp.bottomMargin = UiHelper.dp(context, 10);
 
         typeRow = createFilterStrip(context, filterCard);
         sortRow = createFilterStrip(context, filterCard);

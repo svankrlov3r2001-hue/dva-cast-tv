@@ -132,20 +132,20 @@ public class MovieDetailScreenView extends FrameLayout {
         topNavRow.addView(btnBack);
         contentCol.addView(topNavRow, tnLp);
 
-        // Hero Header Card (Borderless Liquid Glass)
+        // Hero Header Card (Sleek Frosted Card)
         LinearLayout heroGlass = new LinearLayout(context);
         heroGlass.setOrientation(LinearLayout.HORIZONTAL);
-        heroGlass.setPadding(UiHelper.dp(context, 28), UiHelper.dp(context, 26),
-                UiHelper.dp(context, 28), UiHelper.dp(context, 26));
-        UiHelper.applyGlassCardStyle(heroGlass, context, 40, UiHelper.COLOR_SURFACE_GLASS, 24);
+        heroGlass.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 18),
+                UiHelper.dp(context, 20), UiHelper.dp(context, 18));
+        UiHelper.applyGlassCardStyle(heroGlass, context, 18, UiHelper.COLOR_SURFACE_GLASS, 16);
         LinearLayout.LayoutParams hgLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        hgLp.bottomMargin = UiHelper.dp(context, 26);
+        hgLp.bottomMargin = UiHelper.dp(context, 20);
 
         // Left Poster
         FrameLayout posterWrap = new FrameLayout(context);
-        LinearLayout.LayoutParams pwLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 196), UiHelper.dp(ctxOrThis(context), 290));
-        pwLp.rightMargin = UiHelper.dp(context, 28);
+        LinearLayout.LayoutParams pwLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 154), UiHelper.dp(ctxOrThis(context), 226));
+        pwLp.rightMargin = UiHelper.dp(context, 22);
         posterIv = new ImageView(context);
         posterIv.setScaleType(ImageView.ScaleType.CENTER_CROP);
         posterWrap.addView(posterIv, new FrameLayout.LayoutParams(
@@ -153,13 +153,13 @@ public class MovieDetailScreenView extends FrameLayout {
 
         badgeQualityTv = new TextView(context);
         badgeQualityTv.setTextColor(Color.WHITE);
-        badgeQualityTv.setTextSize(11f);
+        badgeQualityTv.setTextSize(10f);
         badgeQualityTv.setTypeface(null, Typeface.BOLD);
-        badgeQualityTv.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 4), UiHelper.dp(context, 10), UiHelper.dp(context, 4));
-        badgeQualityTv.setBackground(UiHelper.createGlassRect(context, 12, Color.argb(180, 229, 9, 20), Color.TRANSPARENT, 0));
+        badgeQualityTv.setPadding(UiHelper.dp(context, 8), UiHelper.dp(context, 3), UiHelper.dp(context, 8), UiHelper.dp(context, 3));
+        badgeQualityTv.setBackground(UiHelper.createGlassRect(context, 6, Color.argb(190, 229, 9, 20), Color.TRANSPARENT, 0));
         FrameLayout.LayoutParams bqLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-        bqLp.setMargins(UiHelper.dp(context, 10), UiHelper.dp(context, 10), 0, 0);
+        bqLp.setMargins(UiHelper.dp(context, 8), UiHelper.dp(context, 8), 0, 0);
         posterWrap.addView(badgeQualityTv, bqLp);
         heroGlass.addView(posterWrap, pwLp);
 
@@ -171,36 +171,36 @@ public class MovieDetailScreenView extends FrameLayout {
 
         titleTv = new TextView(context);
         titleTv.setTextColor(Color.WHITE);
-        titleTv.setTextSize(28f);
+        titleTv.setTextSize(23f);
         titleTv.setTypeface(null, Typeface.BOLD);
         infoCol.addView(titleTv);
 
         metaTv = new TextView(context);
         metaTv.setTextColor(UiHelper.COLOR_GOLD);
-        metaTv.setTextSize(13.5f);
+        metaTv.setTextSize(12.5f);
         metaTv.setTypeface(null, Typeface.BOLD);
         LinearLayout.LayoutParams mLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        mLp.topMargin = UiHelper.dp(context, 8);
+        mLp.topMargin = UiHelper.dp(context, 6);
         infoCol.addView(metaTv, mLp);
 
         progressTv = new TextView(context);
         progressTv.setTextColor(UiHelper.COLOR_GREEN);
-        progressTv.setTextSize(13f);
+        progressTv.setTextSize(12f);
         progressTv.setTypeface(null, Typeface.BOLD);
         LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        pLp.topMargin = UiHelper.dp(context, 6);
+        pLp.topMargin = UiHelper.dp(context, 4);
         infoCol.addView(progressTv, pLp);
 
         descTv = new TextView(context);
         descTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
-        descTv.setTextSize(14f);
-        descTv.setLineSpacing(UiHelper.dp(context, 3), 1f);
+        descTv.setTextSize(13f);
+        descTv.setLineSpacing(UiHelper.dp(context, 2), 1f);
         LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        dLp.topMargin = UiHelper.dp(context, 12);
-        dLp.bottomMargin = UiHelper.dp(context, 20);
+        dLp.topMargin = UiHelper.dp(context, 9);
+        dLp.bottomMargin = UiHelper.dp(context, 16);
         infoCol.addView(descTv, dLp);
 
         // Action Buttons Row
@@ -214,9 +214,9 @@ public class MovieDetailScreenView extends FrameLayout {
         btnLike = makeGlassActionBtn(context, "👍  Thích", false);
         btnDislike = makeGlassActionBtn(context, "👎  Không thích", false);
 
-        actionsRow.addView(btnPlay, marginRightLp(context, 12));
-        actionsRow.addView(btnWishlist, marginRightLp(context, 12));
-        actionsRow.addView(btnLike, marginRightLp(context, 12));
+        actionsRow.addView(btnPlay, marginRightLp(context, 10));
+        actionsRow.addView(btnWishlist, marginRightLp(context, 10));
+        actionsRow.addView(btnLike, marginRightLp(context, 10));
         actionsRow.addView(btnDislike, marginRightLp(context, 0));
         infoCol.addView(actionsRow);
 
@@ -735,10 +735,10 @@ public class MovieDetailScreenView extends FrameLayout {
         TextView tv = new TextView(ctx);
         tv.setText(text);
         tv.setTextColor(Color.WHITE);
-        tv.setTextSize(13.5f);
+        tv.setTextSize(12.5f);
         tv.setTypeface(null, Typeface.BOLD);
-        tv.setPadding(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 11));
-        UiHelper.applyFocusableGlassButton(tv, ctx, 24, accent);
+        tv.setPadding(UiHelper.dp(ctx, 15), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 15), UiHelper.dp(ctx, 8));
+        UiHelper.applyFocusableGlassButton(tv, ctx, 15, accent);
         return tv;
     }
 
@@ -746,11 +746,11 @@ public class MovieDetailScreenView extends FrameLayout {
         TextView tv = new TextView(ctx);
         tv.setText(text);
         tv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
-        tv.setTextSize(19f);
+        tv.setTextSize(15.5f);
         tv.setTypeface(null, Typeface.BOLD);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = UiHelper.dp(ctx, 12);
+        lp.bottomMargin = UiHelper.dp(ctx, 9);
         tv.setLayoutParams(lp);
         return tv;
     }

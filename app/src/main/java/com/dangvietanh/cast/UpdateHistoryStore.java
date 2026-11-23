@@ -125,6 +125,13 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v10 = new ArrayList<>();
+        v10.add("Thiết kế lại giao diện Trang chủ chuẩn Android TV với thanh menu cố định gọn gàng bên trái, không che khuất nội dung phim");
+        v10.add("Hiển thị banner phim nổi bật toàn màn hình cùng thanh tiện ích Tìm kiếm, Danh sách, Cài đặt, Đồng hồ và Wi-Fi ở góc trên");
+        v10.add("Tinh chỉnh hàng Tiếp tục xem và danh sách phim nhỏ gọn, sắc nét kèm biểu tượng phát nhanh và khung sáng rõ nét khi di chuyển bằng remote");
+        v10.add("Nâng cấp bề mặt kính mờ tối dịu mắt, giảm độ bo góc và loại bỏ phần nền đục cồng kềnh trên toàn bộ các màn hình và bảng cài đặt");
+        list.add(new HistoryEntry(10L, "4.1", "23/11/2026", "Tinh Gọn Giao Diện Trang Chủ & Nâng Cấp Trải Nghiệm Android TV Chuẩn Rạp Phim", v10));
+
         List<String> v9 = new ArrayList<>();
         v9.add("Giao diện rạp phim màn hình ngang thế hệ mới dành riêng cho Android TV và Máy chiếu với hiệu ứng kính mờ không viền sang trọng");
         v9.add("Đăng nhập nhanh chóng qua mã QR hoặc mã thiết bị 9 số trực tiếp trên màn hình TV");
