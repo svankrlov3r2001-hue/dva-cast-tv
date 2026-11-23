@@ -396,6 +396,18 @@ public class MainActivity extends Activity {
             public void onShowToast(String message, int accentColor) {
                 UiHelper.showGlassToast(rootLayout, MainActivity.this, message, accentColor);
             }
+
+            @Override
+            public void onNavigateTab(String tabId) {
+                detailScreen.clearHistory();
+                detailScreen.setVisibility(View.GONE);
+                switchMainTab(tabId);
+            }
+
+            @Override
+            public void onOpenSettings() {
+                if (overlayMenu != null) overlayMenu.show();
+            }
         });
         detailScreen.setVisibility(View.GONE);
         appContainer.addView(detailScreen, new FrameLayout.LayoutParams(

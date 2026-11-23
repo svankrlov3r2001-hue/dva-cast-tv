@@ -125,6 +125,12 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v11 = new ArrayList<>();
+        v11.add("Thiết kế lại toàn bộ màn hình Chi tiết phim với hình nền tràn viền sắc nét, áp phích nổi bật và thanh điều hướng biểu tượng tinh gọn bên trái");
+        v11.add("Hiển thị đầy đủ tên tiếng Việt, tên gốc, điểm IMDb, thời lượng, năm phát hành, nhãn chất lượng, thẻ thể loại/quốc gia và cụm nút thao tác gọn gàng");
+        v11.add("Nâng cấp danh sách tập phim dạng lưới ảnh thu nhỏ 5 cột 16:9 trực quan kèm hiệu ứng khung sáng hồng rực rỡ cho tập đang chọn");
+        list.add(new HistoryEntry(11L, "4.2", "23/11/2026", "Thiết Kế Mới Màn Hình Chi Tiết Phim & Lưới Tập Ảnh Thu Nhỏ 5 Cột", v11));
+
         List<String> v10 = new ArrayList<>();
         v10.add("Thiết kế lại giao diện Trang chủ chuẩn Android TV với thanh menu cố định gọn gàng bên trái, không che khuất nội dung phim");
         v10.add("Hiển thị banner phim nổi bật toàn màn hình cùng thanh tiện ích Tìm kiếm, Danh sách, Cài đặt, Đồng hồ và Wi-Fi ở góc trên");
