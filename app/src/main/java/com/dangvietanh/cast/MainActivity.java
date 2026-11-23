@@ -851,7 +851,7 @@ public class MainActivity extends Activity {
             if (playerScreen != null && playerScreen.isShowing()) {
                 MediaMetadata meta = new MediaMetadata.Builder()
                         .putString(MediaMetadata.METADATA_KEY_TITLE, playerScreen.getCurrentTitle())
-                        .putString(MediaMetadata.METADATA_KEY_SUBTITLE, playerScreen.getCurrentSubtitle())
+                        .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE, playerScreen.getCurrentSubtitle())
                         .putLong(MediaMetadata.METADATA_KEY_DURATION, playerScreen.getDurationMs())
                         .build();
                 mediaSession.setMetadata(meta);
