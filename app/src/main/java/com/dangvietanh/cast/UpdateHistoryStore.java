@@ -125,6 +125,12 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v12 = new ArrayList<>();
+        v12.add("Thiết kế lại toàn bộ thanh điều khiển trình phát tối giản tinh tế với thanh thời gian mảnh không viền, không che phụ đề");
+        v12.add("Nhóm biểu tượng Máy chủ, Thuyết minh, Phụ đề, Thông tin và Tải lại gọn gàng trên góc phải kèm thanh tiện ích dọc chuyển nhanh Độ tương phản, Tự chuyển tập và Tràn viền");
+        v12.add("Bổ sung nút Tạm dừng/Phát dạng kính mờ cân đối, tua nhanh 10 giây sắc nét và thẻ thông báo nổi phía trên cùng khi đổi chế độ");
+        list.add(new HistoryEntry(12L, "4.3", "24/11/2026", "Giao Diện Trình Phát Tối Giản Tinh Tế & Điều Khiển Nhanh Thông Minh", v12));
+
         List<String> v11 = new ArrayList<>();
         v11.add("Thiết kế lại toàn bộ màn hình Chi tiết phim với hình nền tràn viền sắc nét, áp phích nổi bật và thanh điều hướng biểu tượng tinh gọn bên trái");
         v11.add("Hiển thị đầy đủ tên tiếng Việt, tên gốc, điểm IMDb, thời lượng, năm phát hành, nhãn chất lượng, thẻ thể loại/quốc gia và cụm nút thao tác gọn gàng");

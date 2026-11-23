@@ -90,34 +90,47 @@ public class PlayerScreenController {
     private final TextView btnNextPlayNow;
     private final TextView btnNextCancel;
 
-    // HUD Controls
+    // HUD Controls (iOS / Apple TV Minimalist Frosted Layout)
     private final FrameLayout hudLayer;
-    private final TextView btnBackHud;
+    private final FrameLayout btnBackHud;
     private final TextView hudTitleTv;
     private final TextView hudMetaTv;
     private final TextView sleepBadgeTv;
-    private final LinearLayout btnFillToggle;
-    private final TextView fillToggleText;
-    private final TextView btnAutoNextQuick;
-    private final LinearLayout btnDubQuick;
-    private final TextView btnPlayPause;
+    private final FrameLayout btnDubTop;
+    private final ImageView dubTopIcon;
+    private final FrameLayout btnDockContrast;
+    private final ImageView dockContrastIcon;
+    private final FrameLayout btnDockAutoNext;
+    private final ImageView dockAutoNextIcon;
+    private final FrameLayout btnDockFill;
+    private final ImageView dockFillIcon;
     private final ImageView playPauseIcon;
+
+    // Top-Center Floating Player Toast
+    private final LinearLayout playerToastPill;
+    private final ImageView playerToastIcon;
+    private final TextView playerToastMsgTv;
+    private Runnable hidePlayerToastRunnable;
 
     // Interactive SeekBar
     private final FrameLayout seekBarFocusBox;
+    private final FrameLayout seekTrackContainer;
     private final View seekBufferedFill;
     private final View seekProgressFill;
+    private final View seekIntroMarker;
+    private final View seekCreditsMarker;
     private final View seekThumbDot;
-    private final TextView timeCurrentTv;
-    private final TextView timeDurationTv;
+    private final TextView timeCombinedTv;
 
     // Bottom Bar Actions
-    private final LinearLayout btnNextEpBar;
-    private final LinearLayout btnWishlistBar;
+    private final LinearLayout btnMemberPill;
+    private final ImageView memberAvatarIv;
+    private final FrameLayout btnWishlistBar;
     private final ImageView wishlistIconBar;
-    private final TextView wishlistTextBar;
-    private final LinearLayout btnLikeBar;
-    private final LinearLayout btnDislikeBar;
+    private final FrameLayout btnLikeBar;
+    private final ImageView likeIconBar;
+    private final FrameLayout btnDislikeBar;
+    private final ImageView dislikeIconBar;
     private final LinearLayout btnSpeedBar;
     private final TextView speedTextBar;
 
@@ -464,7 +477,7 @@ public class PlayerScreenController {
         neLp.setMargins(0, 0, UiHelper.dp(context, 36), UiHelper.dp(context, 118));
         rootFrame.addView(nextEpCard, neLp);
 
-        // 8. Main HUD Layer
+        // 8. Main HUD Layer (Matching iOS Minimalist Frosted Player Layout)
         hudLayer = new FrameLayout(context);
         hudLayer.setClipChildren(false);
         rootFrame.addView(hudLayer, new FrameLayout.LayoutParams(
@@ -472,118 +485,85 @@ public class PlayerScreenController {
 
         View topGrad = new View(context);
         topGrad.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(220, 7, 9, 15), Color.TRANSPARENT}));
+                new int[]{Color.argb(185, 7, 9, 15), Color.TRANSPARENT}));
         hudLayer.addView(topGrad, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 140), Gravity.TOP));
+                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 108), Gravity.TOP));
 
         View botGrad = new View(context);
         botGrad.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.TRANSPARENT, Color.argb(235, 7, 9, 15)}));
+                new int[]{Color.TRANSPARENT, Color.argb(215, 7, 9, 15)}));
         hudLayer.addView(botGrad, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 196), Gravity.BOTTOM));
+                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 150), Gravity.BOTTOM));
 
-        // Top Bar Container
+        // 8A. Top Bar Container (Left: Back + Title/Meta; Right: Icon Groups + Gear)
         LinearLayout topBar = new LinearLayout(context);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setClipChildren(false);
-        topBar.setPadding(UiHelper.dp(context, 28), UiHelper.dp(context, 20),
-                UiHelper.dp(context, 28), UiHelper.dp(context, 10));
+        topBar.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 12),
+                UiHelper.dp(context, 20), UiHelper.dp(context, 6));
 
-        btnBackHud = makeTextPill(context, "←", false);
-        btnBackHud.setTextSize(17f);
+        btnBackHud = makeHudCircleIcon(context, R.drawable.ic_back, 36);
         btnBackHud.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 close();
             }
         });
-        LinearLayout.LayoutParams bbLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        bbLp.rightMargin = UiHelper.dp(context, 14);
+        LinearLayout.LayoutParams bbLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 36), UiHelper.dp(context, 36));
+        bbLp.rightMargin = UiHelper.dp(context, 12);
         topBar.addView(btnBackHud, bbLp);
 
         LinearLayout titleCol = new LinearLayout(context);
         titleCol.setOrientation(LinearLayout.VERTICAL);
         hudTitleTv = new TextView(context);
         hudTitleTv.setTextColor(Color.WHITE);
-        hudTitleTv.setTextSize(19f);
+        hudTitleTv.setTextSize(15.5f);
         hudTitleTv.setTypeface(null, Typeface.BOLD);
         hudTitleTv.setMaxLines(1);
         hudTitleTv.setEllipsize(TextUtils.TruncateAt.END);
+        hudTitleTv.setShadowLayer(4f, 0f, 1f, Color.BLACK);
         titleCol.addView(hudTitleTv);
 
         LinearLayout metaLine = new LinearLayout(context);
         metaLine.setOrientation(LinearLayout.HORIZONTAL);
         metaLine.setGravity(Gravity.CENTER_VERTICAL);
         hudMetaTv = new TextView(context);
-        hudMetaTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
-        hudMetaTv.setTextSize(12.5f);
+        hudMetaTv.setTextColor(Color.argb(215, 225, 232, 244));
+        hudMetaTv.setTextSize(11.5f);
+        hudMetaTv.setMaxLines(1);
+        hudMetaTv.setEllipsize(TextUtils.TruncateAt.END);
         metaLine.addView(hudMetaTv);
 
         sleepBadgeTv = new TextView(context);
         sleepBadgeTv.setTextColor(UiHelper.COLOR_GOLD);
-        sleepBadgeTv.setTextSize(11.5f);
+        sleepBadgeTv.setTextSize(10.5f);
         sleepBadgeTv.setTypeface(null, Typeface.BOLD);
-        sleepBadgeTv.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 2), UiHelper.dp(context, 10), UiHelper.dp(context, 2));
-        UiHelper.applySubtleGlassPill(sleepBadgeTv, context, 14);
+        sleepBadgeTv.setPadding(UiHelper.dp(context, 8), UiHelper.dp(context, 1), UiHelper.dp(context, 8), UiHelper.dp(context, 1));
+        UiHelper.applySubtleGlassPill(sleepBadgeTv, context, 12);
         sleepBadgeTv.setVisibility(View.GONE);
         LinearLayout.LayoutParams sbLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        sbLp.leftMargin = UiHelper.dp(context, 10);
+        sbLp.leftMargin = UiHelper.dp(context, 8);
         metaLine.addView(sleepBadgeTv, sbLp);
 
         titleCol.addView(metaLine);
         topBar.addView(titleCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        // Top-Right Quick Action Pills
-        HorizontalScrollView topQuickScroll = new HorizontalScrollView(context);
-        topQuickScroll.setHorizontalScrollBarEnabled(false);
-        topQuickScroll.setClipChildren(false);
-        LinearLayout topQuickRow = new LinearLayout(context);
-        topQuickRow.setOrientation(LinearLayout.HORIZONTAL);
-        topQuickRow.setClipChildren(false);
-        topQuickScroll.addView(topQuickRow);
-
-        btnFillToggle = makeIconTextPill(context, Prefs.isVideoFillCover(context) ? R.drawable.ic_fit_screen : R.drawable.ic_fullscreen,
-                Prefs.isVideoFillCover(context) ? "Vừa khung" : "Tràn viền");
-        fillToggleText = (TextView) btnFillToggle.getChildAt(1);
-        btnFillToggle.setOnClickListener(new View.OnClickListener() {
+        // Top-Right Icon Groups (NO bulky text labels)
+        LinearLayout topGroup1 = makeFrostedCapsuleGroup(context);
+        FrameLayout btnServerTop = makeGroupSlotIcon(context, R.drawable.ic_server);
+        btnServerTop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                boolean next = !Prefs.isVideoFillCover(PlayerScreenController.this.context);
-                Prefs.setVideoFillCover(PlayerScreenController.this.context, next);
-                applyResizeSetting();
-                toast(next ? "Đã bật chế độ Tràn viền màn hình" : "Đã về tỷ lệ khung hình gốc", UiHelper.COLOR_CYAN);
-                resetHudAutoHide();
+                openSubModal(MODAL_SERVERS);
             }
         });
-        topQuickRow.addView(btnFillToggle, rightMarginLp(8));
+        topGroup1.addView(btnServerTop);
 
-        btnAutoNextQuick = makeTextPill(context, Prefs.isAutoPlayNext(context) ? "Tự chuyển: BẬT" : "Tự chuyển: TẮT", false);
-        btnAutoNextQuick.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                boolean next = !Prefs.isAutoPlayNext(PlayerScreenController.this.context);
-                Prefs.setAutoPlayNext(PlayerScreenController.this.context, next);
-                refreshQuickBadges();
-                toast(next ? "Đã bật Tự động chuyển tập mượt mà" : "Đã tắt Tự động chuyển tập", UiHelper.COLOR_GREEN);
-                resetHudAutoHide();
-            }
-        });
-        topQuickRow.addView(btnAutoNextQuick, rightMarginLp(8));
-
-        LinearLayout btnSubQuick = makeIconTextPill(context, R.drawable.ic_subtitles, "Phụ đề");
-        btnSubQuick.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openSubModal(MODAL_SUBTITLES);
-            }
-        });
-        topQuickRow.addView(btnSubQuick, rightMarginLp(8));
-
-        btnDubQuick = makeIconTextPill(context, R.drawable.ic_voice, "Thuyết minh");
-        btnDubQuick.setOnClickListener(new View.OnClickListener() {
+        btnDubTop = makeGroupSlotIcon(context, R.drawable.ic_voice);
+        dubTopIcon = (ImageView) btnDubTop.getChildAt(0);
+        btnDubTop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 boolean next = !Prefs.isSubAiVoiceEnabled(PlayerScreenController.this.context);
@@ -594,123 +574,267 @@ public class PlayerScreenController {
                 resetHudAutoHide();
             }
         });
-        topQuickRow.addView(btnDubQuick, rightMarginLp(8));
+        topGroup1.addView(btnDubTop);
 
-        LinearLayout btnServerQuick = makeIconTextPill(context, R.drawable.ic_server, "Máy chủ");
-        btnServerQuick.setOnClickListener(new View.OnClickListener() {
+        FrameLayout btnSubTop = makeGroupSlotIcon(context, R.drawable.ic_subtitles);
+        btnSubTop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                openSubModal(MODAL_SERVERS);
+                openSubModal(MODAL_SUBTITLES);
             }
         });
-        topQuickRow.addView(btnServerQuick, rightMarginLp(8));
+        topGroup1.addView(btnSubTop);
+        topBar.addView(topGroup1, rightMarginLp(8));
 
-        LinearLayout btnSettingsQuick = makeIconTextPill(context, R.drawable.ic_settings, "Cài đặt");
-        btnSettingsQuick.setOnClickListener(new View.OnClickListener() {
+        LinearLayout topGroup2 = makeFrostedCapsuleGroup(context);
+        FrameLayout btnInfoTop = makeGroupSlotIcon(context, R.drawable.ic_info);
+        btnInfoTop.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openSubModal(MODAL_INFO);
+            }
+        });
+        topGroup2.addView(btnInfoTop);
+
+        FrameLayout btnReloadTop = makeGroupSlotIcon(context, R.drawable.ic_reload);
+        btnReloadTop.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                reloadCurrentEpisode();
+            }
+        });
+        topGroup2.addView(btnReloadTop);
+        topBar.addView(topGroup2, rightMarginLp(8));
+
+        FrameLayout btnSettingsTop = makeHudCircleIcon(context, R.drawable.ic_settings, 36);
+        btnSettingsTop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 openSubModal(MODAL_SETTINGS);
             }
         });
-        topQuickRow.addView(btnSettingsQuick);
+        topBar.addView(btnSettingsTop, new LinearLayout.LayoutParams(UiHelper.dp(context, 36), UiHelper.dp(context, 36)));
 
-        topBar.addView(topQuickScroll);
         hudLayer.addView(topBar, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP));
 
-        // Center Transport Row
+        // 8B. Top-Center Floating Player Status Toast Pill (matching screenshot "Đặng Việt Anh / Tràn viền màn hình")
+        playerToastPill = new LinearLayout(context);
+        playerToastPill.setOrientation(LinearLayout.HORIZONTAL);
+        playerToastPill.setGravity(Gravity.CENTER_VERTICAL);
+        playerToastPill.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 7),
+                UiHelper.dp(context, 16), UiHelper.dp(context, 7));
+        playerToastPill.setBackground(UiHelper.createPillDrawable(
+                context, 16, Color.argb(198, 28, 30, 38), Color.argb(38, 255, 255, 255), 1.0f));
+        playerToastPill.setElevation(UiHelper.dp(context, 12));
+        playerToastPill.setVisibility(View.GONE);
+
+        FrameLayout ptIconWrap = new FrameLayout(context);
+        ptIconWrap.setBackground(UiHelper.createPillDrawable(
+                context, 9, Color.argb(225, 14, 16, 24), Color.argb(26, 255, 255, 255), 0.8f));
+        playerToastIcon = new ImageView(context);
+        playerToastIcon.setImageResource(R.drawable.ic_fullscreen);
+        playerToastIcon.setColorFilter(UiHelper.COLOR_CYAN, PorterDuff.Mode.SRC_IN);
+        ptIconWrap.addView(playerToastIcon, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 16), UiHelper.dp(context, 16), Gravity.CENTER));
+        LinearLayout.LayoutParams ptiLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 28), UiHelper.dp(context, 28));
+        ptiLp.rightMargin = UiHelper.dp(context, 10);
+        playerToastPill.addView(ptIconWrap, ptiLp);
+
+        LinearLayout ptCol = new LinearLayout(context);
+        ptCol.setOrientation(LinearLayout.VERTICAL);
+        TextView ptBrand = new TextView(context);
+        ptBrand.setText("Đặng Việt Anh");
+        ptBrand.setTextColor(Color.WHITE);
+        ptBrand.setTextSize(12f);
+        ptBrand.setTypeface(null, Typeface.BOLD);
+        ptCol.addView(ptBrand);
+
+        playerToastMsgTv = new TextView(context);
+        playerToastMsgTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
+        playerToastMsgTv.setTextSize(11f);
+        ptCol.addView(playerToastMsgTv);
+        playerToastPill.addView(ptCol);
+
+        FrameLayout.LayoutParams ptRootLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        ptRootLp.topMargin = UiHelper.dp(context, 12);
+        rootFrame.addView(playerToastPill, ptRootLp);
+
+        // 8C. Right-Edge Vertical Floating 3-Button Dock (Contrast, Auto-Next, Fullscreen Cover)
+        LinearLayout rightDock = new LinearLayout(context);
+        rightDock.setOrientation(LinearLayout.VERTICAL);
+        rightDock.setGravity(Gravity.CENTER_HORIZONTAL);
+        rightDock.setPadding(UiHelper.dp(context, 3), UiHelper.dp(context, 6),
+                UiHelper.dp(context, 3), UiHelper.dp(context, 6));
+        rightDock.setBackground(UiHelper.createPillDrawable(
+                context, 20, Color.argb(156, 22, 24, 34), Color.argb(30, 255, 255, 255), 1.0f));
+        rightDock.setClipChildren(false);
+
+        btnDockContrast = makeGroupSlotIcon(context, R.drawable.ic_contrast);
+        dockContrastIcon = (ImageView) btnDockContrast.getChildAt(0);
+        btnDockContrast.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                cycleContrastQuick();
+            }
+        });
+        rightDock.addView(btnDockContrast);
+
+        btnDockAutoNext = makeGroupSlotIcon(context, R.drawable.ic_skip_next);
+        dockAutoNextIcon = (ImageView) btnDockAutoNext.getChildAt(0);
+        btnDockAutoNext.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                boolean next = !Prefs.isAutoPlayNext(PlayerScreenController.this.context);
+                Prefs.setAutoPlayNext(PlayerScreenController.this.context, next);
+                refreshQuickBadges();
+                toast(next ? "Tự động chuyển tập: BẬT" : "Tự động chuyển tập: TẮT", UiHelper.COLOR_ACCENT_RED);
+                resetHudAutoHide();
+            }
+        });
+        rightDock.addView(btnDockAutoNext);
+
+        btnDockFill = makeGroupSlotIcon(context, R.drawable.ic_fullscreen);
+        dockFillIcon = (ImageView) btnDockFill.getChildAt(0);
+        btnDockFill.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                boolean next = !Prefs.isVideoFillCover(PlayerScreenController.this.context);
+                Prefs.setVideoFillCover(PlayerScreenController.this.context, next);
+                applyResizeSetting();
+                toast(next ? "Tràn viền màn hình" : "Tỷ lệ khung hình gốc", UiHelper.COLOR_CYAN);
+                resetHudAutoHide();
+            }
+        });
+        rightDock.addView(btnDockFill);
+
+        FrameLayout.LayoutParams rdLp = new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 40), FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.END | Gravity.CENTER_VERTICAL);
+        rdLp.rightMargin = UiHelper.dp(context, 16);
+        hudLayer.addView(rightDock, rdLp);
+
+        // 8D. Center Transport Row (-10s | Frosted Squircle Play/Pause | +10s)
         LinearLayout centerTransport = new LinearLayout(context);
         centerTransport.setOrientation(LinearLayout.HORIZONTAL);
         centerTransport.setGravity(Gravity.CENTER);
         centerTransport.setClipChildren(false);
 
-        LinearLayout btnRew = makeIconOnlyCircle(context, R.drawable.ic_rewind, 52, false);
+        FrameLayout btnRew = makeClearTransportIcon(context, R.drawable.ic_rewind_10);
         btnRew.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 seekBySec(-10);
             }
         });
-        centerTransport.addView(btnRew, rightMarginLp(24));
+        LinearLayout.LayoutParams rwLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 48), UiHelper.dp(context, 48));
+        rwLp.rightMargin = UiHelper.dp(context, 36);
+        centerTransport.addView(btnRew, rwLp);
 
         FrameLayout centerPlayWrap = new FrameLayout(context);
-        UiHelper.applyFocusableGlassButton(centerPlayWrap, context, 36, true);
+        centerPlayWrap.setBackground(makeSquircleSelectorDrawable(context));
+        centerPlayWrap.setFocusable(true);
+        centerPlayWrap.setClickable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            centerPlayWrap.setDefaultFocusHighlightEnabled(false);
+        }
         playPauseIcon = new ImageView(context);
         playPauseIcon.setImageResource(R.drawable.ic_pause);
         playPauseIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
         centerPlayWrap.addView(playPauseIcon, new FrameLayout.LayoutParams(
-                UiHelper.dp(context, 30), UiHelper.dp(context, 30), Gravity.CENTER));
+                UiHelper.dp(context, 28), UiHelper.dp(context, 28), Gravity.CENTER));
         centerPlayWrap.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 togglePlayPause();
             }
         });
-        // Hidden helper reference on btnPlayPause (actually we focus centerPlayWrap cleanly via view field)
-        btnPlayPause = new TextView(context);
-        btnPlayPause.setVisibility(View.GONE);
         centerPlayWrap.setTag("play_center");
-        centerTransport.addView(centerPlayWrap, new LinearLayout.LayoutParams(UiHelper.dp(context, 68), UiHelper.dp(context, 68)));
+        centerTransport.addView(centerPlayWrap, new LinearLayout.LayoutParams(UiHelper.dp(context, 62), UiHelper.dp(context, 62)));
 
-        LinearLayout btnFwd = makeIconOnlyCircle(context, R.drawable.ic_forward, 52, false);
+        FrameLayout btnFwd = makeClearTransportIcon(context, R.drawable.ic_forward_10);
         btnFwd.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 seekBySec(10);
             }
         });
-        LinearLayout.LayoutParams fwLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 52), UiHelper.dp(context, 52));
-        fwLp.leftMargin = UiHelper.dp(context, 24);
+        LinearLayout.LayoutParams fwLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 48), UiHelper.dp(context, 48));
+        fwLp.leftMargin = UiHelper.dp(context, 36);
         centerTransport.addView(btnFwd, fwLp);
 
         hudLayer.addView(centerTransport, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
 
-        // Bottom Stack: Seekbar + Action Bar
+        // 8E. Bottom Stack: Combined Time Readout + Thin Borderless Red Timeline + Minimalist Bottom Bar
         LinearLayout bottomHudCol = new LinearLayout(context);
         bottomHudCol.setOrientation(LinearLayout.VERTICAL);
         bottomHudCol.setClipChildren(false);
-        bottomHudCol.setPadding(UiHelper.dp(context, 28), UiHelper.dp(context, 6),
-                UiHelper.dp(context, 28), UiHelper.dp(context, 20));
+        bottomHudCol.setPadding(UiHelper.dp(context, 20), 0,
+                UiHelper.dp(context, 20), UiHelper.dp(context, 16));
 
-        LinearLayout seekRow = new LinearLayout(context);
-        seekRow.setOrientation(LinearLayout.HORIZONTAL);
-        seekRow.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams srLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        srLp.bottomMargin = UiHelper.dp(context, 12);
-
-        timeCurrentTv = new TextView(context);
-        timeCurrentTv.setText("00:00");
-        timeCurrentTv.setTextColor(Color.WHITE);
-        timeCurrentTv.setTextSize(13f);
-        timeCurrentTv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        seekRow.addView(timeCurrentTv, rightMarginLp(12));
+        timeCombinedTv = new TextView(context);
+        timeCombinedTv.setText("00:00 / 00:00");
+        timeCombinedTv.setTextColor(Color.WHITE);
+        timeCombinedTv.setTextSize(12f);
+        timeCombinedTv.setTypeface(null, Typeface.BOLD);
+        timeCombinedTv.setShadowLayer(4f, 0f, 1f, Color.BLACK);
+        LinearLayout.LayoutParams tcLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tcLp.bottomMargin = UiHelper.dp(context, 3);
+        bottomHudCol.addView(timeCombinedTv, tcLp);
 
         seekBarFocusBox = new FrameLayout(context);
-        seekBarFocusBox.setPadding(UiHelper.dp(context, 8), UiHelper.dp(context, 10),
-                UiHelper.dp(context, 8), UiHelper.dp(context, 10));
-        UiHelper.applyFocusableGlassButton(seekBarFocusBox, context, 18, false);
+        seekBarFocusBox.setFocusable(true);
+        seekBarFocusBox.setClickable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            seekBarFocusBox.setDefaultFocusHighlightEnabled(false);
+        }
+        seekBarFocusBox.setPadding(UiHelper.dp(context, 2), UiHelper.dp(context, 5),
+                UiHelper.dp(context, 2), UiHelper.dp(context, 5));
+        android.graphics.drawable.StateListDrawable seekFocusStates = new android.graphics.drawable.StateListDrawable();
+        seekFocusStates.addState(new int[]{android.R.attr.state_focused},
+                UiHelper.createFocusRingDrawable(context, 8, Color.argb(185, 255, 255, 255), 1.4f));
+        seekFocusStates.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        seekBarFocusBox.setBackground(seekFocusStates);
 
-        FrameLayout trackWrap = new FrameLayout(context);
+        seekTrackContainer = new FrameLayout(context);
         View trackBg = new View(context);
-        trackBg.setBackground(UiHelper.createGlassRect(context, 4, Color.argb(72, 255, 255, 255), Color.TRANSPARENT, 0));
-        trackWrap.addView(trackBg, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 6), Gravity.CENTER_VERTICAL));
+        trackBg.setBackground(UiHelper.createGlassRect(context, 2, Color.argb(72, 255, 255, 255), Color.TRANSPARENT, 0));
+        seekTrackContainer.addView(trackBg, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 3.5f), Gravity.CENTER_VERTICAL));
 
         seekBufferedFill = new View(context);
-        seekBufferedFill.setBackground(UiHelper.createGlassRect(context, 4, Color.argb(95, 255, 255, 255), Color.TRANSPARENT, 0));
-        trackWrap.addView(seekBufferedFill, new FrameLayout.LayoutParams(0, UiHelper.dp(context, 6), Gravity.CENTER_VERTICAL));
+        seekBufferedFill.setBackground(UiHelper.createGlassRect(context, 2, Color.argb(120, 255, 255, 255), Color.TRANSPARENT, 0));
+        seekTrackContainer.addView(seekBufferedFill, new FrameLayout.LayoutParams(
+                0, UiHelper.dp(context, 3.5f), Gravity.CENTER_VERTICAL));
 
         seekProgressFill = new View(context);
-        seekProgressFill.setBackground(UiHelper.createGlassRect(context, 4, UiHelper.COLOR_ACCENT_RED, Color.TRANSPARENT, 0));
-        trackWrap.addView(seekProgressFill, new FrameLayout.LayoutParams(0, UiHelper.dp(context, 6), Gravity.CENTER_VERTICAL));
+        seekProgressFill.setBackground(UiHelper.createGlassRect(context, 2, UiHelper.COLOR_ACCENT_RED, Color.TRANSPARENT, 0));
+        seekTrackContainer.addView(seekProgressFill, new FrameLayout.LayoutParams(
+                0, UiHelper.dp(context, 3.5f), Gravity.CENTER_VERTICAL));
+
+        seekIntroMarker = new View(context);
+        seekIntroMarker.setBackgroundColor(Color.WHITE);
+        seekIntroMarker.setVisibility(View.GONE);
+        seekTrackContainer.addView(seekIntroMarker, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 2), UiHelper.dp(context, 8), Gravity.CENTER_VERTICAL));
+
+        seekCreditsMarker = new View(context);
+        seekCreditsMarker.setBackground(UiHelper.createGlassRect(context, 4, UiHelper.COLOR_GOLD, Color.TRANSPARENT, 0));
+        seekCreditsMarker.setVisibility(View.GONE);
+        seekTrackContainer.addView(seekCreditsMarker, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 6), UiHelper.dp(context, 6), Gravity.CENTER_VERTICAL));
 
         seekThumbDot = new View(context);
-        seekThumbDot.setBackground(UiHelper.createGlassRect(context, 8, Color.WHITE, Color.TRANSPARENT, 0));
-        trackWrap.addView(seekThumbDot, new FrameLayout.LayoutParams(UiHelper.dp(context, 14), UiHelper.dp(context, 14), Gravity.CENTER_VERTICAL));
+        seekThumbDot.setBackground(UiHelper.createGlassRect(context, 6, UiHelper.COLOR_ACCENT_RED, Color.TRANSPARENT, 0));
+        seekTrackContainer.addView(seekThumbDot, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 12), UiHelper.dp(context, 12), Gravity.CENTER_VERTICAL));
 
-        seekBarFocusBox.addView(trackWrap, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 18)));
+        seekBarFocusBox.addView(seekTrackContainer, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 14)));
 
         seekBarFocusBox.setOnKeyListener(new View.OnKeyListener() {
             @Override
@@ -745,114 +869,111 @@ public class PlayerScreenController {
                 return true;
             }
         });
+        LinearLayout.LayoutParams sbWrapLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        sbWrapLp.bottomMargin = UiHelper.dp(context, 8);
+        bottomHudCol.addView(seekBarFocusBox, sbWrapLp);
 
-        seekRow.addView(seekBarFocusBox, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-
-        timeDurationTv = new TextView(context);
-        timeDurationTv.setText("00:00");
-        timeDurationTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
-        timeDurationTv.setTextSize(13f);
-        timeDurationTv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        LinearLayout.LayoutParams tdLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        tdLp.leftMargin = UiHelper.dp(context, 12);
-        seekRow.addView(timeDurationTv, tdLp);
-        bottomHudCol.addView(seekRow, srLp);
-
-        // Bottom Scrollable Action Strip
-        HorizontalScrollView bottomScroll = new HorizontalScrollView(context);
-        bottomScroll.setHorizontalScrollBarEnabled(false);
-        bottomScroll.setClipChildren(false);
+        // Bottom Minimalist Control Row (Left: Avatar + 4 icons; Right: Speed + Tùy chọn khác)
         LinearLayout bottomRow = new LinearLayout(context);
         bottomRow.setOrientation(LinearLayout.HORIZONTAL);
+        bottomRow.setGravity(Gravity.CENTER_VERTICAL);
         bottomRow.setClipChildren(false);
-        bottomScroll.addView(bottomRow);
 
-        btnNextEpBar = makeIconTextPill(context, R.drawable.ic_skip_next, "Tập tiếp theo");
-        btnNextEpBar.setOnClickListener(new View.OnClickListener() {
+        btnMemberPill = new LinearLayout(context);
+        btnMemberPill.setOrientation(LinearLayout.HORIZONTAL);
+        btnMemberPill.setGravity(Gravity.CENTER_VERTICAL);
+        btnMemberPill.setPadding(UiHelper.dp(context, 5), UiHelper.dp(context, 4),
+                UiHelper.dp(context, 10), UiHelper.dp(context, 4));
+        UiHelper.applyFocusableGlassButton(btnMemberPill, context, 18, false);
+        memberAvatarIv = new ImageView(context);
+        memberAvatarIv.setImageResource(R.drawable.ic_person);
+        LinearLayout.LayoutParams mavLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 26), UiHelper.dp(context, 26));
+        mavLp.rightMargin = UiHelper.dp(context, 6);
+        btnMemberPill.addView(memberAvatarIv, mavLp);
+        TextView chevTv = new TextView(context);
+        chevTv.setText("›");
+        chevTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
+        chevTv.setTextSize(15f);
+        chevTv.setTypeface(null, Typeface.BOLD);
+        btnMemberPill.addView(chevTv);
+        btnMemberPill.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                playNextEpisode(false);
+                openSubModal(MODAL_MEMBER);
             }
         });
-        bottomRow.addView(btnNextEpBar, rightMarginLp(10));
+        LinearLayout.LayoutParams mpLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, UiHelper.dp(context, 36));
+        mpLp.rightMargin = UiHelper.dp(context, 8);
+        bottomRow.addView(btnMemberPill, mpLp);
 
-        LinearLayout btnEpisodesBar = makeIconTextPill(context, R.drawable.ic_episodes, "Danh sách tập");
-        btnEpisodesBar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openSubModal(MODAL_EPISODES);
-            }
-        });
-        bottomRow.addView(btnEpisodesBar, rightMarginLp(10));
-
-        btnWishlistBar = makeIconTextPill(context, R.drawable.ic_bookmark_outline, "Danh sách");
+        btnWishlistBar = makeHudCircleIcon(context, R.drawable.ic_bookmark_outline, 36);
         wishlistIconBar = (ImageView) btnWishlistBar.getChildAt(0);
-        wishlistTextBar = (TextView) btnWishlistBar.getChildAt(1);
         btnWishlistBar.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 toggleWishlist();
             }
         });
-        bottomRow.addView(btnWishlistBar, rightMarginLp(10));
+        bottomRow.addView(btnWishlistBar, fixedSquareMarginLp(36, 8));
 
-        btnLikeBar = makeIconTextPill(context, R.drawable.ic_thumb_up, "Thích");
+        FrameLayout btnEpisodesBar = makeHudCircleIcon(context, R.drawable.ic_episodes, 36);
+        btnEpisodesBar.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openSubModal(MODAL_EPISODES);
+            }
+        });
+        bottomRow.addView(btnEpisodesBar, fixedSquareMarginLp(36, 8));
+
+        btnLikeBar = makeHudCircleIcon(context, R.drawable.ic_thumb_up, 36);
+        likeIconBar = (ImageView) btnLikeBar.getChildAt(0);
         btnLikeBar.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 toggleReaction("like");
             }
         });
-        bottomRow.addView(btnLikeBar, rightMarginLp(10));
+        bottomRow.addView(btnLikeBar, fixedSquareMarginLp(36, 8));
 
-        btnDislikeBar = makeIconTextPill(context, R.drawable.ic_thumb_down, "Không thích");
+        btnDislikeBar = makeHudCircleIcon(context, R.drawable.ic_thumb_down, 36);
+        dislikeIconBar = (ImageView) btnDislikeBar.getChildAt(0);
         btnDislikeBar.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 toggleReaction("dislike");
             }
         });
-        bottomRow.addView(btnDislikeBar, rightMarginLp(10));
+        bottomRow.addView(btnDislikeBar, fixedSquareMarginLp(36, 0));
 
-        LinearLayout btnInfoBar = makeIconTextPill(context, R.drawable.ic_info, "Thông tin phim");
-        btnInfoBar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openSubModal(MODAL_INFO);
-            }
-        });
-        bottomRow.addView(btnInfoBar, rightMarginLp(10));
+        // Open middle space keeps bottom-center subtitles 100% unobstructed
+        bottomRow.addView(new View(context), new LinearLayout.LayoutParams(0, 1, 1f));
 
-        LinearLayout btnMemberBar = makeIconTextPill(context, R.drawable.ic_person, "Thành viên");
-        btnMemberBar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openSubModal(MODAL_MEMBER);
-            }
-        });
-        bottomRow.addView(btnMemberBar, rightMarginLp(10));
-
-        btnSpeedBar = makeIconTextPill(context, R.drawable.ic_speed, "1.0x");
+        btnSpeedBar = makeIconTextPill(context, R.drawable.ic_play, "1.0x");
+        ((ImageView) btnSpeedBar.getChildAt(0)).getLayoutParams().width = UiHelper.dp(context, 12);
+        ((ImageView) btnSpeedBar.getChildAt(0)).getLayoutParams().height = UiHelper.dp(context, 12);
         speedTextBar = (TextView) btnSpeedBar.getChildAt(1);
+        speedTextBar.setTextSize(12.5f);
         btnSpeedBar.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 cycleSpeed();
             }
         });
-        bottomRow.addView(btnSpeedBar, rightMarginLp(10));
+        bottomRow.addView(btnSpeedBar, rightMarginLp(8));
 
-        LinearLayout btnReloadBar = makeIconTextPill(context, R.drawable.ic_reload, "Tải lại");
-        btnReloadBar.setOnClickListener(new View.OnClickListener() {
+        TextView btnMoreBar = makeTextPill(context, "Tùy chọn khác  ⌄", false);
+        btnMoreBar.setTextSize(12.5f);
+        btnMoreBar.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                reloadCurrentEpisode();
+                openSubModal(MODAL_SETTINGS);
             }
         });
-        bottomRow.addView(btnReloadBar);
+        bottomRow.addView(btnMoreBar);
 
-        bottomHudCol.addView(bottomScroll);
+        bottomHudCol.addView(bottomRow);
         hudLayer.addView(bottomHudCol, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
@@ -1174,7 +1295,6 @@ public class PlayerScreenController {
             wishlistLocalState = data.movie.inWishlist;
         }
         nextEpisodeTarget = computeNextEpisode(data, req);
-        btnNextEpBar.setVisibility(nextEpisodeTarget != null ? View.VISIBLE : View.GONE);
 
         String title = !data.title.isEmpty() ? data.title : req.title;
         String epTitle = !data.episodeTitle.isEmpty() ? data.episodeTitle : req.episodeTitle;
@@ -1331,6 +1451,11 @@ public class PlayerScreenController {
         } else if (isReady || isPlaying) {
             loadingCenter.setVisibility(View.GONE);
             fadeTransitionVeilOut();
+            double d = nativePlayer.getDurationSec();
+            if (d > 0) {
+                lastDurSec = d;
+                updateHudMetaText();
+            }
         }
 
         if (!isPlaying) {
@@ -1349,8 +1474,7 @@ public class PlayerScreenController {
         this.lastDurSec = durSec;
         this.lastBufferedPct = bufferedPct;
 
-        timeCurrentTv.setText(formatTime(posSec));
-        timeDurationTv.setText(durSec > 0 ? formatTime(durSec) : "--:--");
+        timeCombinedTv.setText(formatTime(posSec) + " / " + (durSec > 0 ? formatTime(durSec) : "--:--"));
         updateSeekBarVisual();
 
         subtitleOverlay.renderAt(posSec);
@@ -1575,13 +1699,16 @@ public class PlayerScreenController {
     }
 
     private void updateHudMetaText() {
+        String durLabel = formatHumanDuration(lastDurSec);
         String ep = getCurrentSubtitle();
         String srvName = activeServerId.isEmpty() ? "Tự động" : findServerLabel(activeServerId);
         StringBuilder sb = new StringBuilder();
-        if (!ep.isEmpty()) sb.append(ep).append("  •  ");
-        sb.append(activeQualityLabel).append("  •  ").append(srvName);
+        if (!durLabel.isEmpty()) sb.append(durLabel);
+        else if (!ep.isEmpty()) sb.append(ep);
+        if (sb.length() > 0) sb.append(" · ");
+        sb.append(activeQualityLabel).append(" · ").append(srvName);
         if (nativePlayer.isPreloadedFor(preloadedNextUrl)) {
-            sb.append("  •  Sẵn sàng tập kế");
+            sb.append(" · Sẵn sàng tập kế");
         }
         hudMetaTv.setText(sb.toString());
     }
@@ -1598,8 +1725,7 @@ public class PlayerScreenController {
     }
 
     private void updateSeekBarVisual() {
-        View parent = (View) seekProgressFill.getParent();
-        int trackW = parent.getWidth();
+        int trackW = seekTrackContainer.getWidth();
         if (trackW <= 0) return;
 
         float ratio = (lastDurSec > 0) ? (float) Math.max(0.0, Math.min(1.0, lastPosSec / lastDurSec)) : 0f;
@@ -1612,30 +1738,75 @@ public class PlayerScreenController {
         seekProgressFill.getLayoutParams().width = progW;
         seekProgressFill.requestLayout();
 
-        int dotMargin = Math.max(0, Math.min(trackW - UiHelper.dp(context, 14), progW - UiHelper.dp(context, 7)));
+        int dotMargin = Math.max(0, Math.min(trackW - UiHelper.dp(context, 12), progW - UiHelper.dp(context, 6)));
         ((FrameLayout.LayoutParams) seekThumbDot.getLayoutParams()).leftMargin = dotMargin;
         seekThumbDot.requestLayout();
+
+        if (lastDurSec > 20.0 && resolvedData != null && resolvedData.skipIntroSec > 6 && resolvedData.skipIntroSec < lastDurSec) {
+            seekIntroMarker.setVisibility(View.VISIBLE);
+            int mLeft = Math.round(trackW * (float) (resolvedData.skipIntroSec / lastDurSec));
+            ((FrameLayout.LayoutParams) seekIntroMarker.getLayoutParams()).leftMargin = Math.max(0, Math.min(trackW - 4, mLeft));
+            seekIntroMarker.requestLayout();
+        } else {
+            seekIntroMarker.setVisibility(View.GONE);
+        }
+
+        if (lastDurSec > 20.0 && resolvedData != null && resolvedData.endCreditsSec > 30 && resolvedData.endCreditsSec < lastDurSec) {
+            seekCreditsMarker.setVisibility(View.VISIBLE);
+            int cLeft = Math.round(trackW * (float) (resolvedData.endCreditsSec / lastDurSec));
+            ((FrameLayout.LayoutParams) seekCreditsMarker.getLayoutParams()).leftMargin = Math.max(0, Math.min(trackW - 8, cLeft));
+            seekCreditsMarker.requestLayout();
+        } else {
+            seekCreditsMarker.setVisibility(View.GONE);
+        }
     }
 
     private void refreshQuickBadges() {
         boolean fill = Prefs.isVideoFillCover(context);
-        fillToggleText.setText(fill ? "Vừa khung" : "Tràn viền");
-        ((ImageView) btnFillToggle.getChildAt(0)).setImageResource(fill ? R.drawable.ic_fit_screen : R.drawable.ic_fullscreen);
+        dockFillIcon.setImageResource(fill ? R.drawable.ic_fit_screen : R.drawable.ic_fullscreen);
+        dockFillIcon.setColorFilter(fill ? Color.parseColor("#FF2E55") : Color.WHITE, PorterDuff.Mode.SRC_IN);
 
-        btnAutoNextQuick.setText(Prefs.isAutoPlayNext(context) ? "Tự chuyển: BẬT" : "Tự chuyển: TẮT");
-        UiHelper.setButtonSelectedVisual(btnDubQuick, context, 20, Prefs.isSubAiVoiceEnabled(context));
+        boolean autoNext = Prefs.isAutoPlayNext(context);
+        dockAutoNextIcon.setColorFilter(autoNext ? Color.parseColor("#FF2E55") : Color.WHITE, PorterDuff.Mode.SRC_IN);
+
+        String contrast = Prefs.getContrastLevel(context);
+        dockContrastIcon.setColorFilter(!"Mặc định".equals(contrast) ? UiHelper.COLOR_GOLD : Color.WHITE, PorterDuff.Mode.SRC_IN);
+
+        boolean dubOn = Prefs.isSubAiVoiceEnabled(context);
+        dubTopIcon.setColorFilter(dubOn ? Color.parseColor("#FF2E55") : Color.WHITE, PorterDuff.Mode.SRC_IN);
+
+        Models.User u = apiClient.getCachedUser();
+        String avUrl = (resolvedData != null && resolvedData.member != null && !resolvedData.member.avatarUrl.isEmpty())
+                ? resolvedData.member.avatarUrl : (u != null ? u.avatarUrl : "");
+        UiHelper.safeLoadAvatar(memberAvatarIv, avUrl);
 
         wishlistIconBar.setImageResource(wishlistLocalState ? R.drawable.ic_bookmark : R.drawable.ic_bookmark_outline);
-        wishlistTextBar.setText(wishlistLocalState ? "Đã lưu" : "Danh sách");
-        UiHelper.setButtonSelectedVisual(btnWishlistBar, context, 20, wishlistLocalState);
+        wishlistIconBar.setColorFilter(wishlistLocalState ? Color.parseColor("#FF2E55") : Color.WHITE, PorterDuff.Mode.SRC_IN);
 
         String key = launchReq != null ? String.valueOf(launchReq.videosId) : "";
         String react = Prefs.getReaction(context, key);
-        UiHelper.setButtonSelectedVisual(btnLikeBar, context, 20, "like".equals(react));
-        UiHelper.setButtonSelectedVisual(btnDislikeBar, context, 20, "dislike".equals(react));
+        likeIconBar.setColorFilter("like".equals(react) ? Color.parseColor("#FF2E55") : Color.WHITE, PorterDuff.Mode.SRC_IN);
+        dislikeIconBar.setColorFilter("dislike".equals(react) ? Color.parseColor("#FF2E55") : Color.WHITE, PorterDuff.Mode.SRC_IN);
 
         float r = Prefs.getPlaybackRate(context);
         speedTextBar.setText(formatRate(r));
+    }
+
+    private void cycleContrastQuick() {
+        String[] levels = {"Thấp", "Mặc định", "Cao", "Rất cao"};
+        String cur = Prefs.getContrastLevel(context);
+        int idx = 1;
+        for (int i = 0; i < levels.length; i++) {
+            if (levels[i].equals(cur)) {
+                idx = (i + 1) % levels.length;
+                break;
+            }
+        }
+        Prefs.setContrastLevel(context, levels[idx]);
+        applyContrastSetting();
+        refreshQuickBadges();
+        toast("Tương phản dịu mắt: " + levels[idx], UiHelper.COLOR_GOLD);
+        resetHudAutoHide();
     }
 
     private void toggleWishlist() {
@@ -2794,16 +2965,104 @@ public class PlayerScreenController {
         return row;
     }
 
-    private LinearLayout makeIconOnlyCircle(Context ctx, int iconRes, int sizeDp, boolean accent) {
-        LinearLayout box = new LinearLayout(ctx);
-        box.setGravity(Gravity.CENTER);
-        UiHelper.applyFocusableGlassButton(box, ctx, sizeDp / 2, accent);
+    private FrameLayout makeHudCircleIcon(Context ctx, int iconRes, int sizeDp) {
+        FrameLayout box = new FrameLayout(ctx);
+        box.setFocusable(true);
+        box.setClickable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            box.setDefaultFocusHighlightEnabled(false);
+        }
+        int r = sizeDp / 2;
+        android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
+                ctx, r, Color.argb(148, 22, 24, 34), Color.argb(30, 255, 255, 255), 1.0f);
+        android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
+                ctx, r, Color.argb(215, 42, 46, 66), Color.WHITE, 1.5f);
+        android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_pressed}, focused);
+        states.addState(new int[]{android.R.attr.state_focused}, focused);
+        states.addState(new int[]{}, normal);
+        box.setBackground(states);
+
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
         iv.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-        box.addView(iv, new LinearLayout.LayoutParams(UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 24)));
-        box.setLayoutParams(new LinearLayout.LayoutParams(UiHelper.dp(ctx, sizeDp), UiHelper.dp(ctx, sizeDp)));
+        box.addView(iv, new FrameLayout.LayoutParams(UiHelper.dp(ctx, 17), UiHelper.dp(ctx, 17), Gravity.CENTER));
         return box;
+    }
+
+    private LinearLayout makeFrostedCapsuleGroup(Context ctx) {
+        LinearLayout group = new LinearLayout(ctx);
+        group.setOrientation(LinearLayout.HORIZONTAL);
+        group.setGravity(Gravity.CENTER_VERTICAL);
+        group.setPadding(UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 2));
+        group.setBackground(UiHelper.createPillDrawable(
+                ctx, 18, Color.argb(148, 22, 24, 34), Color.argb(30, 255, 255, 255), 1.0f));
+        group.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, UiHelper.dp(ctx, 36)));
+        return group;
+    }
+
+    private FrameLayout makeGroupSlotIcon(Context ctx, int iconRes) {
+        FrameLayout slot = new FrameLayout(ctx);
+        slot.setFocusable(true);
+        slot.setClickable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            slot.setDefaultFocusHighlightEnabled(false);
+        }
+        android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
+                ctx, 16, Color.argb(190, 56, 62, 86), Color.WHITE, 1.4f);
+        android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_pressed}, focused);
+        states.addState(new int[]{android.R.attr.state_focused}, focused);
+        states.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        slot.setBackground(states);
+
+        ImageView iv = new ImageView(ctx);
+        iv.setImageResource(iconRes);
+        iv.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+        slot.addView(iv, new FrameLayout.LayoutParams(UiHelper.dp(ctx, 17), UiHelper.dp(ctx, 17), Gravity.CENTER));
+        slot.setLayoutParams(new LinearLayout.LayoutParams(UiHelper.dp(ctx, 34), UiHelper.dp(ctx, 32)));
+        return slot;
+    }
+
+    private FrameLayout makeClearTransportIcon(Context ctx, int iconRes) {
+        FrameLayout box = new FrameLayout(ctx);
+        box.setFocusable(true);
+        box.setClickable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            box.setDefaultFocusHighlightEnabled(false);
+        }
+        android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
+                ctx, 24, Color.argb(135, 36, 40, 56), Color.WHITE, 1.5f);
+        android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_pressed}, focused);
+        states.addState(new int[]{android.R.attr.state_focused}, focused);
+        states.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        box.setBackground(states);
+
+        ImageView iv = new ImageView(ctx);
+        iv.setImageResource(iconRes);
+        iv.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+        box.addView(iv, new FrameLayout.LayoutParams(UiHelper.dp(ctx, 32), UiHelper.dp(ctx, 32), Gravity.CENTER));
+        return box;
+    }
+
+    private android.graphics.drawable.StateListDrawable makeSquircleSelectorDrawable(Context ctx) {
+        android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
+                ctx, 16, Color.argb(148, 52, 54, 66), Color.argb(42, 255, 255, 255), 1.0f);
+        android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
+                ctx, 16, Color.argb(208, 72, 76, 94), Color.WHITE, 1.8f);
+        android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_pressed}, focused);
+        states.addState(new int[]{android.R.attr.state_focused}, focused);
+        states.addState(new int[]{}, normal);
+        return states;
+    }
+
+    private LinearLayout.LayoutParams fixedSquareMarginLp(int sizeDp, int rightMarginDp) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UiHelper.dp(context, sizeDp), UiHelper.dp(context, sizeDp));
+        lp.rightMargin = UiHelper.dp(context, rightMarginDp);
+        return lp;
     }
 
     private LinearLayout.LayoutParams rightMarginLp(int dpVal) {
@@ -2814,7 +3073,36 @@ public class PlayerScreenController {
     }
 
     private void toast(String msg, int color) {
-        if (listener != null) listener.onShowToast(msg, color);
+        if (msg == null || msg.trim().isEmpty()) return;
+        playerToastMsgTv.setText(msg);
+        playerToastIcon.setColorFilter(color != 0 ? color : UiHelper.COLOR_CYAN, PorterDuff.Mode.SRC_IN);
+        if (hidePlayerToastRunnable != null) {
+            handler.removeCallbacks(hidePlayerToastRunnable);
+        }
+        playerToastPill.setVisibility(View.VISIBLE);
+        playerToastPill.setAlpha(0f);
+        playerToastPill.animate().alpha(1f).setDuration(180).start();
+        hidePlayerToastRunnable = new Runnable() {
+            @Override
+            public void run() {
+                playerToastPill.animate().alpha(0f).setDuration(200).withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        playerToastPill.setVisibility(View.GONE);
+                    }
+                }).start();
+            }
+        };
+        handler.postDelayed(hidePlayerToastRunnable, 2200L);
+    }
+
+    private static String formatHumanDuration(double durSec) {
+        if (durSec < 60.0) return "";
+        int totalMin = (int) Math.round(durSec / 60.0);
+        int h = totalMin / 60;
+        int m = totalMin % 60;
+        if (h > 0) return h + "h " + m + "m";
+        return m + "m";
     }
 
     private static String formatRate(float r) {
