@@ -1,15 +1,13 @@
 package com.dangvietanh.cast;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.graphics.drawable.ColorDrawable;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
+import android.media.MediaMetadata;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.net.ConnectivityManager;
@@ -20,59 +18,71 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.KeyEvent;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
-import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
-import android.webkit.CookieManager;
-import android.webkit.JavascriptInterface;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebStorage;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import org.json.JSONObject;
+import com.bumptech.glide.Glide;
+import com.dangvietanh.cast.data.ApiClient;
+import com.dangvietanh.cast.data.Models;
+import com.dangvietanh.cast.player.PlayerScreenController;
+import com.dangvietanh.cast.ui.AccountProfileModal;
+import com.dangvietanh.cast.ui.ExploreScreenView;
+import com.dangvietanh.cast.ui.HomeScreenView;
+import com.dangvietanh.cast.ui.LibraryScreenView;
+import com.dangvietanh.cast.ui.LoginScreenView;
+import com.dangvietanh.cast.ui.MovieDetailScreenView;
+import com.dangvietanh.cast.ui.SearchScreenView;
+import com.dangvietanh.cast.ui.TvNavigationRail;
+
+import java.io.File;
 
 public class MainActivity extends Activity {
 
-    private static final String CAST_URL = "https://dangvietanh.com/dva_cast/screen";
     private static final long SPLASH_MIN_DURATION_MS = 3000L;
     private static final long LONG_PRESS_MENU_MS = 650L;
 
-    private FrameLayout rootLayout;
-    private WebView webView;
-    private View customView;
-    private WebChromeClient.CustomViewCallback customViewCallback;
-    private WebChromeClient chromeClient;
+    private ApiClient apiClient;
 
-    // Splash UX
+    private FrameLayout rootLayout;
+    private FrameLayout appContainer;
+
+    // Native Screens
+    private LoginScreenView loginScreen;
+    private FrameLayout mainShell;
+    private FrameLayout contentHost;
+    private TvNavigationRail navRail;
+    private HomeScreenView homeScreen;
+    private SearchScreenView searchScreen;
+    private ExploreScreenView exploreScreen;
+    private LibraryScreenView libraryScreen;
+    private MovieDetailScreenView detailScreen;
+    private PlayerScreenController playerScreen;
+
+    // Overlays
+    private AccountProfileModal accountModal;
+    private OverlayMenuController overlayMenu;
+    private UpdateManager updateManager;
+
+    // Startup Splash UX (Preserved)
     private FrameLayout splashOverlay;
     private LinearLayout splashContent;
     private UiHelper.SpinnerView splashSpinner;
     private TextView splashStatusTv;
     private TextView splashRetryBtn;
     private boolean splashMinDone = false;
-    private boolean pageLoadDone = false;
-    private boolean pageHasError = false;
+    private boolean bootReady = false;
+    private boolean bootHasError = false;
     private boolean splashDismissed = false;
-
-    // Controllers
-    private OverlayMenuController overlayMenu;
-    private UpdateManager updateManager;
-    private NativePlayerController nativePlayer;
 
     // Media & Network
     private AudioManager audioManager;
@@ -84,7 +94,6 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private long lastBackPressMs = 0L;
     private boolean longPressTriggered = false;
-    private volatile boolean webModalOpen = false;
 
     private final AudioManager.OnAudioFocusChangeListener audioFocusListener =
             new AudioManager.OnAudioFocusChangeListener() {
@@ -92,7 +101,9 @@ public class MainActivity extends Activity {
                 public void onAudioFocusChange(int focusChange) {
                     if (focusChange == AudioManager.AUDIOFOCUS_LOSS
                             || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                        evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('pause');}else{var v=document.getElementById('dva-video');if(v&&!v.paused)v.pause();}");
+                        if (playerScreen != null && playerScreen.isShowing() && playerScreen.isPlaying()) {
+                            playerScreen.pause();
+                        }
                     }
                 }
             };
@@ -105,287 +116,551 @@ public class MainActivity extends Activity {
         }
     };
 
-    private final Runnable autoRetryRunnable = new Runnable() {
+    private final Runnable longBackMenuRunnable = new Runnable() {
         @Override
         public void run() {
-            if (webView != null && pageHasError) {
-                reloadCastPage();
+            longPressTriggered = true;
+            if (overlayMenu != null && !overlayMenu.isShowing()
+                    && (updateManager == null || !updateManager.isShowing())
+                    && (playerScreen == null || !playerScreen.isShowing())) {
+                overlayMenu.show();
             }
         }
     };
 
-    private final Runnable longPressMenuRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (!splashDismissed || updateManager.isShowing() || overlayMenu.isShowing()) return;
-            longPressTriggered = true;
-            overlayMenu.show();
-        }
-    };
-
-    @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        getWindow().setBackgroundDrawable(new ColorDrawable(android.graphics.Color.BLACK));
-        setVolumeControlStream(AudioManager.STREAM_MUSIC);
-        applyImmersiveFullscreen();
+
+        apiClient = new ApiClient(this);
 
         rootLayout = new FrameLayout(this);
-        rootLayout.setBackgroundColor(UiHelper.COLOR_BG_BASE);
+        rootLayout.setBackground(UiHelper.createCastBackgroundDrawable());
+        setContentView(rootLayout);
 
-        updateManager = new UpdateManager(this);
+        // 1. Native App Layer (Passed to glass blur overlays)
+        appContainer = new FrameLayout(this);
+        rootLayout.addView(appContainer, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // 1. WebView Layer
-        webView = new WebView(this);
-        webView.setBackgroundColor(UiHelper.COLOR_BG_BASE);
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        webView.setFocusable(true);
-        webView.setFocusableInTouchMode(true);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            webView.setDefaultFocusHighlightEnabled(false);
-        }
+        buildAppScreens();
 
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        settings.setUseWideViewPort(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        final String fullUserAgent = settings.getUserAgentString() + " DVACastTV/" + updateManager.getLocalVersionName();
-        settings.setUserAgentString(fullUserAgent);
-
-        nativePlayer = new NativePlayerController(this, fullUserAgent, new NativePlayerController.Callback() {
+        // 2. Account Profile Modal
+        accountModal = new AccountProfileModal(this, appContainer, new AccountProfileModal.Actions() {
             @Override
-            public void onNativeEvent(final String snapshotJson) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (webView != null) {
-                            webView.evaluateJavascript(
-                                    "if(window.__dvaOnNativeState)window.__dvaOnNativeState("
-                                            + JSONObject.quote(snapshotJson) + ");",
-                                    null);
-                        }
-                    }
-                });
-            }
-
-            @Override
-            public void onNativeVisibilityChanged(final boolean active) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        int bg = active ? android.graphics.Color.TRANSPARENT : UiHelper.COLOR_BG_BASE;
-                        if (rootLayout != null) {
-                            rootLayout.setBackgroundColor(bg);
-                        }
-                        if (webView != null) {
-                            webView.setBackgroundColor(bg);
-                        }
-                    }
-                });
-            }
-        });
-
-        webView.addJavascriptInterface(new NativeBridge(), "DVACastNative");
-
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return false;
-            }
-
-            @Override
-            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
-                super.onPageStarted(view, url, favicon);
-                pageHasError = false;
-                webModalOpen = false;
-                if (nativePlayer != null) {
-                    nativePlayer.stopMedia();
-                }
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                if (!pageHasError) {
-                    pageLoadDone = true;
-                    tryDismissSplash();
-                }
-            }
-
-            @Override
-            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) {
-                    pageHasError = true;
-                    onMainFrameLoadFailed();
-                }
-            }
-        });
-
-        chromeClient = new WebChromeClient() {
-            @Override
-            public Bitmap getDefaultVideoPoster() {
-                Bitmap bmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
-                bmp.eraseColor(Color.TRANSPARENT);
-                return bmp;
-            }
-
-            @Override
-            public void onShowCustomView(View view, CustomViewCallback callback) {
-                if (customView != null) {
-                    callback.onCustomViewHidden();
-                    return;
-                }
-                customView = view;
-                customViewCallback = callback;
-                webView.setVisibility(View.GONE);
-                rootLayout.addView(customView, 1, new FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT));
-                applyImmersiveFullscreen();
-            }
-
-            @Override
-            public void onHideCustomView() {
-                if (customView == null) return;
-                rootLayout.removeView(customView);
-                customView = null;
-                webView.setVisibility(View.VISIBLE);
-                if (customViewCallback != null) {
-                    customViewCallback.onCustomViewHidden();
-                    customViewCallback = null;
-                }
-                applyImmersiveFullscreen();
-            }
-        };
-        webView.setWebChromeClient(chromeClient);
-
-        rootLayout.addView(nativePlayer.getView(), 0, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
-
-        rootLayout.addView(webView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
-
-        // 2. Overlay Menu Layer
-        overlayMenu = new OverlayMenuController(this, webView, new OverlayMenuController.Actions() {
-            @Override
-            public void onReloadPage() {
-                if (nativePlayer != null) {
-                    nativePlayer.stopMedia();
-                }
-                Toast.makeText(MainActivity.this, "Đang khởi tạo lại mã QR & phiên kết nối...", Toast.LENGTH_SHORT).show();
-                reloadCastPage();
-            }
-
-            @Override
-            public void onClearCache() {
-                if (nativePlayer != null) {
-                    nativePlayer.stopMedia();
-                }
-                webView.clearCache(true);
-                webView.clearHistory();
-                WebStorage.getInstance().deleteAllData();
-                CookieManager.getInstance().removeAllCookies(null);
-                Toast.makeText(MainActivity.this, "Đã dọn bộ nhớ đệm trình phát. Đang khởi tạo lại...", Toast.LENGTH_SHORT).show();
-                reloadCastPage();
+            public void onOpenTvSettings() {
+                if (overlayMenu != null) overlayMenu.show();
             }
 
             @Override
             public void onCheckUpdates() {
-                updateManager.checkForUpdates(true);
+                if (updateManager != null) updateManager.checkForUpdates(true);
             }
 
             @Override
-            public void onOpenSubtitleSettings() {
-                evalVideoJs("if(window.__dvaOpenSubtitleSettings)window.__dvaOpenSubtitleSettings();");
+            public void onLogout() {
+                performLogout();
+            }
+        });
+        rootLayout.addView(accountModal.getView(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // 3. Settings & Version History Overlay Layer
+        overlayMenu = new OverlayMenuController(this, appContainer, new OverlayMenuController.Actions() {
+            @Override
+            public void onRefreshHome() {
+                refreshActiveScreen();
+            }
+
+            @Override
+            public void onClearCache() {
+                clearAppCaches();
+            }
+
+            @Override
+            public void onCheckUpdates() {
+                if (updateManager != null) updateManager.checkForUpdates(true);
+            }
+
+            @Override
+            public void onLogout() {
+                performLogout();
+            }
+
+            @Override
+            public boolean isLoggedIn() {
+                return !apiClient.getAuthToken().isEmpty();
+            }
+
+            @Override
+            public String getCurrentUserLabel() {
+                Models.User u = apiClient.getCachedUser();
+                if (u == null) return "";
+                if (u.name != null && !u.name.isEmpty()) return u.name;
+                return u.username != null ? u.username : "";
             }
 
             @Override
             public void onFetchHistory(Runnable onComplete) {
-                updateManager.fetchHistoryAsync(onComplete);
+                if (updateManager != null) {
+                    updateManager.fetchHistoryAsync(onComplete);
+                } else if (onComplete != null) {
+                    onComplete.run();
+                }
             }
 
             @Override
             public String getVersionName() {
-                return updateManager.getLocalVersionName();
+                return updateManager != null ? updateManager.getLocalVersionName() : "4.0";
             }
 
             @Override
             public long getVersionCode() {
-                return updateManager.getLocalVersionCode();
+                return updateManager != null ? updateManager.getLocalVersionCode() : 9L;
             }
         });
         rootLayout.addView(overlayMenu.getView(), new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // 3. Splash UX Layer
+        // 4. Update Overlay Layer
+        updateManager = new UpdateManager(this);
+        rootLayout.addView(updateManager.getView(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // 5. Startup Splash Layer (Topmost during initial boot)
         buildSplashOverlay();
         rootLayout.addView(splashOverlay, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // 4. OTA Auto Update Overlay Layer (topmost)
-        rootLayout.addView(updateManager.getView(), new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
-
-        setContentView(rootLayout);
-
+        applyImmersiveFullscreen();
         initMediaOptimization();
         registerNetworkMonitor();
 
         startSplashEntrance();
         handler.postDelayed(splashMinTimerRunnable, SPLASH_MIN_DURATION_MS);
-        webView.loadUrl(CAST_URL);
+
+        startBootFlow();
     }
+
+    private void buildAppScreens() {
+        // Login Screen
+        loginScreen = new LoginScreenView(this, apiClient, new LoginScreenView.Listener() {
+            @Override
+            public void onLoginSuccess(Models.User user, String token) {
+                enterMainShell(user);
+            }
+
+            @Override
+            public void onOpenSettingsMenu() {
+                if (overlayMenu != null) overlayMenu.show();
+            }
+        });
+        loginScreen.setVisibility(View.GONE);
+        appContainer.addView(loginScreen, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Main Netflix/Apple TV Shell (Content + Left Floating Rail)
+        mainShell = new FrameLayout(this);
+        mainShell.setVisibility(View.GONE);
+        mainShell.setClipChildren(false);
+        appContainer.addView(mainShell, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        contentHost = new FrameLayout(this);
+        contentHost.setClipChildren(false);
+        FrameLayout.LayoutParams chLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        chLp.leftMargin = UiHelper.dp(this, 94);
+        mainShell.addView(contentHost, chLp);
+
+        homeScreen = new HomeScreenView(this, apiClient, new HomeScreenView.Listener() {
+            @Override
+            public void onOpenMovieDetail(Models.MovieItem item) {
+                openMovieDetail(item);
+            }
+
+            @Override
+            public void onPlayMovie(Models.MovieItem item) {
+                launchPlayerFromMovieItem(item);
+            }
+
+            @Override
+            public void onShowToast(String message, int accentColor) {
+                UiHelper.showGlassToast(rootLayout, MainActivity.this, message, accentColor);
+            }
+        });
+        contentHost.addView(homeScreen);
+
+        searchScreen = new SearchScreenView(this, apiClient, new SearchScreenView.Listener() {
+            @Override
+            public void onOpenMovieDetail(Models.MovieItem item) {
+                openMovieDetail(item);
+            }
+        });
+        searchScreen.setVisibility(View.GONE);
+        contentHost.addView(searchScreen);
+
+        exploreScreen = new ExploreScreenView(this, apiClient, new ExploreScreenView.Listener() {
+            @Override
+            public void onOpenMovieDetail(Models.MovieItem item) {
+                openMovieDetail(item);
+            }
+        });
+        exploreScreen.setVisibility(View.GONE);
+        contentHost.addView(exploreScreen);
+
+        libraryScreen = new LibraryScreenView(this, apiClient, new LibraryScreenView.Listener() {
+            @Override
+            public void onOpenMovieDetail(Models.MovieItem item) {
+                openMovieDetail(item);
+            }
+
+            @Override
+            public void onShowToast(String msg, int accentColor) {
+                UiHelper.showGlassToast(rootLayout, MainActivity.this, msg, accentColor);
+            }
+        });
+        libraryScreen.setVisibility(View.GONE);
+        contentHost.addView(libraryScreen);
+
+        // Floating Borderless Liquid Glass Left Rail
+        navRail = new TvNavigationRail(this, new TvNavigationRail.Listener() {
+            @Override
+            public void onSelectTab(String tabId) {
+                switchMainTab(tabId);
+            }
+
+            @Override
+            public void onOpenAccountProfile() {
+                if (accountModal != null) {
+                    accountModal.show(apiClient.getCachedUser());
+                }
+            }
+
+            @Override
+            public void onOpenSettingsMenu() {
+                if (overlayMenu != null) {
+                    overlayMenu.show();
+                }
+            }
+
+            @Override
+            public void onMoveFocusToContent() {
+                focusCurrentMainTab();
+            }
+        });
+        navRail.setElevation(UiHelper.dp(this, 32));
+        mainShell.addView(navRail);
+
+        // Movie Detail Screen Overlay
+        detailScreen = new MovieDetailScreenView(this, apiClient, new MovieDetailScreenView.Listener() {
+            @Override
+            public void onCloseDetail() {
+                detailScreen.clearHistory();
+                detailScreen.setVisibility(View.GONE);
+                focusCurrentMainTab();
+            }
+
+            @Override
+            public void onLaunchPlayer(Models.PlayerLaunchRequest request) {
+                playerScreen.open(request);
+            }
+
+            @Override
+            public void onShowToast(String message, int accentColor) {
+                UiHelper.showGlassToast(rootLayout, MainActivity.this, message, accentColor);
+            }
+        });
+        detailScreen.setVisibility(View.GONE);
+        appContainer.addView(detailScreen, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Native Player Screen Overlay
+        playerScreen = new PlayerScreenController(this, apiClient, new PlayerScreenController.Listener() {
+            @Override
+            public void onPlayerClosed(boolean shouldRefreshHome) {
+                if (homeScreen != null && shouldRefreshHome) {
+                    homeScreen.silentRefresh();
+                }
+                if (libraryScreen != null && libraryScreen.getVisibility() == View.VISIBLE) {
+                    libraryScreen.refresh();
+                }
+                if (detailScreen != null && detailScreen.getVisibility() == View.VISIBLE) {
+                    detailScreen.requestFocus();
+                } else {
+                    focusCurrentMainTab();
+                }
+                updateMediaPlaybackState(PlaybackState.STATE_PAUSED, 0L);
+            }
+
+            @Override
+            public void onAudioFocusRequested(boolean active) {
+                if (active) {
+                    requestAppAudioFocus();
+                    updateMediaPlaybackState(PlaybackState.STATE_PLAYING, 0L);
+                } else {
+                    abandonAppAudioFocus();
+                    updateMediaPlaybackState(PlaybackState.STATE_STOPPED, 0L);
+                }
+            }
+
+            @Override
+            public void onShowToast(String message, int accentColor) {
+                UiHelper.showGlassToast(rootLayout, MainActivity.this, message, accentColor);
+            }
+        });
+        appContainer.addView(playerScreen.getView(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    private void startBootFlow() {
+        bootHasError = false;
+        if (splashStatusTv != null) {
+            splashStatusTv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
+            splashStatusTv.setText("Đang kết nối...");
+        }
+        if (splashSpinner != null) {
+            splashSpinner.setVisibility(View.VISIBLE);
+            splashSpinner.setSpinning(true);
+        }
+        if (splashRetryBtn != null) {
+            splashRetryBtn.setVisibility(View.GONE);
+        }
+
+        String token = apiClient.getAuthToken();
+        if (token != null && !token.isEmpty()) {
+            apiClient.checkAuthStatus(new ApiClient.Callback<Models.User>() {
+                @Override
+                public void onSuccess(Models.User user) {
+                    if (user != null && user.userId > 0) {
+                        apiClient.saveUser(user);
+                        enterMainShell(user);
+                    } else {
+                        apiClient.clearSession();
+                        showLoginScreen();
+                    }
+                    bootReady = true;
+                    tryDismissSplash();
+                }
+
+                @Override
+                public void onError(String message, int httpCode) {
+                    Models.User cached = apiClient.getCachedUser();
+                    if (httpCode == 0 && cached != null && cached.userId > 0) {
+                        enterMainShell(cached);
+                        bootReady = true;
+                        tryDismissSplash();
+                    } else if (httpCode >= 400) {
+                        apiClient.clearSession();
+                        showLoginScreen();
+                        bootReady = true;
+                        tryDismissSplash();
+                    } else {
+                        onBootNetworkFailure();
+                    }
+                }
+            });
+            return;
+        }
+
+        apiClient.pingTvAuth(new ApiClient.Callback<Boolean>() {
+            @Override
+            public void onSuccess(Boolean ok) {
+                showLoginScreen();
+                bootReady = true;
+                tryDismissSplash();
+            }
+
+            @Override
+            public void onError(String message, int httpCode) {
+                onBootNetworkFailure();
+            }
+        });
+    }
+
+    private void onBootNetworkFailure() {
+        bootHasError = true;
+        if (splashSpinner != null) {
+            splashSpinner.setSpinning(false);
+            splashSpinner.setVisibility(View.GONE);
+        }
+        if (splashStatusTv != null) {
+            splashStatusTv.setTextColor(Color.parseColor("#FF7A85"));
+            splashStatusTv.setText("Chưa có kết nối mạng. Vui lòng kiểm tra Wi-Fi");
+        }
+        if (splashRetryBtn != null) {
+            splashRetryBtn.setVisibility(View.VISIBLE);
+            splashRetryBtn.requestFocus();
+        }
+    }
+
+    private void showLoginScreen() {
+        homeScreen.stopAutoSlide();
+        detailScreen.setVisibility(View.GONE);
+        mainShell.setVisibility(View.GONE);
+        loginScreen.setVisibility(View.VISIBLE);
+        loginScreen.start();
+    }
+
+    private void enterMainShell(Models.User user) {
+        if (user != null) apiClient.saveUser(user);
+        loginScreen.stop();
+        loginScreen.setVisibility(View.GONE);
+        detailScreen.setVisibility(View.GONE);
+        mainShell.setVisibility(View.VISIBLE);
+        navRail.setUser(user != null ? user : apiClient.getCachedUser());
+        switchMainTab("home");
+    }
+
+    private void performLogout() {
+        apiClient.logout(new Runnable() {
+            @Override
+            public void run() {
+                if (playerScreen != null && playerScreen.isShowing()) {
+                    playerScreen.close();
+                }
+                showLoginScreen();
+                UiHelper.showGlassToast(rootLayout, MainActivity.this, "Đã đăng xuất tài khoản", UiHelper.COLOR_TEXT_MUTED);
+            }
+        });
+    }
+
+    private void switchMainTab(String tabId) {
+        navRail.setActiveTab(tabId);
+        detailScreen.setVisibility(View.GONE);
+
+        homeScreen.setVisibility(View.GONE);
+        homeScreen.stopAutoSlide();
+        searchScreen.setVisibility(View.GONE);
+        exploreScreen.setVisibility(View.GONE);
+        libraryScreen.setVisibility(View.GONE);
+
+        if ("search".equals(tabId)) {
+            searchScreen.setVisibility(View.VISIBLE);
+            searchScreen.onOpened();
+        } else if ("explore".equals(tabId)) {
+            exploreScreen.setVisibility(View.VISIBLE);
+            exploreScreen.onOpened();
+        } else if ("library".equals(tabId)) {
+            libraryScreen.setVisibility(View.VISIBLE);
+            libraryScreen.refresh();
+        } else {
+            homeScreen.setVisibility(View.VISIBLE);
+            homeScreen.loadHome(tabId, "", false);
+            homeScreen.requestInitialFocus();
+        }
+    }
+
+    private void refreshActiveScreen() {
+        if (loginScreen.getVisibility() == View.VISIBLE) {
+            loginScreen.start();
+            return;
+        }
+        String tab = navRail != null ? navRail.getActiveTabId() : "home";
+        if ("library".equals(tab)) libraryScreen.refresh();
+        else if ("explore".equals(tab)) exploreScreen.onOpened();
+        else if ("search".equals(tab)) searchScreen.onOpened();
+        else homeScreen.loadHome(tab, "", false);
+    }
+
+    private void focusCurrentMainTab() {
+        if (searchScreen.getVisibility() == View.VISIBLE) {
+            searchScreen.requestFocus();
+        } else if (exploreScreen.getVisibility() == View.VISIBLE) {
+            exploreScreen.requestFocus();
+        } else if (libraryScreen.getVisibility() == View.VISIBLE) {
+            libraryScreen.requestFocus();
+        } else if (homeScreen.getVisibility() == View.VISIBLE) {
+            homeScreen.requestInitialFocus();
+        }
+    }
+
+    private void openMovieDetail(Models.MovieItem item) {
+        if (item == null || item.videosId <= 0) return;
+        homeScreen.stopAutoSlide();
+        detailScreen.setVisibility(View.VISIBLE);
+        detailScreen.openMovie(item.videosId, false);
+    }
+
+    private void launchPlayerFromMovieItem(Models.MovieItem item) {
+        if (item == null) return;
+        Models.PlayerLaunchRequest req = new Models.PlayerLaunchRequest();
+        req.videosId = item.videosId;
+        req.streamCode = !item.streamCode.isEmpty() ? item.streamCode : String.valueOf(item.videosId);
+        req.title = item.getDisplayTitle();
+        req.posterUrl = item.posterUrl;
+        req.thumbnailUrl = item.thumbnailUrl;
+        req.initialResumeSec = item.resumeSeconds > 5 ? item.resumeSeconds : -1;
+        playerScreen.open(req);
+    }
+
+    private void clearAppCaches() {
+        try {
+            Glide.get(this).clearMemory();
+        } catch (Exception ignored) {
+        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Glide.get(getApplicationContext()).clearDiskCache();
+                } catch (Exception ignored) {
+                }
+                File ttsDir = new File(getCacheDir(), "dva_tts");
+                if (ttsDir.exists() && ttsDir.isDirectory()) {
+                    File[] files = ttsDir.listFiles();
+                    if (files != null) {
+                        for (File f : files) {
+                            //noinspection ResultOfMethodCallIgnored
+                            f.delete();
+                        }
+                    }
+                }
+            }
+        }).start();
+        refreshActiveScreen();
+        UiHelper.showGlassToast(rootLayout, this, "Đã dọn bộ nhớ đệm hình ảnh & phụ đề", UiHelper.COLOR_GREEN);
+    }
+
+    // ---- Preserved Startup Splash Overlay ----
 
     private void buildSplashOverlay() {
         splashOverlay = new FrameLayout(this);
         splashOverlay.setBackground(UiHelper.createCastBackgroundDrawable());
         splashOverlay.setClickable(true);
-        splashOverlay.setClipChildren(false);
-        splashOverlay.setClipToPadding(false);
+        splashOverlay.setFocusable(true);
 
         splashContent = new LinearLayout(this);
         splashContent.setOrientation(LinearLayout.VERTICAL);
         splashContent.setGravity(Gravity.CENTER_HORIZONTAL);
         splashContent.setMinimumWidth(UiHelper.dp(this, 360));
-        splashContent.setClipChildren(false);
-        splashContent.setClipToPadding(false);
         splashContent.setPadding(UiHelper.dp(this, 32), UiHelper.dp(this, 30),
                 UiHelper.dp(this, 32), UiHelper.dp(this, 30));
         UiHelper.applyGlassCardStyle(splashContent, this, 40, UiHelper.COLOR_SURFACE_GLASS, 24);
+        splashContent.setAlpha(0f);
+        splashContent.setScaleX(0.95f);
+        splashContent.setScaleY(0.95f);
 
         FrameLayout.LayoutParams contentLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER);
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
         contentLp.setMargins(UiHelper.dp(this, 24), UiHelper.dp(this, 24),
                 UiHelper.dp(this, 24), UiHelper.dp(this, 24));
 
-        ImageView logoIv = new ImageView(this);
-        logoIv.setImageResource(R.drawable.splash_logo);
-        logoIv.setAdjustViewBounds(true);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.splash_logo);
         LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(
                 UiHelper.dp(this, 108), UiHelper.dp(this, 108));
         logoLp.bottomMargin = UiHelper.dp(this, 16);
-        splashContent.addView(logoIv, logoLp);
+        splashContent.addView(logo, logoLp);
 
         TextView appTitle = new TextView(this);
         appTitle.setText("Đặng Việt Anh");
         appTitle.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
-        appTitle.setTextSize(24);
-        appTitle.setSingleLine(true);
+        appTitle.setTextSize(26);
         appTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        appTitle.setLetterSpacing(0.02f);
+        appTitle.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         titleLp.bottomMargin = UiHelper.dp(this, 22);
@@ -407,26 +682,17 @@ public class MainActivity extends Activity {
 
         splashStatusTv = new TextView(this);
         splashStatusTv.setText("Đang kết nối...");
-        splashStatusTv.setTextColor(Color.WHITE);
+        splashStatusTv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
         splashStatusTv.setTextSize(15);
-        splashStatusTv.setSingleLine(true);
-        splashStatusTv.setIncludeFontPadding(true);
         splashStatusTv.setTypeface(Typeface.DEFAULT_BOLD);
-        LinearLayout.LayoutParams statusTextLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        statusPill.addView(splashStatusTv, statusTextLp);
-
-        LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        splashContent.addView(statusPill, pillLp);
+        statusPill.addView(splashStatusTv);
+        splashContent.addView(statusPill);
 
         splashRetryBtn = new TextView(this);
-        splashRetryBtn.setText("Thử lại ngay");
-        splashRetryBtn.setTextColor(Color.WHITE);
-        splashRetryBtn.setTextSize(14);
-        splashRetryBtn.setSingleLine(true);
+        splashRetryBtn.setText("Thử lại");
+        splashRetryBtn.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
+        splashRetryBtn.setTextSize(15);
         splashRetryBtn.setTypeface(Typeface.DEFAULT_BOLD);
-        splashRetryBtn.setGravity(Gravity.CENTER);
         splashRetryBtn.setPadding(UiHelper.dp(this, 26), UiHelper.dp(this, 12),
                 UiHelper.dp(this, 26), UiHelper.dp(this, 12));
         UiHelper.applyFocusableTileStyle(splashRetryBtn, this, 24,
@@ -435,11 +701,7 @@ public class MainActivity extends Activity {
         splashRetryBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                splashStatusTv.setText("Đang kết nối lại...");
-                splashSpinner.setVisibility(View.VISIBLE);
-                splashSpinner.setSpinning(true);
-                splashRetryBtn.setVisibility(View.GONE);
-                reloadCastPage();
+                startBootFlow();
             }
         });
         LinearLayout.LayoutParams retryLp = new LinearLayout.LayoutParams(
@@ -448,226 +710,193 @@ public class MainActivity extends Activity {
         splashContent.addView(splashRetryBtn, retryLp);
 
         splashOverlay.addView(splashContent, contentLp);
-
-        TextView hintTv = new TextView(this);
-        hintTv.setText("Mẹo: Nhấn phím Menu hoặc giữ OK để mở Cài đặt");
-        hintTv.setTextColor(Color.argb(175, 176, 184, 200));
-        hintTv.setTextSize(12);
-        FrameLayout.LayoutParams hintLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        hintLp.bottomMargin = UiHelper.dp(this, 22);
-        splashOverlay.addView(hintTv, hintLp);
     }
 
     private void startSplashEntrance() {
-        splashOverlay.setAlpha(0f);
-        splashContent.setAlpha(0f);
-        splashContent.setScaleX(0.92f);
-        splashContent.setScaleY(0.92f);
-
-        splashOverlay.animate()
-                .alpha(1f)
-                .setDuration(360)
-                .setInterpolator(new DecelerateInterpolator())
-                .start();
-
         splashContent.animate()
                 .alpha(1f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .setDuration(460)
+                .setDuration(480)
                 .setInterpolator(new DecelerateInterpolator())
                 .start();
     }
 
     private void tryDismissSplash() {
-        if (splashDismissed || !splashMinDone || !pageLoadDone || pageHasError) {
-            return;
-        }
+        if (splashDismissed || !splashMinDone || !bootReady || bootHasError) return;
         splashDismissed = true;
-        splashContent.animate()
-                .alpha(0f)
-                .scaleX(1.04f)
-                .scaleY(1.04f)
-                .setDuration(380)
-                .setInterpolator(new AccelerateDecelerateInterpolator())
-                .start();
-
         splashOverlay.animate()
                 .alpha(0f)
-                .setDuration(440)
-                .setInterpolator(new AccelerateDecelerateInterpolator())
+                .scaleX(1.03f)
+                .scaleY(1.03f)
+                .setDuration(420)
+                .setInterpolator(new DecelerateInterpolator())
                 .withEndAction(new Runnable() {
                     @Override
                     public void run() {
                         splashSpinner.setSpinning(false);
                         splashOverlay.setVisibility(View.GONE);
-                        webView.requestFocus();
-                        updateManager.checkForUpdates(false);
+                        if (loginScreen.getVisibility() == View.VISIBLE) {
+                            loginScreen.requestInitialFocus();
+                        } else if (mainShell.getVisibility() == View.VISIBLE) {
+                            homeScreen.requestInitialFocus();
+                        }
+                        handler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (updateManager != null) {
+                                    updateManager.checkForUpdates(false);
+                                }
+                            }
+                        }, 3500L);
                     }
                 })
                 .start();
     }
 
-    private void onMainFrameLoadFailed() {
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                if (!splashDismissed) {
-                    splashStatusTv.setText("Mất kết nối mạng — Đang chờ Wi-Fi...");
-                    splashRetryBtn.setVisibility(View.VISIBLE);
-                    splashRetryBtn.requestFocus();
-                }
-                handler.removeCallbacks(autoRetryRunnable);
-                handler.postDelayed(autoRetryRunnable, 5000);
-            }
-        });
-    }
-
-    private void reloadCastPage() {
-        handler.removeCallbacks(autoRetryRunnable);
-        pageHasError = false;
-        if (webView != null) {
-            webView.loadUrl(CAST_URL);
-        }
-    }
+    // ---- Network, Audio & MediaSession ----
 
     private void registerNetworkMonitor() {
         try {
             connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (connectivityManager == null) return;
+            if (connectivityManager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return;
             networkCallback = new ConnectivityManager.NetworkCallback() {
                 @Override
                 public void onAvailable(Network network) {
-                    if (pageHasError) {
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (!splashDismissed) {
-                                    splashStatusTv.setText("Đã có mạng! Đang kết nối...");
-                                    splashRetryBtn.setVisibility(View.GONE);
-                                }
-                                reloadCastPage();
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (bootHasError && !splashDismissed) {
+                                startBootFlow();
                             }
-                        });
-                    }
+                        }
+                    });
                 }
             };
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                connectivityManager.registerDefaultNetworkCallback(networkCallback);
-            } else {
-                NetworkRequest req = new NetworkRequest.Builder()
-                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                        .build();
-                connectivityManager.registerNetworkCallback(req, networkCallback);
-            }
+            connectivityManager.registerDefaultNetworkCallback(networkCallback);
         } catch (Exception ignored) {
         }
     }
 
     private void initMediaOptimization() {
-        try {
-            audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            requestAppAudioFocus();
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AudioAttributes attrs = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                    .build();
+            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(attrs)
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(audioFocusListener)
+                    .build();
+        }
 
-            mediaSession = new MediaSession(this, "DVACastTV");
+        try {
+            mediaSession = new MediaSession(this, "DVACastTVSession");
             mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
                     | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
             mediaSession.setCallback(new MediaSession.Callback() {
                 @Override
                 public void onPlay() {
-                    evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('play');}else{var v=document.getElementById('dva-video');if(v&&v.src)v.play().catch(function(){});}");
+                    if (playerScreen != null && playerScreen.isShowing()) playerScreen.play();
                 }
 
                 @Override
                 public void onPause() {
-                    evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('pause');}else{var v=document.getElementById('dva-video');if(v&&!v.paused)v.pause();}");
+                    if (playerScreen != null && playerScreen.isShowing()) playerScreen.pause();
                 }
 
                 @Override
                 public void onStop() {
-                    evalVideoJs("var b=document.getElementById('dva-btn-disconnect');if(b)b.click();");
+                    if (playerScreen != null && playerScreen.isShowing()) playerScreen.close();
+                }
+
+                @Override
+                public void onSkipToNext() {
+                    if (playerScreen != null && playerScreen.isShowing()) playerScreen.playNextEpisodeIfAvailable();
                 }
 
                 @Override
                 public void onFastForward() {
-                    evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('ff');}else{var v=document.getElementById('dva-video');if(v&&v.duration)v.currentTime=Math.min(v.duration,v.currentTime+10);}");
+                    if (playerScreen != null && playerScreen.isShowing()) playerScreen.seekBySec(10);
                 }
 
                 @Override
                 public void onRewind() {
-                    evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('rw');}else{var v=document.getElementById('dva-video');if(v&&v.duration)v.currentTime=Math.max(0,v.currentTime-10);}");
+                    if (playerScreen != null && playerScreen.isShowing()) playerScreen.seekBySec(-10);
                 }
             });
-            PlaybackState state = new PlaybackState.Builder()
+            updateMediaPlaybackState(PlaybackState.STATE_PAUSED, 0L);
+            mediaSession.setActive(true);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void updateMediaPlaybackState(int state, long positionMs) {
+        if (mediaSession == null) return;
+        try {
+            PlaybackState ps = new PlaybackState.Builder()
                     .setActions(PlaybackState.ACTION_PLAY
                             | PlaybackState.ACTION_PAUSE
                             | PlaybackState.ACTION_PLAY_PAUSE
                             | PlaybackState.ACTION_STOP
                             | PlaybackState.ACTION_FAST_FORWARD
-                            | PlaybackState.ACTION_REWIND)
-                    .setState(PlaybackState.STATE_PLAYING, 0L, 1.0f)
+                            | PlaybackState.ACTION_REWIND
+                            | PlaybackState.ACTION_SKIP_TO_NEXT)
+                    .setState(state, positionMs, 1.0f)
                     .build();
-            mediaSession.setPlaybackState(state);
-            mediaSession.setActive(true);
+            mediaSession.setPlaybackState(ps);
+
+            if (playerScreen != null && playerScreen.isShowing()) {
+                MediaMetadata meta = new MediaMetadata.Builder()
+                        .putString(MediaMetadata.METADATA_KEY_TITLE, playerScreen.getCurrentTitle())
+                        .putString(MediaMetadata.METADATA_KEY_SUBTITLE, playerScreen.getCurrentSubtitle())
+                        .putLong(MediaMetadata.METADATA_KEY_DURATION, playerScreen.getDurationMs())
+                        .build();
+                mediaSession.setMetadata(meta);
+            }
         } catch (Exception ignored) {
         }
     }
 
     private void requestAppAudioFocus() {
         if (audioManager == null) return;
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                AudioAttributes attrs = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
-                        .build();
-                audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                        .setAudioAttributes(attrs)
-                        .setOnAudioFocusChangeListener(audioFocusListener)
-                        .build();
-                audioManager.requestAudioFocus(audioFocusRequest);
-            } else {
-                audioManager.requestAudioFocus(audioFocusListener,
-                        AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
-            }
-        } catch (Exception ignored) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
+            audioManager.requestAudioFocus(audioFocusRequest);
+        } else {
+            audioManager.requestAudioFocus(audioFocusListener,
+                    AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
         }
     }
 
     private void abandonAppAudioFocus() {
         if (audioManager == null) return;
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
-                audioManager.abandonAudioFocusRequest(audioFocusRequest);
-            } else {
-                audioManager.abandonAudioFocus(audioFocusListener);
-            }
-        } catch (Exception ignored) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
+            audioManager.abandonAudioFocusRequest(audioFocusRequest);
+        } else {
+            audioManager.abandonAudioFocus(audioFocusListener);
         }
     }
 
-    private void evalVideoJs(final String js) {
-        if (webView == null) return;
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                webView.evaluateJavascript(js, null);
-            }
-        });
-    }
-
+    @SuppressWarnings("deprecation")
     private void applyImmersiveFullscreen() {
-        View decorView = getWindow().getDecorView();
-        decorView.setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_FULLSCREEN);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        }
     }
 
     @Override
@@ -678,302 +907,137 @@ public class MainActivity extends Activity {
         }
     }
 
-    @Override
-    public boolean dispatchGenericMotionEvent(MotionEvent ev) {
-        if (ev.getActionMasked() == MotionEvent.ACTION_BUTTON_PRESS
-                && ev.getButtonState() == MotionEvent.BUTTON_SECONDARY
-                && splashDismissed && !updateManager.isShowing() && !overlayMenu.isShowing()) {
-            overlayMenu.show();
-            return true;
-        }
-        return super.dispatchGenericMotionEvent(ev);
-    }
+    // ---- Global TV Remote Key Handling ----
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
         int action = event.getAction();
 
-        if (updateManager.isShowing()) {
+        if (updateManager != null && updateManager.isShowing()) {
             if (action == KeyEvent.ACTION_DOWN && updateManager.handleKeyDown(keyCode, event)) {
                 return true;
             }
             return super.dispatchKeyEvent(event);
         }
 
-        if (overlayMenu.isShowing()) {
+        if (overlayMenu != null && overlayMenu.isShowing()) {
             if (action == KeyEvent.ACTION_DOWN && overlayMenu.handleKeyDown(keyCode, event)) {
                 return true;
             }
             return super.dispatchKeyEvent(event);
         }
 
-        // Open Overlay Menu via Menu/Settings/F1/F2 button
-        if (action == KeyEvent.ACTION_DOWN
-                && (keyCode == KeyEvent.KEYCODE_MENU
-                || keyCode == KeyEvent.KEYCODE_SETTINGS
-                || keyCode == KeyEvent.KEYCODE_F1
-                || keyCode == KeyEvent.KEYCODE_F2)) {
-            if (splashDismissed) {
-                overlayMenu.show();
+        if (accountModal != null && accountModal.isShowing()) {
+            if (action == KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)) {
+                accountModal.hide();
+                navRail.focusActiveTab();
                 return true;
             }
+            return super.dispatchKeyEvent(event);
         }
 
-        // Long-press OK/Enter (>= 650ms) opens Overlay Menu
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+        if (playerScreen != null && playerScreen.isShowing()) {
+            if (action == KeyEvent.ACTION_DOWN && playerScreen.handleKeyDown(keyCode, event)) {
+                return true;
+            }
+            return super.dispatchKeyEvent(event);
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_MENU && action == KeyEvent.ACTION_DOWN) {
+            if (overlayMenu != null) overlayMenu.show();
+            return true;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
             if (action == KeyEvent.ACTION_DOWN) {
                 if (event.getRepeatCount() == 0) {
                     longPressTriggered = false;
-                    handler.removeCallbacks(longPressMenuRunnable);
-                    handler.postDelayed(longPressMenuRunnable, LONG_PRESS_MENU_MS);
+                    handler.removeCallbacks(longBackMenuRunnable);
+                    handler.postDelayed(longBackMenuRunnable, LONG_PRESS_MENU_MS);
                 }
                 return true;
             } else if (action == KeyEvent.ACTION_UP) {
-                handler.removeCallbacks(longPressMenuRunnable);
-                if (longPressTriggered) {
-                    longPressTriggered = false;
-                    return true;
+                handler.removeCallbacks(longBackMenuRunnable);
+                if (!longPressTriggered) {
+                    handleShortBack();
                 }
-                if (splashDismissed) {
-                    evalVideoJs("if(window.__dvaHandleTvKey)window.__dvaHandleTvKey('Enter');");
-                    return true;
-                }
-            }
-        }
-
-        // Route D-Pad directional keys directly to WebView JS to avoid Android WebView orange spatial-navigation box
-        if (splashDismissed && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT
-                || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-                || keyCode == KeyEvent.KEYCODE_DPAD_UP
-                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) {
-            if (action == KeyEvent.ACTION_DOWN) {
-                String jsKey = keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? "ArrowLeft"
-                        : (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? "ArrowRight"
-                        : (keyCode == KeyEvent.KEYCODE_DPAD_UP ? "ArrowUp" : "ArrowDown"));
-                evalVideoJs("if(window.__dvaHandleTvKey)window.__dvaHandleTvKey('" + jsKey + "');");
-            }
-            return true;
-        }
-
-        // Hardware Media Keys forwarding
-        if (action == KeyEvent.ACTION_DOWN) {
-            if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
-                evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('toggle');}else{var v=document.getElementById('dva-video');if(v&&v.src){v.paused?v.play().catch(function(){}):v.pause();}}");
-                return true;
-            } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY) {
-                evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('play');}else{var v=document.getElementById('dva-video');if(v&&v.src)v.play().catch(function(){});}");
-                return true;
-            } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PAUSE) {
-                evalVideoJs("if(window.__dvaRemoteMediaAction){window.__dvaRemoteMediaAction('pause');}else{var v=document.getElementById('dva-video');if(v&&!v.paused)v.pause();}");
                 return true;
             }
-        }
-
-        // Back key handling
-        if (keyCode == KeyEvent.KEYCODE_BACK && action == KeyEvent.ACTION_DOWN) {
-            if (webModalOpen) {
-                evalVideoJs("if(window.__dvaHandleTvKey)window.__dvaHandleTvKey('Escape');");
-                return true;
-            }
-            if (customView != null && chromeClient != null) {
-                chromeClient.onHideCustomView();
-                return true;
-            }
-            long now = SystemClock.elapsedRealtime();
-            if (now - lastBackPressMs < 2000L) {
-                finish();
-            } else {
-                lastBackPressMs = now;
-                Toast.makeText(this, "Nhấn Back lần nữa để thoát · Giữ OK để mở Cài đặt", Toast.LENGTH_SHORT).show();
-            }
-            return true;
         }
 
         return super.dispatchKeyEvent(event);
     }
 
+    private void handleShortBack() {
+        if (detailScreen != null && detailScreen.getVisibility() == View.VISIBLE) {
+            if (!detailScreen.handleBack()) {
+                detailScreen.clearHistory();
+                detailScreen.setVisibility(View.GONE);
+                focusCurrentMainTab();
+            }
+            return;
+        }
+
+        if (mainShell != null && mainShell.getVisibility() == View.VISIBLE
+                && navRail != null && !"home".equals(navRail.getActiveTabId())) {
+            switchMainTab("home");
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastBackPressMs < 2000L) {
+            finish();
+        } else {
+            lastBackPressMs = now;
+            UiHelper.showGlassToast(rootLayout, this, "Nhấn Quay lại lần nữa để thoát ứng dụng", UiHelper.COLOR_TEXT_MUTED);
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
-        requestAppAudioFocus();
-        if (webView != null) {
-            webView.onResume();
-        }
+        applyImmersiveFullscreen();
         if (updateManager != null) {
             updateManager.onHostResume();
+        }
+        if (mainShell != null && mainShell.getVisibility() == View.VISIBLE
+                && homeScreen != null && homeScreen.getVisibility() == View.VISIBLE) {
+            homeScreen.startAutoSlide();
         }
     }
 
     @Override
     protected void onPause() {
+        if (playerScreen != null) {
+            playerScreen.onHostPause();
+        }
+        if (homeScreen != null) {
+            homeScreen.stopAutoSlide();
+        }
         super.onPause();
-        if (nativePlayer != null) {
-            nativePlayer.onHostPause();
-        }
-        if (webView != null) {
-            webView.onPause();
-        }
     }
 
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
-        abandonAppAudioFocus();
-        if (mediaSession != null) {
-            mediaSession.setActive(false);
-            mediaSession.release();
-        }
-        if (connectivityManager != null && networkCallback != null) {
+        if (connectivityManager != null && networkCallback != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
                 connectivityManager.unregisterNetworkCallback(networkCallback);
             } catch (Exception ignored) {
             }
         }
-        if (nativePlayer != null) {
-            nativePlayer.release();
-            nativePlayer = null;
+        abandonAppAudioFocus();
+        if (mediaSession != null) {
+            try {
+                mediaSession.setActive(false);
+                mediaSession.release();
+            } catch (Exception ignored) {
+            }
         }
-        if (webView != null) {
-            webView.destroy();
-        }
+        if (loginScreen != null) loginScreen.stop();
+        if (homeScreen != null) homeScreen.stopAutoSlide();
+        if (playerScreen != null) playerScreen.release();
         super.onDestroy();
-    }
-
-    private class NativeBridge {
-        @JavascriptInterface
-        public boolean isNativeApp() {
-            return true;
-        }
-
-        @JavascriptInterface
-        public boolean hasNativePlayer() {
-            return nativePlayer != null;
-        }
-
-        @JavascriptInterface
-        public void setWebModalOpen(final boolean open) {
-            webModalOpen = open;
-        }
-
-        @JavascriptInterface
-        public void openOverlayMenu() {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (splashDismissed && !updateManager.isShowing() && !overlayMenu.isShowing()) {
-                        overlayMenu.show();
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void loadMedia(
-                final String url,
-                final String streamType,
-                final double startPosSec,
-                final boolean paused,
-                final boolean mutedState,
-                final float rate) {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (nativePlayer != null) {
-                        nativePlayer.loadMedia(url, streamType, startPosSec, paused, mutedState, rate);
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void stopMedia() {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (nativePlayer != null) {
-                        nativePlayer.stopMedia();
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void playNative() {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (nativePlayer != null) {
-                        nativePlayer.play();
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void pauseNative() {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (nativePlayer != null) {
-                        nativePlayer.pause();
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void seekNative(final double posSec) {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (nativePlayer != null) {
-                        nativePlayer.seekTo(posSec);
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void setNativeMuted(final boolean muted) {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (nativePlayer != null) {
-                        nativePlayer.setMuted(muted);
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void setNativePlaybackRate(final float rate) {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (nativePlayer != null) {
-                        nativePlayer.setPlaybackRate(rate);
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void setNativeResizeMode(final boolean cover) {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (nativePlayer != null) {
-                        nativePlayer.setResizeMode(cover);
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public String getNativeSnapshotJson() {
-            NativePlayerController np = nativePlayer;
-            return np != null ? np.getSnapshotJson() : "{\"active\":false}";
-        }
     }
 }

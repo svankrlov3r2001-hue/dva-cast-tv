@@ -151,7 +151,7 @@ public class UpdateManager {
         brandName.setTextSize(15);
         brandName.setTypeface(Typeface.DEFAULT_BOLD);
         TextView brandSub = new TextView(activity);
-        brandSub.setText("DVA Cast Android TV OTA");
+        brandSub.setText("Tự động cập nhật phiên bản mới");
         brandSub.setTextColor(UiHelper.COLOR_TEXT_MUTED);
         brandSub.setTextSize(12);
         brandTextCol.addView(brandName);

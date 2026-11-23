@@ -78,7 +78,7 @@ public final class UpdateHistoryStore {
                 return entry.date;
             }
         }
-        return "17/11/2026";
+        return "23/11/2026";
     }
 
     private static List<HistoryEntry> parseServerJson(String rawJson) {
@@ -124,6 +124,14 @@ public final class UpdateHistoryStore {
 
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
+
+        List<String> v9 = new ArrayList<>();
+        v9.add("Giao diện rạp phim màn hình ngang thế hệ mới dành riêng cho Android TV và Máy chiếu với hiệu ứng kính mờ không viền sang trọng");
+        v9.add("Đăng nhập nhanh chóng qua mã QR hoặc mã thiết bị 9 số trực tiếp trên màn hình TV");
+        v9.add("Kho phim trang chủ, tìm kiếm, khám phá theo thể loại/quốc gia, tủ phim cá nhân và trang chi tiết phim đầy đủ thông tin, diễn viên, phim liên quan");
+        v9.add("Trình phát phim siêu mượt hỗ trợ chọn máy chủ phát, danh sách tập, tự động chuyển tập mượt mà, tràn viền màn hình, phụ đề song ngữ, dịch tự động và thuyết minh thông minh");
+        v9.add("Giữ nguyên quy trình kiểm tra và tự động cập nhật phiên bản mới qua mạng Wi-Fi cho mọi dòng thiết bị");
+        list.add(new HistoryEntry(9L, "4.0", "23/11/2026", "Giao Diện Rạp Phim Toàn Diện Thế Hệ Mới Cho Android TV & Máy Chiếu", v9));
 
         List<String> v8 = new ArrayList<>();
         v8.add("Tối ưu tốc độ ghép nối mã QR giữa điện thoại, máy tính và màn hình TV / máy chiếu");

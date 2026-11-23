@@ -31,27 +31,28 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.exoplayer.upstream.DefaultAllocator;
 import androidx.media3.ui.AspectRatioFrameLayout;
 
-import org.json.JSONObject;
-
 import java.util.Locale;
 
 /**
- * Hardware-accelerated native Media3 ExoPlayer layer rendered onto a SurfaceView
- * behind the transparent WebView HUD so 4K / 4K 60fps / HDR streams decode directly
- * through Android TV / Projector MediaCodec hardware composer planes.
+ * Hardware-accelerated native Media3 ExoPlayer controller with dual-player preload
+ * support for seamless zero-gap episode transitions on Android TV & Projectors.
  */
 public class NativePlayerController {
 
-    public interface Callback {
-        void onNativeEvent(String snapshotJson);
-        void onNativeVisibilityChanged(boolean active);
+    public interface PlayerEventListener {
+        void onPlaybackState(boolean isPlaying, boolean isBuffering, boolean isEnded, boolean isReady);
+        void onProgress(double posSec, double durSec, int bufferedPct);
+        void onFirstFrame();
+        void onVideoSize(int width, int height);
+        void onError(String errorMsg, boolean isCodecError);
+        void onVisibilityChanged(boolean active);
     }
 
     private static final long TICK_INTERVAL_MS = 280L;
-    private static final long UNSUPPORTED_VIDEO_TIMEOUT_MS = 3200L;
+    private static final long UNSUPPORTED_VIDEO_TIMEOUT_MS = 4500L;
 
     private final Context context;
-    private final Callback callback;
+    private final PlayerEventListener listener;
     private final String userAgent;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -59,24 +60,27 @@ public class NativePlayerController {
     private final AspectRatioFrameLayout aspectFrame;
     private final SurfaceView surfaceView;
 
-    private ExoPlayer exoPlayer;
     private DefaultDataSource.Factory dataSourceFactory;
+    private ExoPlayer exoPlayer;
+    private Player.Listener mainPlayerListener;
+
+    // Secondary player for seamless next-episode preload
+    private ExoPlayer preloadPlayer;
+    private String preloadUrl = "";
+    private boolean preloadReady = false;
 
     private String currentUrl = "";
     private boolean isActive = false;
     private boolean firstFrameRendered = false;
     private boolean hasVideoTrackGroup = false;
     private boolean videoUnsupported = false;
-    private boolean isCodecError = false;
     private boolean muted = false;
+    private float currentRate = 1.0f;
     private int videoWidth = 0;
     private int videoHeight = 0;
-    private String lastErrorMsg = "";
     private long readyPlayingAccumMs = 0L;
     private long lastTickElapsedMs = 0L;
     private boolean ticking = false;
-
-    private volatile String cachedSnapshotJson = "{\"active\":false,\"pos\":0,\"dur\":0,\"playing\":false,\"paused\":true,\"buffering\":false,\"ended\":false,\"ready\":false,\"firstFrame\":false,\"vw\":0,\"vh\":0,\"muted\":false,\"err\":\"\",\"unsupportedVideo\":false,\"codecError\":false,\"event\":\"idle\"}";
 
     private final Runnable tickRunnable = new Runnable() {
         @Override
@@ -100,17 +104,17 @@ public class NativePlayerController {
                         && readyPlayingAccumMs >= UNSUPPORTED_VIDEO_TIMEOUT_MS
                         && (!firstFrameRendered || videoWidth <= 0 || videoHeight <= 0)) {
                     videoUnsupported = true;
-                    isCodecError = true;
-                    lastErrorMsg = "black_video_no_frames";
-                    publishState("videoUnsupported", true);
+                    if (listener != null) {
+                        listener.onError("black_video_no_frames", true);
+                    }
                 }
             } else {
                 lastTickElapsedMs = 0L;
             }
 
-            publishState("tick", false);
+            dispatchProgress();
 
-            if (isPlayingNow || state == Player.STATE_BUFFERING) {
+            if (isPlayingNow || state == Player.STATE_BUFFERING || exoPlayer.getPlayWhenReady()) {
                 handler.postDelayed(this, TICK_INTERVAL_MS);
             } else {
                 ticking = false;
@@ -118,22 +122,22 @@ public class NativePlayerController {
         }
     };
 
-    public NativePlayerController(Context context, String userAgent, Callback callback) {
-        this.context = context;
-        this.userAgent = userAgent;
-        this.callback = callback;
+    public NativePlayerController(Context context, String userAgent, PlayerEventListener listener) {
+        this.context = context.getApplicationContext();
+        this.userAgent = (userAgent != null && !userAgent.trim().isEmpty()) ? userAgent : "DVACastTV/4.0";
+        this.listener = listener;
 
-        container = new FrameLayout(context);
+        container = new FrameLayout(this.context);
         container.setVisibility(View.GONE);
         container.setFocusable(false);
         container.setClickable(false);
 
-        aspectFrame = new AspectRatioFrameLayout(context);
+        aspectFrame = new AspectRatioFrameLayout(this.context);
         aspectFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
         aspectFrame.setFocusable(false);
         aspectFrame.setClickable(false);
 
-        surfaceView = new SurfaceView(context);
+        surfaceView = new SurfaceView(this.context);
         surfaceView.setFocusable(false);
         surfaceView.setClickable(false);
 
@@ -156,20 +160,37 @@ public class NativePlayerController {
         return isActive && !currentUrl.isEmpty();
     }
 
-    public String getSnapshotJson() {
-        return cachedSnapshotJson;
+    public boolean isPlaying() {
+        return exoPlayer != null && isActive && exoPlayer.isPlaying();
     }
 
-    private void ensurePlayer() {
-        if (exoPlayer != null) return;
+    public boolean isBuffering() {
+        return exoPlayer != null && isActive && exoPlayer.getPlaybackState() == Player.STATE_BUFFERING;
+    }
 
+    public double getCurrentPositionSec() {
+        if (exoPlayer == null || !isActive) return 0.0;
+        return Math.max(0L, exoPlayer.getCurrentPosition()) / 1000.0;
+    }
+
+    public double getDurationSec() {
+        if (exoPlayer == null || !isActive) return 0.0;
+        long raw = exoPlayer.getDuration();
+        return (raw != C.TIME_UNSET && raw > 0L) ? (raw / 1000.0) : 0.0;
+    }
+
+    private void ensureDataSourceFactory() {
+        if (dataSourceFactory != null) return;
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true)
                 .setConnectTimeoutMs(12_000)
                 .setReadTimeoutMs(20_000)
-                .setUserAgent(userAgent != null && !userAgent.isEmpty() ? userAgent : "DVACastTV/3.5");
+                .setUserAgent(userAgent);
         dataSourceFactory = new DefaultDataSource.Factory(context, httpFactory);
+    }
 
+    private ExoPlayer createExoInstance(boolean isPreload) {
+        ensureDataSourceFactory();
         DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(context)
                 .setEnableDecoderFallback(true);
 
@@ -179,12 +200,17 @@ public class NativePlayerController {
                 .setExceedRendererCapabilitiesIfNecessary(true)
                 .build());
 
-        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                .setAllocator(new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
-                .setBufferDurationsMs(15_000, 45_000, 2_000, 4_000)
-                .build();
+        DefaultLoadControl loadControl = isPreload
+                ? new DefaultLoadControl.Builder()
+                        .setAllocator(new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
+                        .setBufferDurationsMs(8_000, 20_000, 1_500, 3_000)
+                        .build()
+                : new DefaultLoadControl.Builder()
+                        .setAllocator(new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
+                        .setBufferDurationsMs(15_000, 45_000, 2_000, 4_000)
+                        .build();
 
-        exoPlayer = new ExoPlayer.Builder(context, renderersFactory)
+        ExoPlayer player = new ExoPlayer.Builder(context, renderersFactory)
                 .setTrackSelector(trackSelector)
                 .setLoadControl(loadControl)
                 .build();
@@ -193,37 +219,66 @@ public class NativePlayerController {
                 .setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                 .build();
-        exoPlayer.setAudioAttributes(audioAttributes, false);
-        exoPlayer.setVideoSurfaceView(surfaceView);
+        player.setAudioAttributes(audioAttributes, false);
+        return player;
+    }
 
-        exoPlayer.addListener(new Player.Listener() {
+    private MediaSource buildMediaSource(String url, String streamType) {
+        ensureDataSourceFactory();
+        String lowerUrl = url.toLowerCase(Locale.ROOT);
+        boolean isHls = "hls".equalsIgnoreCase(streamType)
+                || lowerUrl.contains(".m3u8")
+                || lowerUrl.contains("hls-proxy");
+
+        MediaItem.Builder itemBuilder = new MediaItem.Builder().setUri(Uri.parse(url));
+        if (isHls) {
+            itemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8);
+        }
+        MediaItem item = itemBuilder.build();
+        return isHls
+                ? new HlsMediaSource.Factory(dataSourceFactory)
+                        .setAllowChunklessPreparation(true)
+                        .createMediaSource(item)
+                : new ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(item);
+    }
+
+    private Player.Listener createMainListener() {
+        return new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
-                if (!isActive) return;
-                if (playbackState == Player.STATE_READY) {
+                if (!isActive || exoPlayer == null) return;
+                boolean playing = exoPlayer.isPlaying();
+                boolean buffering = playbackState == Player.STATE_BUFFERING;
+                boolean ended = playbackState == Player.STATE_ENDED;
+                boolean ready = playbackState == Player.STATE_READY;
+                if (buffering || ready) {
                     startTickingIfNeeded();
-                    publishState("ready", true);
-                } else if (playbackState == Player.STATE_BUFFERING) {
-                    startTickingIfNeeded();
-                    publishState("buffering", true);
-                } else if (playbackState == Player.STATE_ENDED) {
+                } else if (ended) {
                     stopTicking();
-                    publishState("ended", true);
-                } else {
-                    publishState("idle", true);
                 }
+                if (listener != null) {
+                    listener.onPlaybackState(playing, buffering, ended, ready);
+                }
+                dispatchProgress();
             }
 
             @Override
-            public void onIsPlayingChanged(boolean isPlaying) {
-                if (!isActive) return;
-                if (isPlaying) {
+            public void onIsPlayingChanged(boolean isPlayingNow) {
+                if (!isActive || exoPlayer == null) return;
+                if (isPlayingNow) {
                     lastTickElapsedMs = SystemClock.elapsedRealtime();
                     startTickingIfNeeded();
-                    publishState("playing", true);
                 } else {
                     lastTickElapsedMs = 0L;
-                    publishState("paused", true);
+                }
+                int pb = exoPlayer.getPlaybackState();
+                if (listener != null) {
+                    listener.onPlaybackState(
+                            isPlayingNow,
+                            pb == Player.STATE_BUFFERING,
+                            pb == Player.STATE_ENDED,
+                            pb == Player.STATE_READY);
                 }
             }
 
@@ -232,11 +287,9 @@ public class NativePlayerController {
                 if (!isActive) return;
                 firstFrameRendered = true;
                 videoUnsupported = false;
-                isCodecError = false;
-                if ("black_video_no_frames".equals(lastErrorMsg) || "codec_unsupported".equals(lastErrorMsg)) {
-                    lastErrorMsg = "";
+                if (listener != null) {
+                    listener.onFirstFrame();
                 }
-                publishState("firstFrame", true);
             }
 
             @Override
@@ -248,9 +301,8 @@ public class NativePlayerController {
                     if (ratio > 0f) {
                         aspectFrame.setAspectRatio(ratio);
                     }
-                    if (!firstFrameRendered) {
-                        // Do not clear firstFrame flag prematurely; onRenderedFirstFrame will confirm frame output
-                        publishState("videoSize", true);
+                    if (listener != null) {
+                        listener.onVideoSize(videoWidth, videoHeight);
                     }
                 }
             }
@@ -274,9 +326,9 @@ public class NativePlayerController {
                 hasVideoTrackGroup = foundVideoGroup;
                 if (foundVideoGroup && !anyVideoSupportedOrSelected && !videoUnsupported) {
                     videoUnsupported = true;
-                    isCodecError = true;
-                    lastErrorMsg = "codec_unsupported";
-                    publishState("videoUnsupported", true);
+                    if (listener != null) {
+                        listener.onError("codec_unsupported", true);
+                    }
                 }
             }
 
@@ -284,9 +336,8 @@ public class NativePlayerController {
             public void onPositionDiscontinuity(Player.PositionInfo oldPosition,
                                                 Player.PositionInfo newPosition,
                                                 int reason) {
-                if (!isActive) return;
-                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
-                    publishState("seeked", true);
+                if (isActive && reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    dispatchProgress();
                 }
             }
 
@@ -301,14 +352,22 @@ public class NativePlayerController {
                         || code == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED
                         || code == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED
                         || code == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED);
-                isCodecError = codecErr;
                 if (codecErr) {
                     videoUnsupported = true;
                 }
-                lastErrorMsg = (codecErr ? "native_codec_" : "native_err_") + error.getErrorCodeName();
-                publishState("error", true);
+                if (listener != null) {
+                    listener.onError(error.getErrorCodeName(), codecErr);
+                }
             }
-        });
+        };
+    }
+
+    private void ensureMainPlayer() {
+        if (exoPlayer != null) return;
+        exoPlayer = createExoInstance(false);
+        exoPlayer.setVideoSurfaceView(surfaceView);
+        mainPlayerListener = createMainListener();
+        exoPlayer.addListener(mainPlayerListener);
     }
 
     public void loadMedia(String url, String streamType, double startPosSec, boolean paused, boolean mutedState, float rate) {
@@ -318,67 +377,158 @@ public class NativePlayerController {
             return;
         }
 
-        ensurePlayer();
+        if (isPreloadedFor(cleanUrl) && !paused) {
+            swapToPreloaded(startPosSec, rate, mutedState);
+            return;
+        }
+
+        ensureMainPlayer();
 
         currentUrl = cleanUrl;
         isActive = true;
         firstFrameRendered = false;
         hasVideoTrackGroup = false;
         videoUnsupported = false;
-        isCodecError = false;
-        lastErrorMsg = "";
         videoWidth = 0;
         videoHeight = 0;
         readyPlayingAccumMs = 0L;
         lastTickElapsedMs = 0L;
         muted = mutedState;
+        currentRate = clampRate(rate);
 
         if (container.getVisibility() != View.VISIBLE) {
             container.setVisibility(View.VISIBLE);
         }
-        if (callback != null) {
-            callback.onNativeVisibilityChanged(true);
+        if (listener != null) {
+            listener.onVisibilityChanged(true);
+            listener.onPlaybackState(false, true, false, false);
         }
 
-        String lowerUrl = cleanUrl.toLowerCase(Locale.ROOT);
-        boolean isHls = "hls".equalsIgnoreCase(streamType)
-                || lowerUrl.contains(".m3u8")
-                || lowerUrl.contains("hls-proxy");
-
-        MediaItem.Builder itemBuilder = new MediaItem.Builder().setUri(Uri.parse(cleanUrl));
-        if (isHls) {
-            itemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8);
-        }
-        MediaItem item = itemBuilder.build();
-        MediaSource mediaSource = isHls
-                ? new HlsMediaSource.Factory(dataSourceFactory)
-                        .setAllowChunklessPreparation(true)
-                        .createMediaSource(item)
-                : new ProgressiveMediaSource.Factory(dataSourceFactory)
-                        .createMediaSource(item);
-
+        MediaSource mediaSource = buildMediaSource(cleanUrl, streamType);
         long startMs = startPosSec > 0.5 ? Math.round(startPosSec * 1000.0) : 0L;
+
         exoPlayer.stop();
         exoPlayer.setMediaSource(mediaSource, startMs);
         exoPlayer.setVolume(mutedState ? 0f : 1f);
-        exoPlayer.setPlaybackSpeed(clampRate(rate));
+        exoPlayer.setPlaybackSpeed(currentRate);
         exoPlayer.setPlayWhenReady(!paused);
         exoPlayer.prepare();
 
         startTickingIfNeeded();
-        publishState("loading", true);
+    }
+
+    public void preloadNext(final String url, String streamType, double startPosSec) {
+        String cleanUrl = url != null ? url.trim() : "";
+        if (cleanUrl.isEmpty() || cleanUrl.equals(currentUrl)) return;
+        if (cleanUrl.equals(preloadUrl) && preloadPlayer != null) return;
+
+        clearPreload();
+        try {
+            preloadUrl = cleanUrl;
+            preloadReady = false;
+            preloadPlayer = createExoInstance(true);
+            preloadPlayer.setVolume(0f);
+            preloadPlayer.setPlayWhenReady(false);
+            preloadPlayer.addListener(new Player.Listener() {
+                @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_READY) {
+                        preloadReady = true;
+                    }
+                }
+            });
+            MediaSource src = buildMediaSource(cleanUrl, streamType);
+            long startMs = startPosSec > 0.5 ? Math.round(startPosSec * 1000.0) : 0L;
+            preloadPlayer.setMediaSource(src, startMs);
+            preloadPlayer.prepare();
+        } catch (Exception ignored) {
+            clearPreload();
+        }
+    }
+
+    public boolean isPreloadedFor(String url) {
+        return preloadPlayer != null
+                && preloadReady
+                && url != null
+                && url.trim().equals(preloadUrl);
+    }
+
+    public boolean swapToPreloaded(double startPosSec, float rate, boolean mutedState) {
+        if (preloadPlayer == null || preloadUrl.isEmpty()) return false;
+
+        stopTicking();
+        ExoPlayer oldMain = exoPlayer;
+        if (oldMain != null) {
+            try {
+                if (mainPlayerListener != null) oldMain.removeListener(mainPlayerListener);
+                oldMain.stop();
+                oldMain.clearVideoSurfaceView(surfaceView);
+                oldMain.release();
+            } catch (Exception ignored) {
+            }
+        }
+
+        exoPlayer = preloadPlayer;
+        currentUrl = preloadUrl;
+        preloadPlayer = null;
+        preloadUrl = "";
+        preloadReady = false;
+
+        isActive = true;
+        firstFrameRendered = false;
+        hasVideoTrackGroup = false;
+        videoUnsupported = false;
+        videoWidth = 0;
+        videoHeight = 0;
+        readyPlayingAccumMs = 0L;
+        lastTickElapsedMs = 0L;
+        muted = mutedState;
+        currentRate = clampRate(rate);
+
+        if (container.getVisibility() != View.VISIBLE) {
+            container.setVisibility(View.VISIBLE);
+        }
+
+        mainPlayerListener = createMainListener();
+        exoPlayer.addListener(mainPlayerListener);
+        exoPlayer.setVideoSurfaceView(surfaceView);
+        if (startPosSec > 0.5) {
+            exoPlayer.seekTo(Math.round(startPosSec * 1000.0));
+        }
+        exoPlayer.setVolume(mutedState ? 0f : 1f);
+        exoPlayer.setPlaybackSpeed(currentRate);
+        exoPlayer.setPlayWhenReady(true);
+
+        if (listener != null) {
+            listener.onVisibilityChanged(true);
+            listener.onPlaybackState(true, exoPlayer.getPlaybackState() == Player.STATE_BUFFERING, false, true);
+        }
+        startTickingIfNeeded();
+        return true;
+    }
+
+    public void clearPreload() {
+        preloadUrl = "";
+        preloadReady = false;
+        if (preloadPlayer != null) {
+            try {
+                preloadPlayer.stop();
+                preloadPlayer.release();
+            } catch (Exception ignored) {
+            }
+            preloadPlayer = null;
+        }
     }
 
     public void stopMedia() {
         stopTicking();
+        clearPreload();
         boolean wasActive = isActive;
         isActive = false;
         currentUrl = "";
         firstFrameRendered = false;
         hasVideoTrackGroup = false;
         videoUnsupported = false;
-        isCodecError = false;
-        lastErrorMsg = "";
         videoWidth = 0;
         videoHeight = 0;
         readyPlayingAccumMs = 0L;
@@ -394,10 +544,9 @@ public class NativePlayerController {
         if (container.getVisibility() != View.GONE) {
             container.setVisibility(View.GONE);
         }
-        if (wasActive && callback != null) {
-            callback.onNativeVisibilityChanged(false);
+        if (wasActive && listener != null) {
+            listener.onVisibilityChanged(false);
         }
-        publishState("stopped", false);
     }
 
     public void play() {
@@ -407,13 +556,11 @@ public class NativePlayerController {
         }
         exoPlayer.setPlayWhenReady(true);
         startTickingIfNeeded();
-        publishState("playing", true);
     }
 
     public void pause() {
         if (exoPlayer == null || !isActive) return;
         exoPlayer.setPlayWhenReady(false);
-        publishState("paused", true);
     }
 
     public void seekTo(double posSec) {
@@ -424,7 +571,7 @@ public class NativePlayerController {
             targetMs = Math.min(durMs, targetMs);
         }
         exoPlayer.seekTo(targetMs);
-        publishState("seeked", true);
+        dispatchProgress();
     }
 
     public void setMuted(boolean m) {
@@ -432,12 +579,12 @@ public class NativePlayerController {
         if (exoPlayer != null) {
             exoPlayer.setVolume(m ? 0f : 1f);
         }
-        publishState("mute", true);
     }
 
     public void setPlaybackRate(float rate) {
+        currentRate = clampRate(rate);
         if (exoPlayer != null) {
-            exoPlayer.setPlaybackSpeed(clampRate(rate));
+            exoPlayer.setPlaybackSpeed(currentRate);
         }
     }
 
@@ -450,13 +597,13 @@ public class NativePlayerController {
     public void onHostPause() {
         if (exoPlayer != null && isActive && exoPlayer.getPlayWhenReady()) {
             exoPlayer.setPlayWhenReady(false);
-            publishState("paused", true);
         }
         stopTicking();
     }
 
     public void release() {
         stopTicking();
+        clearPreload();
         isActive = false;
         currentUrl = "";
         if (exoPlayer != null) {
@@ -488,48 +635,12 @@ public class NativePlayerController {
         handler.removeCallbacks(tickRunnable);
     }
 
-    private void publishState(String eventName, boolean notifyJsCallback) {
-        try {
-            long posMs = 0L;
-            long durMs = 0L;
-            int pbState = Player.STATE_IDLE;
-            boolean playWhenReady = false;
-            boolean isPlayingNow = false;
-
-            if (exoPlayer != null && isActive) {
-                posMs = Math.max(0L, exoPlayer.getCurrentPosition());
-                long rawDur = exoPlayer.getDuration();
-                durMs = (rawDur != C.TIME_UNSET && rawDur > 0L) ? rawDur : 0L;
-                pbState = exoPlayer.getPlaybackState();
-                playWhenReady = exoPlayer.getPlayWhenReady();
-                isPlayingNow = exoPlayer.isPlaying();
-            }
-
-            JSONObject obj = new JSONObject();
-            obj.put("active", isActive);
-            obj.put("url", currentUrl);
-            obj.put("pos", posMs / 1000.0);
-            obj.put("dur", durMs / 1000.0);
-            obj.put("playing", isPlayingNow);
-            obj.put("paused", !playWhenReady);
-            obj.put("buffering", isActive && pbState == Player.STATE_BUFFERING);
-            obj.put("ended", isActive && pbState == Player.STATE_ENDED);
-            obj.put("ready", isActive && (pbState == Player.STATE_READY || pbState == Player.STATE_ENDED));
-            obj.put("firstFrame", firstFrameRendered);
-            obj.put("vw", videoWidth);
-            obj.put("vh", videoHeight);
-            obj.put("muted", muted);
-            obj.put("err", lastErrorMsg);
-            obj.put("unsupportedVideo", videoUnsupported);
-            obj.put("codecError", isCodecError);
-            obj.put("event", eventName);
-
-            String json = obj.toString();
-            cachedSnapshotJson = json;
-            if (notifyJsCallback && callback != null) {
-                callback.onNativeEvent(json);
-            }
-        } catch (Exception ignored) {
-        }
+    private void dispatchProgress() {
+        if (listener == null || exoPlayer == null || !isActive) return;
+        long posMs = Math.max(0L, exoPlayer.getCurrentPosition());
+        long rawDur = exoPlayer.getDuration();
+        long durMs = (rawDur != C.TIME_UNSET && rawDur > 0L) ? rawDur : 0L;
+        int bufPct = Math.max(0, Math.min(100, exoPlayer.getBufferedPercentage()));
+        listener.onProgress(posMs / 1000.0, durMs / 1000.0, bufPct);
     }
 }

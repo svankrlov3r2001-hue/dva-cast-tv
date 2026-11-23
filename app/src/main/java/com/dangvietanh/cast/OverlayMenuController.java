@@ -24,10 +24,12 @@ import java.util.List;
 public class OverlayMenuController {
 
     public interface Actions {
-        void onReloadPage();
+        void onRefreshHome();
         void onClearCache();
         void onCheckUpdates();
-        void onOpenSubtitleSettings();
+        void onLogout();
+        boolean isLoggedIn();
+        String getCurrentUserLabel();
         void onFetchHistory(Runnable onComplete);
         String getVersionName();
         long getVersionCode();
@@ -40,23 +42,24 @@ public class OverlayMenuController {
     private FrameLayout overlayRoot;
     private LinearLayout mainCard;
 
-    // Header views
     private FrameLayout backBtn;
     private TextView headerTitleTv;
     private TextView headerSubTv;
     private TextView verPill;
     private FrameLayout closeBtn;
 
-    // Main Settings Section
     private LinearLayout settingsSection;
     private TextView ipValueView;
     private TextView adbHintView;
     private TextView autoStartBadge;
     private TextView changelogBadge;
+    private TextView logoutSubTv;
     private View firstTile;
     private View tileChangelog;
+    private View tileLogout;
+    private View tileAutoStart;
+    private View tileUpdate;
 
-    // Changelog History Section
     private LinearLayout historySection;
     private ScrollView historyScrollView;
     private LinearLayout historyListContainer;
@@ -84,8 +87,8 @@ public class OverlayMenuController {
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         int screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(context, 960);
         int screenH = dm.heightPixels > 0 ? dm.heightPixels : UiHelper.dp(context, 540);
-        int cardWidth = Math.min(UiHelper.dp(context, 640), Math.round(screenW * 0.90f));
-        int historyMaxH = Math.min(UiHelper.dp(context, 300), Math.round(screenH * 0.54f));
+        int cardWidth = Math.min(UiHelper.dp(context, 650), Math.round(screenW * 0.90f));
+        int historyMaxH = Math.min(UiHelper.dp(context, 310), Math.round(screenH * 0.54f));
 
         overlayRoot = new FrameLayout(context);
         overlayRoot.setVisibility(View.GONE);
@@ -121,9 +124,8 @@ public class OverlayMenuController {
 
         mainCard = new LinearLayout(context);
         mainCard.setOrientation(LinearLayout.VERTICAL);
-        // Matches CSS: padding: 30px 32px; border-radius: 40px; rgba(0, 0, 0, 0.25); 1px rgba(255,255,255,0.16)
-        mainCard.setPadding(UiHelper.dp(context, 32), UiHelper.dp(context, 30),
-                UiHelper.dp(context, 32), UiHelper.dp(context, 30));
+        mainCard.setPadding(UiHelper.dp(context, 30), UiHelper.dp(context, 28),
+                UiHelper.dp(context, 30), UiHelper.dp(context, 28));
         mainCard.setClickable(true);
         mainCard.setClipChildren(false);
         mainCard.setClipToPadding(false);
@@ -186,15 +188,14 @@ public class OverlayMenuController {
         verPill.setTypeface(Typeface.DEFAULT_BOLD);
         verPill.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 3),
                 UiHelper.dp(context, 10), UiHelper.dp(context, 3));
-        verPill.setBackground(UiHelper.createGlassRect(context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
+        UiHelper.applySubtleGlassPill(verPill, context, 24);
         LinearLayout.LayoutParams verLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         verLp.leftMargin = UiHelper.dp(context, 8);
         titleBadgeRow.addView(verPill, verLp);
 
         headerSubTv = new TextView(context);
-        headerSubTv.setText("DVA Cast TV · Thiết lập trình phát & rạp phim");
+        headerSubTv.setText("Đặng Việt Anh · Thiết lập rạp phim trên TV");
         headerSubTv.setTextColor(UiHelper.COLOR_TEXT_MUTED);
         headerSubTv.setTextSize(11.5f);
         headerSubTv.setSingleLine(true);
@@ -227,21 +228,18 @@ public class OverlayMenuController {
         settingsSection.setClipChildren(false);
         settingsSection.setClipToPadding(false);
 
-        // Wi-Fi IP & ADB Banner
         LinearLayout ipCard = new LinearLayout(context);
         ipCard.setOrientation(LinearLayout.HORIZONTAL);
         ipCard.setGravity(Gravity.CENTER_VERTICAL);
         ipCard.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 10),
                 UiHelper.dp(context, 14), UiHelper.dp(context, 10));
-        ipCard.setBackground(UiHelper.createGlassRect(context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
+        UiHelper.applySubtleGlassPill(ipCard, context, 24);
         LinearLayout.LayoutParams ipLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ipLp.bottomMargin = UiHelper.dp(context, 12);
 
         FrameLayout wifiBox = new FrameLayout(context);
-        wifiBox.setBackground(UiHelper.createGlassRect(context, 14,
-                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
+        UiHelper.applySubtleGlassPill(wifiBox, context, 14);
         ImageView wifiIcon = new ImageView(context);
         wifiIcon.setImageResource(R.drawable.ic_wifi);
         wifiIcon.setColorFilter(Color.parseColor("#64D2FF"));
@@ -265,7 +263,7 @@ public class OverlayMenuController {
         ipLabel.setTypeface(Typeface.DEFAULT_BOLD);
 
         adbHintView = new TextView(context);
-        adbHintView.setText("ADB nội bộ: adb connect ...:5555");
+        adbHintView.setText("Đã sẵn sàng kết nối Wi-Fi / LAN");
         adbHintView.setTextColor(UiHelper.COLOR_TEXT_MUTED);
         adbHintView.setTextSize(11);
         adbHintView.setSingleLine(true);
@@ -283,8 +281,7 @@ public class OverlayMenuController {
         ipValueView.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         ipValueView.setPadding(UiHelper.dp(context, 12), UiHelper.dp(context, 5),
                 UiHelper.dp(context, 12), UiHelper.dp(context, 5));
-        ipValueView.setBackground(UiHelper.createGlassRect(context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
+        UiHelper.applySubtleGlassPill(ipValueView, context, 24);
         ipCard.addView(ipValueView);
 
         settingsSection.addView(ipCard, ipLp);
@@ -308,19 +305,19 @@ public class OverlayMenuController {
 
         View tileReload = createHorizontalActionTile(
                 R.drawable.ic_reload, "#64D2FF",
-                "Khởi tạo lại mã QR", "Tạo phiên kết nối & mã ghép nối mới",
+                "Làm mới nội dung", "Tải lại danh sách phim & tiến trình đang xem",
                 null,
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
                         hide();
-                        actions.onReloadPage();
+                        actions.onRefreshHome();
                     }
                 });
 
         View tileCache = createHorizontalActionTile(
                 R.drawable.ic_clean, "#FFD60A",
-                "Dọn bộ nhớ đệm", "Làm sạch dữ liệu tạm & tối ưu trình phát",
+                "Dọn bộ nhớ đệm", "Làm sạch ảnh tạm & tối ưu hiệu năng thiết bị",
                 null,
                 new View.OnClickListener() {
                     @Override
@@ -337,7 +334,7 @@ public class OverlayMenuController {
         autoStartBadge.setPadding(UiHelper.dp(context, 8), UiHelper.dp(context, 3),
                 UiHelper.dp(context, 8), UiHelper.dp(context, 3));
 
-        View tileAutoStart = createHorizontalActionTile(
+        tileAutoStart = createHorizontalActionTile(
                 R.drawable.ic_power, "#30D158",
                 "Tự mở khi bật máy", "Khởi chạy rạp phim khi mở thiết bị",
                 autoStartBadge,
@@ -350,7 +347,7 @@ public class OverlayMenuController {
                     }
                 });
 
-        View tileUpdate = createHorizontalActionTile(
+        tileUpdate = createHorizontalActionTile(
                 R.drawable.ic_update, "#FF453A",
                 "Cập nhật phiên bản", "Kiểm tra & cài đặt bản mới qua Wi-Fi",
                 null,
@@ -377,22 +374,22 @@ public class OverlayMenuController {
         settingsSection.addView(row1, row1Lp);
         settingsSection.addView(row2, row2Lp);
 
-        // Full-width Subtitle Customization Row
-        View tileSubtitle = createHorizontalActionTile(
-                R.drawable.ic_subtitles, "#FF375F",
-                "Tuỳ chỉnh phụ đề", "Phông chữ, màu sắc, cỡ chữ, vị trí, viền chữ & dịch",
-                null,
+        // Full-width Account Logout Row (when logged in)
+        LinearLayout logoutRow = createTileWithSubRef(
+                R.drawable.ic_logout, "#FF9F0A",
+                "Đăng xuất tài khoản", "Đang đăng nhập...",
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
                         hide();
-                        actions.onOpenSubtitleSettings();
+                        actions.onLogout();
                     }
                 });
-        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
+        tileLogout = logoutRow;
+        LinearLayout.LayoutParams logoutLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        subLp.bottomMargin = UiHelper.dp(context, 10);
-        settingsSection.addView(tileSubtitle, subLp);
+        logoutLp.bottomMargin = UiHelper.dp(context, 10);
+        settingsSection.addView(tileLogout, logoutLp);
 
         // Full-width Changelog Row
         changelogBadge = new TextView(context);
@@ -402,8 +399,7 @@ public class OverlayMenuController {
         changelogBadge.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
         changelogBadge.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 4),
                 UiHelper.dp(context, 10), UiHelper.dp(context, 4));
-        changelogBadge.setBackground(UiHelper.createGlassRect(context, 24,
-                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
+        UiHelper.applySubtleGlassPill(changelogBadge, context, 24);
 
         tileChangelog = createHorizontalActionTile(
                 R.drawable.ic_update, "#BF5AF2",
@@ -461,7 +457,7 @@ public class OverlayMenuController {
         tileCache.setId(View.generateViewId());
         tileAutoStart.setId(View.generateViewId());
         tileUpdate.setId(View.generateViewId());
-        tileSubtitle.setId(View.generateViewId());
+        tileLogout.setId(View.generateViewId());
         tileChangelog.setId(View.generateViewId());
 
         tileReload.setNextFocusRightId(tileCache.getId());
@@ -477,19 +473,16 @@ public class OverlayMenuController {
         tileAutoStart.setNextFocusUpId(tileReload.getId());
         tileAutoStart.setNextFocusRightId(tileUpdate.getId());
         tileAutoStart.setNextFocusLeftId(tileAutoStart.getId());
-        tileAutoStart.setNextFocusDownId(tileSubtitle.getId());
 
         tileUpdate.setNextFocusUpId(tileCache.getId());
         tileUpdate.setNextFocusLeftId(tileAutoStart.getId());
         tileUpdate.setNextFocusRightId(closeBtn.getId());
-        tileUpdate.setNextFocusDownId(tileSubtitle.getId());
 
-        tileSubtitle.setNextFocusUpId(tileAutoStart.getId());
-        tileSubtitle.setNextFocusDownId(tileChangelog.getId());
-        tileSubtitle.setNextFocusLeftId(tileSubtitle.getId());
-        tileSubtitle.setNextFocusRightId(tileSubtitle.getId());
+        tileLogout.setNextFocusUpId(tileAutoStart.getId());
+        tileLogout.setNextFocusDownId(tileChangelog.getId());
+        tileLogout.setNextFocusLeftId(tileLogout.getId());
+        tileLogout.setNextFocusRightId(tileLogout.getId());
 
-        tileChangelog.setNextFocusUpId(tileSubtitle.getId());
         tileChangelog.setNextFocusDownId(closeBtn.getId());
         tileChangelog.setNextFocusLeftId(tileChangelog.getId());
         tileChangelog.setNextFocusRightId(tileChangelog.getId());
@@ -510,6 +503,14 @@ public class OverlayMenuController {
         outerScroll.addView(cardContainer, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         overlayRoot.addView(outerScroll, scrollLp);
+    }
+
+    private LinearLayout createTileWithSubRef(int iconRes, String iconTintHex, String title, String subtitle,
+                                              View.OnClickListener listener) {
+        LinearLayout tile = (LinearLayout) createHorizontalActionTile(iconRes, iconTintHex, title, subtitle, null, listener);
+        LinearLayout textCol = (LinearLayout) tile.getChildAt(1);
+        logoutSubTv = (TextView) textCol.getChildAt(1);
+        return tile;
     }
 
     private FrameLayout createHeaderIconButton(int iconRes, String contentDesc) {
@@ -537,8 +538,7 @@ public class OverlayMenuController {
         tile.setOnClickListener(listener);
 
         FrameLayout iconBox = new FrameLayout(context);
-        iconBox.setBackground(UiHelper.createGlassRect(context, 14,
-                UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
+        UiHelper.applySubtleGlassPill(iconBox, context, 14);
         ImageView iv = new ImageView(context);
         iv.setImageResource(iconRes);
         iv.setColorFilter(Color.parseColor(iconTintHex));
@@ -597,7 +597,7 @@ public class OverlayMenuController {
         showingHistory = false;
         backBtn.setVisibility(View.GONE);
         headerTitleTv.setText("Cài đặt");
-        headerSubTv.setText("DVA Cast TV · Thiết lập trình phát & rạp phim");
+        headerSubTv.setText("Đặng Việt Anh · Thiết lập rạp phim trên TV");
         settingsSection.setVisibility(View.VISIBLE);
         historySection.setVisibility(View.GONE);
         closeBtn.setNextFocusDownId(tileChangelog.getId());
@@ -613,7 +613,7 @@ public class OverlayMenuController {
         showingHistory = true;
         backBtn.setVisibility(View.VISIBLE);
         headerTitleTv.setText("Nhật ký cập nhật");
-        headerSubTv.setText("Lịch sử phiên bản & tính năng mới của DVA Cast TV");
+        headerSubTv.setText("Lịch sử phiên bản & tính năng mới trên TV");
         settingsSection.setVisibility(View.GONE);
         historySection.setVisibility(View.VISIBLE);
 
@@ -655,7 +655,6 @@ public class OverlayMenuController {
                 cardLp.bottomMargin = UiHelper.dp(context, 10);
             }
 
-            // Top row: Version badge + status + date
             LinearLayout topRow = new LinearLayout(context);
             topRow.setOrientation(LinearLayout.HORIZONTAL);
             topRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -670,8 +669,7 @@ public class OverlayMenuController {
             verBadge.setTypeface(Typeface.DEFAULT_BOLD);
             verBadge.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 3),
                     UiHelper.dp(context, 10), UiHelper.dp(context, 3));
-            verBadge.setBackground(UiHelper.createGlassRect(context, 24,
-                    UiHelper.COLOR_SURFACE_GLASS, Color.TRANSPARENT, 0));
+            UiHelper.applySubtleGlassPill(verBadge, context, 24);
             topRow.addView(verBadge);
 
             if (entry.versionCode == localCode) {
@@ -715,7 +713,6 @@ public class OverlayMenuController {
 
             card.addView(topRow, topLp);
 
-            // Title
             TextView titleTv = new TextView(context);
             titleTv.setText(entry.title);
             titleTv.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
@@ -726,7 +723,6 @@ public class OverlayMenuController {
             titleLp.bottomMargin = UiHelper.dp(context, 5);
             card.addView(titleTv, titleLp);
 
-            // Bullet changes
             StringBuilder sb = new StringBuilder();
             for (int c = 0; c < entry.changes.size(); c++) {
                 if (c > 0) sb.append('\n');
@@ -748,7 +744,7 @@ public class OverlayMenuController {
         String ip = UiHelper.getWifiIpAddress(context);
         ipValueView.setText(ip);
         if (ip.contains(".")) {
-            adbHintView.setText("ADB nội bộ: adb connect " + ip + ":5555");
+            adbHintView.setText("Kết nối mạng nội bộ ổn định (" + ip + ")");
         } else {
             adbHintView.setText("Kiểm tra lại kết nối Wi-Fi / LAN trên thiết bị");
         }
@@ -776,9 +772,19 @@ public class OverlayMenuController {
 
         backBtn.setVisibility(View.GONE);
         headerTitleTv.setText("Cài đặt");
-        headerSubTv.setText("DVA Cast TV · Thiết lập trình phát & rạp phim");
+        headerSubTv.setText("Đặng Việt Anh · Thiết lập rạp phim trên TV");
         settingsSection.setVisibility(View.VISIBLE);
         historySection.setVisibility(View.GONE);
+
+        boolean loggedIn = actions.isLoggedIn();
+        tileLogout.setVisibility(loggedIn ? View.VISIBLE : View.GONE);
+        if (loggedIn && logoutSubTv != null) {
+            logoutSubTv.setText("Thoát tài khoản " + actions.getCurrentUserLabel() + " trên TV");
+        }
+        int nextDown = loggedIn ? tileLogout.getId() : tileChangelog.getId();
+        tileAutoStart.setNextFocusDownId(nextDown);
+        tileUpdate.setNextFocusDownId(nextDown);
+        tileChangelog.setNextFocusUpId(loggedIn ? tileLogout.getId() : tileAutoStart.getId());
 
         refreshNetworkInfo();
         refreshAutoStartBadge();
