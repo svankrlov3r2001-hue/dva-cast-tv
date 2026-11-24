@@ -826,9 +826,9 @@ public class HomeScreenView extends FrameLayout {
             tv.setTextColor(textColor);
             tv.setTextSize(10f);
             tv.setTypeface(null, Typeface.BOLD);
-            tv.setPadding(UiHelper.dp(ctx, 7), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 7), UiHelper.dp(ctx, 2));
+            tv.setPadding(UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 3), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 3));
             tv.setBackground(UiHelper.createPillDrawable(
-                    ctx, 4, Color.argb(175, 24, 27, 40), Color.argb(34, 255, 255, 255), 0.8f));
+                    ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             lp.rightMargin = UiHelper.dp(ctx, 6);
@@ -843,7 +843,7 @@ public class HomeScreenView extends FrameLayout {
             tv.setTypeface(null, Typeface.BOLD);
             tv.setGravity(Gravity.CENTER);
             tv.setPadding(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 8));
-            UiHelper.applyFocusableGlassButton(tv, ctx, 17, accent);
+            UiHelper.applyFocusableGlassButton(tv, ctx, UiHelper.GLASS_RADIUS_DP, accent);
             return tv;
         }
 
@@ -974,7 +974,7 @@ public class HomeScreenView extends FrameLayout {
                 RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(UiHelper.dp(ctx, 172), UiHelper.dp(ctx, 64));
                 lp.setMargins(UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 4));
                 box.setLayoutParams(lp);
-                UiHelper.applyFocusableGlassButton(box, ctx, 12, false);
+                UiHelper.applyFocusableGlassButton(box, ctx, UiHelper.GLASS_RADIUS_DP, false);
 
                 TextView t1 = new TextView(ctx);
                 t1.setTextColor(Color.WHITE);

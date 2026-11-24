@@ -469,8 +469,9 @@ public class MovieDetailScreenView extends FrameLayout {
         inner.setGravity(Gravity.CENTER);
         inner.setClipChildren(false);
         inner.setClipToPadding(false);
-        inner.setBackgroundColor(Color.argb(228, 12, 14, 22));
-        inner.setPadding(0, UiHelper.dp(ctx, 18), 0, UiHelper.dp(ctx, 18));
+        UiHelper.applyGlassCardStyle(inner, ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.COLOR_SURFACE_GLASS, 20);
+        inner.setClipToOutline(false);
+        inner.setPadding(0, UiHelper.dp(ctx, 14), 0, UiHelper.dp(ctx, 14));
 
         addRailIcon(ctx, inner, R.drawable.ic_home, true, new Runnable() {
             @Override
@@ -521,13 +522,10 @@ public class MovieDetailScreenView extends FrameLayout {
             }
         });
 
-        rail.addView(inner, new LinearLayout.LayoutParams(
-                UiHelper.dp(ctx, 55), LinearLayout.LayoutParams.MATCH_PARENT));
-
-        View rightHairline = new View(ctx);
-        rightHairline.setBackgroundColor(Color.argb(18, 255, 255, 255));
-        rail.addView(rightHairline, new LinearLayout.LayoutParams(
-                UiHelper.dp(ctx, 1), LinearLayout.LayoutParams.MATCH_PARENT));
+        LinearLayout.LayoutParams innerLp = new LinearLayout.LayoutParams(
+                UiHelper.dp(ctx, 48), LinearLayout.LayoutParams.MATCH_PARENT);
+        innerLp.setMargins(UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 10));
+        rail.addView(inner, innerLp);
         return rail;
     }
 
@@ -538,10 +536,9 @@ public class MovieDetailScreenView extends FrameLayout {
             firstRailIcon = btn;
         }
         if (accentActive) {
-            UiHelper.applyFocusableGlassButton(btn, ctx, 18, true);
+            UiHelper.applyFocusableGlassButton(btn, ctx, UiHelper.GLASS_RADIUS_DP, true);
         } else {
             UiHelper.applyCircularIconButtonStyle(btn, ctx, 36);
-            btn.setBackground(UiHelper.createSidebarItemStateDrawable(ctx, 18, false));
         }
         final ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -829,7 +826,7 @@ public class MovieDetailScreenView extends FrameLayout {
         tv.setTextSize(10.5f);
         tv.setPadding(UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 3), UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 3));
         tv.setBackground(UiHelper.createPillDrawable(
-                ctx, 10, Color.argb(135, 34, 38, 54), Color.argb(32, 255, 255, 255), 0.8f));
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.rightMargin = UiHelper.dp(ctx, 6);
@@ -1279,7 +1276,7 @@ public class MovieDetailScreenView extends FrameLayout {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER);
         row.setPadding(UiHelper.dp(ctx, 15), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 8));
-        UiHelper.applyFocusableGlassButton(row, ctx, 18, accent);
+        UiHelper.applyFocusableGlassButton(row, ctx, UiHelper.GLASS_RADIUS_DP, accent);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);

@@ -644,14 +644,12 @@ public class PlayerScreenController {
         playerToastPill.setGravity(Gravity.CENTER_VERTICAL);
         playerToastPill.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 7),
                 UiHelper.dp(context, 16), UiHelper.dp(context, 7));
-        playerToastPill.setBackground(UiHelper.createPillDrawable(
-                context, 16, Color.argb(198, 28, 30, 38), Color.argb(38, 255, 255, 255), 1.0f));
-        playerToastPill.setElevation(UiHelper.dp(context, 12));
+        UiHelper.applyGlassCardStyle(playerToastPill, context, UiHelper.GLASS_RADIUS_DP, UiHelper.COLOR_SURFACE_GLASS, 20);
         playerToastPill.setVisibility(View.GONE);
 
         FrameLayout ptIconWrap = new FrameLayout(context);
         ptIconWrap.setBackground(UiHelper.createPillDrawable(
-                context, 9, Color.argb(225, 14, 16, 24), Color.argb(26, 255, 255, 255), 0.8f));
+                context, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f));
         playerToastIcon = new ImageView(context);
         playerToastIcon.setImageResource(R.drawable.ic_fullscreen);
         playerToastIcon.setColorFilter(UiHelper.COLOR_CYAN, PorterDuff.Mode.SRC_IN);
@@ -688,8 +686,8 @@ public class PlayerScreenController {
         rightDock.setGravity(Gravity.CENTER_HORIZONTAL);
         rightDock.setPadding(UiHelper.dp(context, 3), UiHelper.dp(context, 6),
                 UiHelper.dp(context, 3), UiHelper.dp(context, 6));
-        rightDock.setBackground(UiHelper.createPillDrawable(
-                context, 20, Color.argb(156, 22, 24, 34), Color.argb(30, 255, 255, 255), 1.0f));
+        UiHelper.applyGlassCardStyle(rightDock, context, UiHelper.GLASS_RADIUS_DP, UiHelper.COLOR_SURFACE_GLASS, 20);
+        rightDock.setClipToOutline(false);
         rightDock.setClipChildren(false);
         rightDock.setClipToPadding(false);
 
@@ -765,11 +763,11 @@ public class PlayerScreenController {
         centerPlayWrap.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View v, Outline outline) {
-                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), 16));
+                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), UiHelper.GLASS_RADIUS_DP));
             }
         });
         centerPlayWrap.setClipToOutline(true);
-        UiHelper.applyTvFocusZoomGlow(centerPlayWrap, context, 1.14f, 10, UiHelper.COLOR_FOCUS_GLOW);
+        UiHelper.applyTvFocusZoomGlow(centerPlayWrap, context, 1.14f, 20, UiHelper.COLOR_FOCUS_GLOW);
         playPauseIcon = new ImageView(context);
         playPauseIcon.setImageResource(R.drawable.ic_pause);
         playPauseIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
@@ -3098,17 +3096,23 @@ public class PlayerScreenController {
 
     private FrameLayout makeHudCircleIcon(Context ctx, int iconRes, int sizeDp) {
         FrameLayout box = new FrameLayout(ctx);
-        int r = sizeDp / 2;
         android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
-                ctx, r, Color.argb(148, 22, 24, 34), Color.argb(30, 255, 255, 255), 1.0f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, r, Color.argb(242, 48, 54, 82), Color.WHITE, 2.0f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, normal);
         box.setBackground(states);
-        UiHelper.applyTvFocusZoomGlow(box, ctx, 1.15f, 6, UiHelper.COLOR_FOCUS_GLOW);
+        box.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline outline) {
+                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), UiHelper.GLASS_RADIUS_DP));
+            }
+        });
+        box.setClipToOutline(true);
+        UiHelper.applyTvFocusZoomGlow(box, ctx, 1.15f, 20, UiHelper.COLOR_FOCUS_GLOW);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -3124,8 +3128,8 @@ public class PlayerScreenController {
         group.setClipChildren(false);
         group.setClipToPadding(false);
         group.setPadding(UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 2));
-        group.setBackground(UiHelper.createPillDrawable(
-                ctx, 18, Color.argb(148, 22, 24, 34), Color.argb(30, 255, 255, 255), 1.0f));
+        UiHelper.applyGlassCardStyle(group, ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.COLOR_SURFACE_GLASS, 20);
+        group.setClipToOutline(false);
         group.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, UiHelper.dp(ctx, 36)));
         return group;
@@ -3134,13 +3138,13 @@ public class PlayerScreenController {
     private FrameLayout makeGroupSlotIcon(Context ctx, int iconRes) {
         FrameLayout slot = new FrameLayout(ctx);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, 16, Color.argb(232, 58, 66, 98), Color.WHITE, 2.0f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         slot.setBackground(states);
-        UiHelper.applyTvFocusZoomGlow(slot, ctx, 1.16f, 6, UiHelper.COLOR_FOCUS_GLOW);
+        UiHelper.applyTvFocusZoomGlow(slot, ctx, 1.16f, 20, UiHelper.COLOR_FOCUS_GLOW);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -3152,14 +3156,23 @@ public class PlayerScreenController {
 
     private FrameLayout makeClearTransportIcon(Context ctx, int iconRes) {
         FrameLayout box = new FrameLayout(ctx);
+        android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, 24, Color.argb(195, 48, 54, 82), Color.WHITE, 2.0f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
-        states.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        states.addState(new int[]{}, normal);
         box.setBackground(states);
-        UiHelper.applyTvFocusZoomGlow(box, ctx, 1.18f, 6, UiHelper.COLOR_FOCUS_GLOW);
+        box.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline outline) {
+                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), UiHelper.GLASS_RADIUS_DP));
+            }
+        });
+        box.setClipToOutline(true);
+        UiHelper.applyTvFocusZoomGlow(box, ctx, 1.18f, 20, UiHelper.COLOR_FOCUS_GLOW);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -3170,9 +3183,9 @@ public class PlayerScreenController {
 
     private android.graphics.drawable.StateListDrawable makeSquircleSelectorDrawable(Context ctx) {
         android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
-                ctx, 16, Color.argb(148, 52, 54, 66), Color.argb(42, 255, 255, 255), 1.0f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, 16, Color.argb(238, 76, 82, 110), Color.WHITE, 2.4f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);

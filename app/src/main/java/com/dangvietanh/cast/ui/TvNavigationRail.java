@@ -80,8 +80,8 @@ public class TvNavigationRail extends FrameLayout {
         railCard.setClipToPadding(false);
         railCard.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 14),
                 UiHelper.dp(context, 10), UiHelper.dp(context, 12));
-        railCard.setBackground(UiHelper.createPillDrawable(
-                context, 18, Color.argb(228, 13, 15, 24), Color.argb(20, 255, 255, 255), 1.0f));
+        UiHelper.applyGlassCardStyle(railCard, context, UiHelper.GLASS_RADIUS_DP, UiHelper.COLOR_SURFACE_GLASS, 20);
+        railCard.setClipToOutline(false);
         addView(railCard, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -163,9 +163,7 @@ public class TvNavigationRail extends FrameLayout {
         statusChip.setGravity(Gravity.CENTER_VERTICAL);
         statusChip.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 6),
                 UiHelper.dp(context, 10), UiHelper.dp(context, 6));
-        statusChip.setBackground(UiHelper.createPillDrawable(
-                context, 11, Color.argb(115, 255, 255, 255) & 0x16FFFFFF, Color.argb(24, 255, 255, 255), 1.0f));
-        UiHelper.applyFocusableGlassButton(statusChip, context, 11, false);
+        UiHelper.applyFocusableGlassButton(statusChip, context, UiHelper.GLASS_RADIUS_DP, false);
 
         View greenDot = new View(context);
         greenDot.setBackground(UiHelper.createGlassRect(context, 4, UiHelper.COLOR_GREEN, Color.TRANSPARENT, 0));
@@ -244,7 +242,7 @@ public class TvNavigationRail extends FrameLayout {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             row.setDefaultFocusHighlightEnabled(false);
         }
-        row.setBackground(UiHelper.createSidebarItemStateDrawable(ctx, 11, active));
+        row.setBackground(UiHelper.createSidebarItemStateDrawable(ctx, UiHelper.GLASS_RADIUS_DP, active));
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -329,7 +327,7 @@ public class TvNavigationRail extends FrameLayout {
         Context ctx = getContext();
         for (NavItem item : navItems) {
             boolean active = item.id.equals(activeTabId);
-            item.rowView.setBackground(UiHelper.createSidebarItemStateDrawable(ctx, 11, active));
+            item.rowView.setBackground(UiHelper.createSidebarItemStateDrawable(ctx, UiHelper.GLASS_RADIUS_DP, active));
             boolean bright = active || item.rowView.hasFocus();
             item.iconIv.setColorFilter(bright ? Color.WHITE : UiHelper.COLOR_TEXT_MUTED, PorterDuff.Mode.SRC_IN);
             item.labelTv.setTextColor(bright ? Color.WHITE : UiHelper.COLOR_TEXT_SECONDARY);

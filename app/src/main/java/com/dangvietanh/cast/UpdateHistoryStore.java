@@ -125,6 +125,12 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v14 = new ArrayList<>();
+        v14.add("Đồng bộ toàn bộ nút bấm, biểu tượng, thanh menu và thẻ điều khiển sang phong cách kính mờ trong suốt bo tròn 40dp không viền kèm bóng đổ sâu sang trọng");
+        v14.add("Tối ưu tự động độ trong suốt tương thích cả Android TV thế hệ mới lẫn các dòng Tivi, máy chiếu đời cũ giúp hiển thị sắc nét và dịu mắt");
+        v14.add("Giữ nguyên hiệu ứng phóng to mượt mà và phát sáng khi chọn bằng điều khiển từ xa trên Trang chủ, Thông tin phim và Trình phát");
+        list.add(new HistoryEntry(14L, "4.5", "24/11/2026", "Giao Diện Kính Mờ Trong Suốt 40dp Không Viền Toàn Hệ Thống", v14));
+
         List<String> v13 = new ArrayList<>();
         v13.add("Nâng cấp hiệu ứng chọn bằng remote TV: mục đang chọn tự động phóng to mượt mà, nổi khối 3D và phát sáng viền hồng rực rỡ trên mọi dòng tivi");
         v13.add("Tối ưu điều hướng 4 hướng liền mạch xuyên suốt từ thanh menu trái, thanh công cụ góc trên đến từng thẻ phim ở Trang chủ");

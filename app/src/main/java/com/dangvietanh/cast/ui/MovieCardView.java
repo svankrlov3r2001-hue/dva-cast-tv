@@ -204,7 +204,7 @@ public final class MovieCardView {
         badgeLeftTv.setTypeface(null, Typeface.BOLD);
         badgeLeftTv.setPadding(UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 2));
         badgeLeftTv.setBackground(UiHelper.createPillDrawable(
-                ctx, 5, Color.argb(195, 11, 13, 20), Color.argb(30, 255, 255, 255), 0.7f));
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f));
         FrameLayout.LayoutParams blLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
         blLp.setMargins(UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 6), 0, 0);
@@ -217,7 +217,7 @@ public final class MovieCardView {
         badgeRightTv.setTypeface(null, Typeface.BOLD);
         badgeRightTv.setPadding(UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 2));
         badgeRightTv.setBackground(UiHelper.createPillDrawable(
-                ctx, 5, Color.argb(195, 11, 13, 20), Color.argb(30, 255, 255, 255), 0.7f));
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f));
         FrameLayout.LayoutParams brLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
         brLp.setMargins(0, UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 6), 0);
@@ -241,7 +241,7 @@ public final class MovieCardView {
 
             playBadge = new FrameLayout(ctx);
             playBadge.setBackground(UiHelper.createPillDrawable(
-                    ctx, 14, Color.argb(185, 14, 16, 26), Color.argb(195, 255, 255, 255), 1.2f));
+                    ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f));
             ImageView playIv = new ImageView(ctx);
             playIv.setImageResource(R.drawable.ic_play);
             playIv.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);

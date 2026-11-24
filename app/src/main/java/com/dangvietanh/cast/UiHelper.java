@@ -59,7 +59,12 @@ public final class UiHelper {
     public static final int COLOR_BG_BASE = Color.parseColor("#090B12");
     public static final int COLOR_SURFACE_GLASS = Color.argb(214, 15, 17, 26);
     public static final int COLOR_SURFACE_CARD = Color.argb(185, 22, 25, 38);
-    public static final int COLOR_BORDER_GLASS = Color.argb(24, 255, 255, 255);
+    public static final int COLOR_BORDER_GLASS = Color.TRANSPARENT;
+    public static final int GLASS_RADIUS_DP = 40;
+    public static final int COLOR_GLASS_BLUR_FILL = Color.argb(51, 20, 20, 20);
+    public static final int COLOR_GLASS_FALLBACK_FILL = Color.argb(102, 20, 20, 20);
+    public static final int COLOR_GLASS_SHADOW_SPOT = Color.argb(128, 0, 0, 0);
+    public static final int COLOR_GLASS_SHADOW_AMBIENT = Color.argb(96, 0, 0, 0);
     public static final int COLOR_BTN_FOCUSED = Color.argb(46, 255, 255, 255);
     public static final int COLOR_ACCENT_RED = Color.parseColor("#E50914");
     public static final int COLOR_ACCENT_PINK = Color.parseColor("#D50055");
@@ -87,6 +92,14 @@ public final class UiHelper {
 
     public static boolean supportsNativeBlur() {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S;
+    }
+
+    public static int getGlassBackgroundColor() {
+        return supportsNativeBlur() ? COLOR_GLASS_BLUR_FILL : COLOR_GLASS_FALLBACK_FILL;
+    }
+
+    public static int getGlassFocusedBackgroundColor() {
+        return supportsNativeBlur() ? Color.argb(96, 56, 56, 70) : Color.argb(148, 52, 52, 66);
     }
 
     public static void setBackdropBlur(View view, boolean enabled) {
@@ -196,21 +209,20 @@ public final class UiHelper {
      * Refined Frosted Obsidian Glass drawable (slim radii <= 20dp, delicate hairline rim,
      * crisp TV focus outline, zero cloudy white fog).
      */
+    /**
+     * Borderless Liquid Glass drawable:
+     * - 40dp corner radius
+     * - Zero border strokes
+     * - rgba(20, 20, 20, 0.2) on API >= 31, rgba(20, 20, 20, 0.4) fallback on older TVs
+     */
     public static Drawable createLiquidGlassDrawable(
             Context ctx, int radiusDp, final boolean isModalCard, final boolean isFocused, final boolean isActiveAccent) {
-        final int effRadius = isModalCard ? Math.min(radiusDp, 20) : Math.min(radiusDp, 18);
-        final float radiusPx = dpF(ctx, effRadius);
-        final float strokePx = dpF(ctx, isFocused ? 2.2f : 1.0f);
-        final float glowStrokePx = dpF(ctx, isFocused ? 5.0f : 0f);
+        final float radiusPx = dpF(ctx, GLASS_RADIUS_DP);
         return new Drawable() {
             private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             private final Paint sheenPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final Paint glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final Paint rimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             private final Path clipPath = new Path();
             private final RectF rectF = new RectF();
-            private final RectF strokeRect = new RectF();
-            private final RectF glowRect = new RectF();
             private int lastW = -1;
             private int lastH = -1;
 
@@ -228,11 +240,6 @@ public final class UiHelper {
                     clipPath.reset();
                     clipPath.addRoundRect(rectF, radiusPx, radiusPx, Path.Direction.CW);
 
-                    float inset = strokePx * 0.5f;
-                    strokeRect.set(rectF.left + inset, rectF.top + inset, rectF.right - inset, rectF.bottom - inset);
-                    float glowInset = glowStrokePx * 0.5f;
-                    glowRect.set(rectF.left + glowInset, rectF.top + glowInset, rectF.right - glowInset, rectF.bottom - glowInset);
-
                     if (isActiveAccent) {
                         basePaint.setShader(new LinearGradient(
                                 0, 0, w, h,
@@ -240,60 +247,33 @@ public final class UiHelper {
                                 isFocused ? Color.parseColor("#FF1F7A") : Color.parseColor("#C90052"),
                                 Shader.TileMode.CLAMP));
                     } else if (isFocused) {
-                        basePaint.setShader(new LinearGradient(
-                                0, 0, 0, h,
-                                Color.argb(244, 46, 52, 76),
-                                Color.argb(236, 28, 32, 48),
-                                Shader.TileMode.CLAMP));
-                    } else if (isModalCard) {
-                        basePaint.setShader(new LinearGradient(
-                                0, 0, 0, h,
-                                supportsNativeBlur() ? Color.argb(198, 17, 19, 30) : Color.argb(232, 16, 18, 28),
-                                supportsNativeBlur() ? Color.argb(190, 12, 14, 22) : Color.argb(226, 11, 13, 20),
-                                Shader.TileMode.CLAMP));
+                        basePaint.setShader(null);
+                        basePaint.setColor(getGlassFocusedBackgroundColor());
                     } else {
-                        basePaint.setShader(new LinearGradient(
-                                0, 0, 0, h,
-                                supportsNativeBlur() ? Color.argb(166, 22, 25, 38) : Color.argb(204, 20, 23, 35),
-                                supportsNativeBlur() ? Color.argb(154, 15, 17, 27) : Color.argb(192, 14, 16, 25),
-                                Shader.TileMode.CLAMP));
+                        basePaint.setShader(null);
+                        basePaint.setColor(getGlassBackgroundColor());
                     }
 
-                    sheenPaint.setShader(new LinearGradient(
-                            0, 0, 0, Math.max(1f, h * 0.24f),
-                            Color.argb(isFocused ? 46 : 14, 255, 255, 255),
-                            Color.TRANSPARENT,
-                            Shader.TileMode.CLAMP));
-
                     if (isFocused) {
-                        glowPaint.setStyle(Paint.Style.STROKE);
-                        glowPaint.setStrokeWidth(glowStrokePx);
-                        glowPaint.setColor(isActiveAccent
-                                ? Color.argb(145, 255, 160, 195)
-                                : Color.argb(120, 255, 46, 99));
-                    }
-
-                    rimPaint.setStyle(Paint.Style.STROKE);
-                    rimPaint.setStrokeWidth(strokePx);
-                    if (isFocused) {
-                        rimPaint.setColor(Color.WHITE);
-                    } else if (isActiveAccent) {
-                        rimPaint.setColor(Color.argb(72, 255, 175, 195));
+                        sheenPaint.setShader(new LinearGradient(
+                                0, 0, 0, Math.max(1f, h),
+                                Color.argb(48, 255, 255, 255),
+                                Color.argb(10, 255, 255, 255),
+                                Shader.TileMode.CLAMP));
                     } else {
-                        rimPaint.setColor(Color.argb(24, 255, 255, 255));
+                        sheenPaint.setShader(new LinearGradient(
+                                0, 0, 0, Math.max(1f, h * 0.26f),
+                                Color.argb(16, 255, 255, 255),
+                                Color.TRANSPARENT,
+                                Shader.TileMode.CLAMP));
                     }
                 }
 
                 canvas.save();
                 canvas.clipPath(clipPath);
                 canvas.drawRect(rectF, basePaint);
-                canvas.drawRect(rectF.left, rectF.top, rectF.right, rectF.top + (h * 0.26f), sheenPaint);
-                if (isFocused) {
-                    canvas.drawRoundRect(glowRect, Math.max(0f, radiusPx - glowStrokePx * 0.5f),
-                            Math.max(0f, radiusPx - glowStrokePx * 0.5f), glowPaint);
-                }
-                canvas.drawRoundRect(strokeRect, Math.max(0f, radiusPx - strokePx * 0.5f),
-                        Math.max(0f, radiusPx - strokePx * 0.5f), rimPaint);
+                float sheenBottom = isFocused ? rectF.bottom : (rectF.top + (h * 0.26f));
+                canvas.drawRect(rectF.left, rectF.top, rectF.right, sheenBottom, sheenPaint);
                 canvas.restore();
             }
 
@@ -370,22 +350,21 @@ public final class UiHelper {
             GradientDrawable act = new GradientDrawable(
                     GradientDrawable.Orientation.LEFT_RIGHT,
                     new int[]{Color.parseColor("#E50914"), Color.parseColor("#C90052")});
-            act.setCornerRadius(dpF(ctx, radiusDp));
+            act.setCornerRadius(dpF(ctx, GLASS_RADIUS_DP));
             normal = act;
         } else {
-            normal = createGlassRect(ctx, radiusDp, Color.TRANSPARENT, Color.TRANSPARENT, 0);
+            normal = createGlassRect(ctx, GLASS_RADIUS_DP, Color.TRANSPARENT, Color.TRANSPARENT, 0);
         }
 
         GradientDrawable focused = new GradientDrawable();
         focused.setShape(GradientDrawable.RECTANGLE);
-        focused.setCornerRadius(dpF(ctx, radiusDp));
+        focused.setCornerRadius(dpF(ctx, GLASS_RADIUS_DP));
         if (active) {
             focused.setColors(new int[]{Color.parseColor("#FF2E50"), Color.parseColor("#FF0066")});
             focused.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);
         } else {
-            focused.setColor(Color.argb(58, 255, 255, 255));
+            focused.setColor(Color.argb(72, 255, 255, 255));
         }
-        focused.setStroke(Math.max(2, dp(ctx, 2.0f)), Color.WHITE);
 
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
@@ -406,106 +385,99 @@ public final class UiHelper {
     }
 
     public static void applyGlassCardStyle(final View view, final Context ctx, final int radiusDp, int fillColor, int shadowDp) {
-        int effRadius = Math.min(radiusDp, 20);
         if (fillColor == COLOR_SURFACE_GLASS || fillColor == COLOR_SURFACE_CARD) {
-            view.setBackground(createLiquidGlassDrawable(ctx, effRadius, true, false, false));
+            view.setBackground(createLiquidGlassDrawable(ctx, GLASS_RADIUS_DP, true, false, false));
         } else {
-            view.setBackground(createGlassRect(ctx, effRadius, fillColor, COLOR_BORDER_GLASS, 1));
+            view.setBackground(createGlassRect(ctx, GLASS_RADIUS_DP, fillColor, Color.TRANSPARENT, 0));
         }
-        applyElevationAndOutline(view, ctx, effRadius, Math.min(shadowDp, 16));
+        applyElevationAndOutline(view, ctx, GLASS_RADIUS_DP, Math.max(shadowDp, 20));
     }
 
     public static void applySubtleGlassPill(final View view, final Context ctx, final int radiusDp) {
-        int effRadius = Math.min(radiusDp, 18);
-        view.setBackground(createPillDrawable(ctx, effRadius,
-                Color.argb(170, 18, 20, 32), Color.argb(26, 255, 255, 255), 1.0f));
-        applyElevationAndOutline(view, ctx, effRadius, 6);
+        view.setBackground(createPillDrawable(ctx, GLASS_RADIUS_DP,
+                getGlassBackgroundColor(), Color.TRANSPARENT, 0f));
+        applyElevationAndOutline(view, ctx, GLASS_RADIUS_DP, 20);
     }
 
     public static void applyFocusableTileStyle(final View view, final Context ctx, final int radiusDp, int normalFill, int focusedFill) {
-        int effRadius = Math.min(radiusDp, 16);
         Drawable normal = (normalFill == COLOR_SURFACE_GLASS || normalFill == COLOR_SURFACE_CARD)
-                ? createLiquidGlassDrawable(ctx, effRadius, false, false, false)
-                : createGlassRect(ctx, effRadius, normalFill, COLOR_BORDER_GLASS, 1);
-        Drawable focused = createLiquidGlassDrawable(ctx, effRadius, false, true, false);
-        Drawable pressed = createLiquidGlassDrawable(ctx, effRadius, false, true, false);
+                ? createLiquidGlassDrawable(ctx, GLASS_RADIUS_DP, false, false, false)
+                : createGlassRect(ctx, GLASS_RADIUS_DP, normalFill, Color.TRANSPARENT, 0);
+        Drawable focused = createLiquidGlassDrawable(ctx, GLASS_RADIUS_DP, false, true, false);
+        Drawable pressed = createLiquidGlassDrawable(ctx, GLASS_RADIUS_DP, false, true, false);
 
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, pressed);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, normal);
         view.setBackground(states);
-        configureTvFocus(view, ctx, effRadius, 1.08f, 8);
+        configureTvFocus(view, ctx, GLASS_RADIUS_DP, 1.08f, 20);
     }
 
     public static void applyFocusableGlassButton(final View view, final Context ctx, final int radiusDp, boolean isPrimaryAccent) {
-        int effRadius = Math.min(radiusDp, 18);
-        Drawable normal = createLiquidGlassDrawable(ctx, effRadius, false, false, isPrimaryAccent);
-        Drawable focused = createLiquidGlassDrawable(ctx, effRadius, false, true, isPrimaryAccent);
+        Drawable normal = createLiquidGlassDrawable(ctx, GLASS_RADIUS_DP, false, false, isPrimaryAccent);
+        Drawable focused = createLiquidGlassDrawable(ctx, GLASS_RADIUS_DP, false, true, isPrimaryAccent);
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, normal);
         view.setBackground(states);
-        configureTvFocus(view, ctx, effRadius, 1.09f, 8);
+        configureTvFocus(view, ctx, GLASS_RADIUS_DP, 1.09f, 20);
     }
 
     public static void applyCircularIconButtonStyle(final View view, final Context ctx, final int sizeDp) {
-        int r = Math.max(12, sizeDp / 2);
-        Drawable normal = createPillDrawable(ctx, r, Color.argb(170, 20, 22, 34), Color.argb(32, 255, 255, 255), 1.0f);
-        Drawable focused = createPillDrawable(ctx, r, Color.argb(242, 48, 54, 82), Color.WHITE, 2.0f);
+        Drawable normal = createPillDrawable(ctx, GLASS_RADIUS_DP, getGlassBackgroundColor(), Color.TRANSPARENT, 0f);
+        Drawable focused = createPillDrawable(ctx, GLASS_RADIUS_DP, getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, normal);
         view.setBackground(states);
-        configureTvFocus(view, ctx, r, 1.14f, 6);
+        configureTvFocus(view, ctx, GLASS_RADIUS_DP, 1.14f, 20);
     }
 
     public static void applyCompactChipStyle(final View view, final Context ctx, final int radiusDp, boolean selected) {
-        int r = Math.min(radiusDp, 14);
         Drawable normal;
         if (selected) {
             GradientDrawable g = new GradientDrawable(
                     GradientDrawable.Orientation.LEFT_RIGHT,
                     new int[]{Color.parseColor("#E50914"), Color.parseColor("#C90052")});
-            g.setCornerRadius(dpF(ctx, r));
+            g.setCornerRadius(dpF(ctx, GLASS_RADIUS_DP));
             normal = g;
         } else {
-            normal = createPillDrawable(ctx, r, Color.argb(175, 22, 25, 38), Color.argb(28, 255, 255, 255), 1.0f);
+            normal = createPillDrawable(ctx, GLASS_RADIUS_DP, getGlassBackgroundColor(), Color.TRANSPARENT, 0f);
         }
         Drawable focused;
         if (selected) {
             GradientDrawable fg = new GradientDrawable(
                     GradientDrawable.Orientation.LEFT_RIGHT,
                     new int[]{Color.parseColor("#FF2A42"), Color.parseColor("#FF1F7A")});
-            fg.setCornerRadius(dpF(ctx, r));
-            fg.setStroke(Math.max(2, dp(ctx, 2.0f)), Color.WHITE);
+            fg.setCornerRadius(dpF(ctx, GLASS_RADIUS_DP));
             focused = fg;
         } else {
-            focused = createPillDrawable(ctx, r, Color.argb(240, 50, 56, 84), Color.WHITE, 2.0f);
+            focused = createPillDrawable(ctx, GLASS_RADIUS_DP, getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
         }
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, normal);
         view.setBackground(states);
-        configureTvFocus(view, ctx, r, 1.08f, 6);
+        configureTvFocus(view, ctx, GLASS_RADIUS_DP, 1.08f, 20);
     }
 
     public static void applyPrimaryGradientButton(final View view, final Context ctx, final int radiusDp) {
-        applyFocusableGlassButton(view, ctx, radiusDp, true);
+        applyFocusableGlassButton(view, ctx, GLASS_RADIUS_DP, true);
     }
 
     public static void setButtonSelectedVisual(final View view, final Context ctx, final int radiusDp, boolean selected) {
-        applyFocusableGlassButton(view, ctx, radiusDp, selected);
+        applyFocusableGlassButton(view, ctx, GLASS_RADIUS_DP, selected);
     }
 
     private static void applyElevationAndOutline(final View view, final Context ctx, final int radiusDp, int shadowDp) {
         view.setElevation(dp(ctx, shadowDp));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            view.setOutlineAmbientShadowColor(Color.argb(165, 0, 0, 0));
-            view.setOutlineSpotShadowColor(Color.argb(210, 0, 0, 0));
+            view.setOutlineAmbientShadowColor(COLOR_GLASS_SHADOW_AMBIENT);
+            view.setOutlineSpotShadowColor(COLOR_GLASS_SHADOW_SPOT);
         }
         view.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -535,8 +507,8 @@ public final class UiHelper {
                 view.setOutlineAmbientShadowColor(Color.argb(
                         195, Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor)));
             } else {
-                view.setOutlineSpotShadowColor(Color.argb(210, 0, 0, 0));
-                view.setOutlineAmbientShadowColor(Color.argb(165, 0, 0, 0));
+                view.setOutlineSpotShadowColor(COLOR_GLASS_SHADOW_SPOT);
+                view.setOutlineAmbientShadowColor(COLOR_GLASS_SHADOW_AMBIENT);
             }
         }
     }
@@ -550,6 +522,10 @@ public final class UiHelper {
             view.setDefaultFocusHighlightEnabled(false);
         }
         view.setElevation(dp(ctx, baseShadowDp));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            view.setOutlineSpotShadowColor(COLOR_GLASS_SHADOW_SPOT);
+            view.setOutlineAmbientShadowColor(COLOR_GLASS_SHADOW_AMBIENT);
+        }
         view.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
@@ -682,7 +658,7 @@ public final class UiHelper {
         toastPill.setOrientation(LinearLayout.HORIZONTAL);
         toastPill.setGravity(Gravity.CENTER_VERTICAL);
         toastPill.setPadding(dp(ctx, 18), dp(ctx, 9), dp(ctx, 20), dp(ctx, 9));
-        applyGlassCardStyle(toastPill, ctx, 18, COLOR_SURFACE_GLASS, 14);
+        applyGlassCardStyle(toastPill, ctx, GLASS_RADIUS_DP, COLOR_SURFACE_GLASS, 20);
 
         View dot = new View(ctx);
         dot.setBackground(createGlassRect(ctx, 8, accentColor != 0 ? accentColor : COLOR_ACCENT_RED, Color.TRANSPARENT, 0));
