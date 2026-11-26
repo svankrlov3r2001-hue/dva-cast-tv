@@ -38,8 +38,11 @@ public class AccountProfileModal {
     private final TextView rolePillTv;
     private final TextView deviceTv;
     private final LinearLayout btnSettings;
+    private final LinearLayout btnUpdate;
+    private final LinearLayout btnLogout;
     private final ImageView btnClose;
 
+    private View previouslyFocused;
     private boolean showing = false;
 
     public AccountProfileModal(Context context, View backgroundToBlur, Actions actions) {
@@ -51,7 +54,9 @@ public class AccountProfileModal {
         rootOverlay.setBackground(UiHelper.createOverlayBackdropDrawable());
         rootOverlay.setVisibility(View.GONE);
         rootOverlay.setClickable(true);
-        rootOverlay.setFocusable(true);
+        rootOverlay.setFocusable(false);
+        rootOverlay.setClipChildren(false);
+        rootOverlay.setClipToPadding(false);
 
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         int screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(context, 960);
@@ -60,9 +65,12 @@ public class AccountProfileModal {
         mainCard = new LinearLayout(context);
         mainCard.setOrientation(LinearLayout.VERTICAL);
         mainCard.setGravity(Gravity.CENTER_HORIZONTAL);
+        mainCard.setClipChildren(false);
+        mainCard.setClipToPadding(false);
         mainCard.setPadding(UiHelper.dp(context, 24), UiHelper.dp(context, 22),
                 UiHelper.dp(context, 24), UiHelper.dp(context, 22));
         UiHelper.applyGlassCardStyle(mainCard, context, 20, UiHelper.COLOR_SURFACE_GLASS, 18);
+        mainCard.setClipToOutline(false);
 
         FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(
                 cardW, FrameLayout.LayoutParams.WRAP_CONTENT);
@@ -73,6 +81,8 @@ public class AccountProfileModal {
         LinearLayout headerRow = new LinearLayout(context);
         headerRow.setOrientation(LinearLayout.HORIZONTAL);
         headerRow.setGravity(Gravity.CENTER_VERTICAL);
+        headerRow.setClipChildren(false);
+        headerRow.setClipToPadding(false);
         LinearLayout.LayoutParams hdrLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         hdrLp.bottomMargin = UiHelper.dp(context, 20);
@@ -85,6 +95,7 @@ public class AccountProfileModal {
         headerRow.addView(hdrTitle, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         btnClose = new ImageView(context);
+        btnClose.setId(View.generateViewId());
         btnClose.setImageResource(R.drawable.ic_close);
         btnClose.setColorFilter(UiHelper.COLOR_TEXT_PRIMARY, PorterDuff.Mode.SRC_IN);
         btnClose.setPadding(UiHelper.dp(context, 8), UiHelper.dp(context, 8), UiHelper.dp(context, 8), UiHelper.dp(context, 8));
@@ -140,6 +151,7 @@ public class AccountProfileModal {
         mainCard.addView(deviceTv, dvLp);
 
         btnSettings = buildActionRow(R.drawable.ic_settings, "Cài đặt TV & Lịch sử phiên bản", false);
+        btnSettings.setId(View.generateViewId());
         btnSettings.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -149,7 +161,8 @@ public class AccountProfileModal {
         });
         mainCard.addView(btnSettings);
 
-        LinearLayout btnUpdate = buildActionRow(R.drawable.ic_refresh, "Kiểm tra cập nhật ứng dụng", false);
+        btnUpdate = buildActionRow(R.drawable.ic_refresh, "Kiểm tra cập nhật ứng dụng", false);
+        btnUpdate.setId(View.generateViewId());
         btnUpdate.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -159,7 +172,8 @@ public class AccountProfileModal {
         });
         mainCard.addView(btnUpdate);
 
-        LinearLayout btnLogout = buildActionRow(R.drawable.ic_logout, "Đăng xuất tài khoản", true);
+        btnLogout = buildActionRow(R.drawable.ic_logout, "Đăng xuất tài khoản", true);
+        btnLogout.setId(View.generateViewId());
         btnLogout.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -168,6 +182,27 @@ public class AccountProfileModal {
             }
         });
         mainCard.addView(btnLogout);
+
+        // Trap D-Pad cleanly inside modal
+        btnClose.setNextFocusDownId(btnSettings.getId());
+        btnClose.setNextFocusUpId(btnClose.getId());
+        btnClose.setNextFocusLeftId(btnClose.getId());
+        btnClose.setNextFocusRightId(btnClose.getId());
+
+        btnSettings.setNextFocusUpId(btnClose.getId());
+        btnSettings.setNextFocusDownId(btnUpdate.getId());
+        btnSettings.setNextFocusLeftId(btnSettings.getId());
+        btnSettings.setNextFocusRightId(btnSettings.getId());
+
+        btnUpdate.setNextFocusUpId(btnSettings.getId());
+        btnUpdate.setNextFocusDownId(btnLogout.getId());
+        btnUpdate.setNextFocusLeftId(btnUpdate.getId());
+        btnUpdate.setNextFocusRightId(btnUpdate.getId());
+
+        btnLogout.setNextFocusUpId(btnUpdate.getId());
+        btnLogout.setNextFocusDownId(btnClose.getId());
+        btnLogout.setNextFocusLeftId(btnLogout.getId());
+        btnLogout.setNextFocusRightId(btnLogout.getId());
     }
 
     private LinearLayout buildActionRow(int iconRes, String title, boolean accent) {
@@ -225,6 +260,7 @@ public class AccountProfileModal {
         }
 
         showing = true;
+        previouslyFocused = rootOverlay.getRootView() != null ? rootOverlay.getRootView().findFocus() : null;
         UiHelper.setBackdropBlur(backgroundToBlur, true);
         rootOverlay.setAlpha(0f);
         rootOverlay.setVisibility(View.VISIBLE);
@@ -256,6 +292,11 @@ public class AccountProfileModal {
                     @Override
                     public void run() {
                         rootOverlay.setVisibility(View.GONE);
+                        if (previouslyFocused != null) {
+                            previouslyFocused.requestFocus();
+                        } else if (backgroundToBlur != null) {
+                            backgroundToBlur.requestFocus();
+                        }
                     }
                 })
                 .start();

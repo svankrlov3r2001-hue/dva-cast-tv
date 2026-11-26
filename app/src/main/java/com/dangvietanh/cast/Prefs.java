@@ -35,6 +35,7 @@ public final class Prefs {
     private static final String KEY_SUB_FONT_STEP = "sub_font_step";
     private static final String KEY_SUB_POS_PCT = "sub_pos_pct";
     private static final String KEY_SUB_OUTLINE = "sub_outline";
+    private static final String KEY_SUB_BG_STYLE = "sub_bg_style";
     private static final String KEY_SUB_DELAY_SEC = "sub_delay_sec";
     private static final String KEY_SUB_EXTEND_SEC = "sub_extend_sec";
     private static final String KEY_SUB_TRANSLATE_LANG = "sub_translate_lang";
@@ -266,6 +267,14 @@ public final class Prefs {
         getPrefs(context).edit().putString(KEY_SUB_OUTLINE, outline != null ? outline : "uniform").apply();
     }
 
+    public static String getSubBgStyle(Context context) {
+        return getPrefs(context).getString(KEY_SUB_BG_STYLE, "none");
+    }
+
+    public static void setSubBgStyle(Context context, String style) {
+        getPrefs(context).edit().putString(KEY_SUB_BG_STYLE, style != null ? style : "none").apply();
+    }
+
     public static float getSubDelaySec(Context context) {
         return getPrefs(context).getFloat(KEY_SUB_DELAY_SEC, 0.0f);
     }
@@ -327,6 +336,7 @@ public final class Prefs {
                 .putInt(KEY_SUB_FONT_STEP, 9)
                 .putInt(KEY_SUB_POS_PCT, 10)
                 .putString(KEY_SUB_OUTLINE, "uniform")
+                .putString(KEY_SUB_BG_STYLE, "none")
                 .putFloat(KEY_SUB_DELAY_SEC, 0.0f)
                 .putFloat(KEY_SUB_EXTEND_SEC, 0.0f)
                 .putString(KEY_SUB_TRANSLATE_LANG, "")

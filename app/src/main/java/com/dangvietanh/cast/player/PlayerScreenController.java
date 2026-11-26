@@ -79,10 +79,12 @@ public class PlayerScreenController {
     private final View contrastOverlay;
     private final View transitionVeil;
 
-    // Loading pill
-    private final LinearLayout loadingCenter;
-    private final UiHelper.SpinnerView loadingSpinner;
-    private final TextView loadingStatusTv;
+    // Center Buffering Spinner (replaces center Play/Pause icon when loading/buffering)
+    private final FrameLayout centerPlayWrap;
+    private final UiHelper.SpinnerView centerPlaySpinner;
+    private final FrameLayout detachedBufferingHost;
+    private final UiHelper.SpinnerView detachedBufferingSpinner;
+    private boolean isLoadingOrBuffering = false;
 
     // Skip Intro & Auto-Next Cards
     private final TextView skipIntroBtn;
@@ -143,6 +145,8 @@ public class PlayerScreenController {
     private final TextView subModalCloseBtn;
     private final ScrollView subModalScroll;
     private final LinearLayout subModalBody;
+    private final int screenW;
+    private final int screenH;
 
     // Playback Session State
     private boolean showing = false;
@@ -209,15 +213,16 @@ public class PlayerScreenController {
                 @Override
                 public void onResult(ServerOrchestrator.CheckFileResult res) {
                     if (!showing || seq != episodeSessionSeq) return;
-                    List<ServerOrchestrator.ServerState> updated = serverOrchestrator.applyCheckFile(serverStates, sfk, res);
+                    List<ServerOrchestrator.ServerState> updated = serverOrchestrator.applyCheckFile(
+                            serverStates, sfk, res, (long) lastDurSec);
                     serverStates.clear();
                     serverStates.addAll(updated);
 
                     if (activeModal == MODAL_SERVERS) {
-                        renderSubModalContent();
+                        refreshServersModalPreservingFocus();
                     }
-                    if (activeStreamUrl.isEmpty() && loadingCenter.getVisibility() == View.VISIBLE && res != null) {
-                        loadingStatusTv.setText("Đang chuẩn bị máy chủ (" + res.progressNum + "%)...");
+                    if (activeStreamUrl.isEmpty() && isLoadingOrBuffering && res != null) {
+                        hudMetaTv.setText("Đang chuẩn bị máy chủ (" + res.progressNum + "%)...");
                     }
 
                     boolean anyStillPreparing = false;
@@ -317,7 +322,7 @@ public class PlayerScreenController {
 
                     @Override
                     public void onFirstFrame() {
-                        loadingCenter.setVisibility(View.GONE);
+                        updateBufferingIndicator(false);
                         fadeTransitionVeilOut();
                     }
 
@@ -367,26 +372,26 @@ public class PlayerScreenController {
         rootFrame.addView(transitionVeil, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-        // 5. Loading Pill
-        loadingCenter = new LinearLayout(context);
-        loadingCenter.setOrientation(LinearLayout.HORIZONTAL);
-        loadingCenter.setGravity(Gravity.CENTER_VERTICAL);
-        loadingCenter.setPadding(UiHelper.dp(context, 24), UiHelper.dp(context, 14),
-                UiHelper.dp(context, 26), UiHelper.dp(context, 14));
-        UiHelper.applyGlassCardStyle(loadingCenter, context, 32, UiHelper.COLOR_SURFACE_GLASS, 20);
-        loadingSpinner = new UiHelper.SpinnerView(context);
-        LinearLayout.LayoutParams lsp = new LinearLayout.LayoutParams(UiHelper.dp(context, 26), UiHelper.dp(context, 26));
-        lsp.rightMargin = UiHelper.dp(context, 12);
-        loadingCenter.addView(loadingSpinner, lsp);
-        loadingStatusTv = new TextView(context);
-        loadingStatusTv.setText("Đang khởi tạo trình phát...");
-        loadingStatusTv.setTextColor(Color.WHITE);
-        loadingStatusTv.setTextSize(14.5f);
-        loadingStatusTv.setTypeface(null, Typeface.BOLD);
-        loadingCenter.addView(loadingStatusTv);
-        FrameLayout.LayoutParams lcLp = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
-        rootFrame.addView(loadingCenter, lcLp);
+        // 5. Detached Center Buffering Spinner (shown at exact Play/Pause center when HUD is hidden)
+        detachedBufferingHost = new FrameLayout(context);
+        detachedBufferingHost.setFocusable(false);
+        detachedBufferingHost.setClickable(false);
+        detachedBufferingHost.setBackground(UiHelper.createPillDrawable(
+                context, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f));
+        detachedBufferingHost.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline outline) {
+                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), UiHelper.GLASS_RADIUS_DP));
+            }
+        });
+        detachedBufferingHost.setClipToOutline(true);
+        detachedBufferingSpinner = new UiHelper.SpinnerView(context);
+        detachedBufferingSpinner.setSpinning(false);
+        detachedBufferingHost.addView(detachedBufferingSpinner, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 34), UiHelper.dp(context, 34), Gravity.CENTER));
+        detachedBufferingHost.setVisibility(View.GONE);
+        rootFrame.addView(detachedBufferingHost, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 62), UiHelper.dp(context, 62), Gravity.CENTER));
 
         // 6. Skip Intro Pill
         skipIntroBtn = new TextView(context);
@@ -396,7 +401,7 @@ public class PlayerScreenController {
         skipIntroBtn.setTypeface(null, Typeface.BOLD);
         skipIntroBtn.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 11),
                 UiHelper.dp(context, 20), UiHelper.dp(context, 11));
-        UiHelper.applyFocusableGlassButton(skipIntroBtn, context, 24, false);
+        applyPlayerFocusButton(skipIntroBtn, context, 24, false, 1.07f);
         skipIntroBtn.setVisibility(View.GONE);
         skipIntroBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -757,7 +762,7 @@ public class PlayerScreenController {
         rwLp.rightMargin = UiHelper.dp(context, 36);
         centerTransport.addView(btnRew, rwLp);
 
-        FrameLayout centerPlayWrap = new FrameLayout(context);
+        centerPlayWrap = new FrameLayout(context);
         centerPlayWrap.setId(View.generateViewId());
         centerPlayWrap.setBackground(makeSquircleSelectorDrawable(context));
         centerPlayWrap.setOutlineProvider(new ViewOutlineProvider() {
@@ -767,12 +772,17 @@ public class PlayerScreenController {
             }
         });
         centerPlayWrap.setClipToOutline(true);
-        UiHelper.applyTvFocusZoomGlow(centerPlayWrap, context, 1.14f, 20, UiHelper.COLOR_FOCUS_GLOW);
+        applyPlayerTvFocusAnimation(centerPlayWrap, context, 1.10f, 16);
         playPauseIcon = new ImageView(context);
         playPauseIcon.setImageResource(R.drawable.ic_pause);
         playPauseIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
         centerPlayWrap.addView(playPauseIcon, new FrameLayout.LayoutParams(
                 UiHelper.dp(context, 28), UiHelper.dp(context, 28), Gravity.CENTER));
+        centerPlaySpinner = new UiHelper.SpinnerView(context);
+        centerPlaySpinner.setSpinning(false);
+        centerPlaySpinner.setVisibility(View.GONE);
+        centerPlayWrap.addView(centerPlaySpinner, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 34), UiHelper.dp(context, 34), Gravity.CENTER));
         centerPlayWrap.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -829,7 +839,7 @@ public class PlayerScreenController {
                 UiHelper.dp(context, 4), UiHelper.dp(context, 6));
         android.graphics.drawable.StateListDrawable seekFocusStates = new android.graphics.drawable.StateListDrawable();
         seekFocusStates.addState(new int[]{android.R.attr.state_focused},
-                UiHelper.createGlowingFocusRingDrawable(context, 10, UiHelper.COLOR_FOCUS_GLOW, 1.8f));
+                UiHelper.createPillDrawable(context, 10, Color.argb(30, 255, 255, 255), Color.argb(245, 255, 255, 255), 2.2f));
         seekFocusStates.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         seekBarFocusBox.setBackground(seekFocusStates);
 
@@ -871,10 +881,9 @@ public class PlayerScreenController {
         seekBarFocusBox.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
-                float sc = hasFocus ? 1.55f : 1.0f;
+                float sc = hasFocus ? 1.45f : 1.0f;
                 seekThumbDot.animate().scaleX(sc).scaleY(sc).setDuration(130).start();
-                UiHelper.applyFocusVisualEffects(v, PlayerScreenController.this.context,
-                        hasFocus, 1.015f, 4, UiHelper.COLOR_FOCUS_GLOW);
+                applyNeutralFocusScale(v, PlayerScreenController.this.context, hasFocus, 1.01f, 4);
             }
         });
 
@@ -932,7 +941,7 @@ public class PlayerScreenController {
         btnMemberPill.setGravity(Gravity.CENTER_VERTICAL);
         btnMemberPill.setPadding(UiHelper.dp(context, 5), UiHelper.dp(context, 4),
                 UiHelper.dp(context, 10), UiHelper.dp(context, 4));
-        UiHelper.applyFocusableGlassButton(btnMemberPill, context, 18, false);
+        applyPlayerFocusButton(btnMemberPill, context, 18, false, 1.07f);
         memberAvatarIv = new ImageView(context);
         memberAvatarIv.setImageResource(R.drawable.ic_person);
         LinearLayout.LayoutParams mavLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 26), UiHelper.dp(context, 26));
@@ -1031,6 +1040,7 @@ public class PlayerScreenController {
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
         // Deterministic 5-Zone D-Pad Focus Matrix across Player HUD (zero dead ends)
+        btnBackHud.setNextFocusLeftId(btnBackHud.getId());
         btnBackHud.setNextFocusRightId(btnServerTop.getId());
         btnServerTop.setNextFocusLeftId(btnBackHud.getId());
         btnServerTop.setNextFocusRightId(btnDubTop.getId());
@@ -1043,6 +1053,7 @@ public class PlayerScreenController {
         btnReloadTop.setNextFocusLeftId(btnInfoTop.getId());
         btnReloadTop.setNextFocusRightId(btnSettingsTop.getId());
         btnSettingsTop.setNextFocusLeftId(btnReloadTop.getId());
+        btnSettingsTop.setNextFocusRightId(btnSettingsTop.getId());
 
         btnBackHud.setNextFocusDownId(btnRew.getId());
         btnServerTop.setNextFocusDownId(centerPlayWrap.getId());
@@ -1053,6 +1064,7 @@ public class PlayerScreenController {
         btnSettingsTop.setNextFocusDownId(btnDockContrast.getId());
 
         btnRew.setNextFocusUpId(btnBackHud.getId());
+        btnRew.setNextFocusLeftId(btnRew.getId());
         btnRew.setNextFocusRightId(centerPlayWrap.getId());
         btnRew.setNextFocusDownId(seekBarFocusBox.getId());
 
@@ -1069,19 +1081,23 @@ public class PlayerScreenController {
         btnDockContrast.setNextFocusUpId(btnSettingsTop.getId());
         btnDockContrast.setNextFocusDownId(btnDockAutoNext.getId());
         btnDockContrast.setNextFocusLeftId(btnFwd.getId());
+        btnDockContrast.setNextFocusRightId(btnDockContrast.getId());
 
         btnDockAutoNext.setNextFocusUpId(btnDockContrast.getId());
         btnDockAutoNext.setNextFocusDownId(btnDockFill.getId());
         btnDockAutoNext.setNextFocusLeftId(btnFwd.getId());
+        btnDockAutoNext.setNextFocusRightId(btnDockAutoNext.getId());
 
         btnDockFill.setNextFocusUpId(btnDockAutoNext.getId());
         btnDockFill.setNextFocusDownId(seekBarFocusBox.getId());
         btnDockFill.setNextFocusLeftId(btnFwd.getId());
+        btnDockFill.setNextFocusRightId(btnDockFill.getId());
 
         seekBarFocusBox.setNextFocusUpId(centerPlayWrap.getId());
         seekBarFocusBox.setNextFocusDownId(btnMemberPill.getId());
 
         btnMemberPill.setNextFocusUpId(seekBarFocusBox.getId());
+        btnMemberPill.setNextFocusLeftId(btnMemberPill.getId());
         btnMemberPill.setNextFocusRightId(btnWishlistBar.getId());
         btnWishlistBar.setNextFocusUpId(seekBarFocusBox.getId());
         btnWishlistBar.setNextFocusLeftId(btnMemberPill.getId());
@@ -1100,31 +1116,36 @@ public class PlayerScreenController {
         btnSpeedBar.setNextFocusRightId(btnMoreBar.getId());
         btnMoreBar.setNextFocusUpId(seekBarFocusBox.getId());
         btnMoreBar.setNextFocusLeftId(btnSpeedBar.getId());
+        btnMoreBar.setNextFocusRightId(btnMoreBar.getId());
 
-        // 9. Sub-Modal Host (Sleek Frosted Glass 20dp)
+        // 9. Sub-Modal Host (Sleek Frosted Glass, dynamic centered / right-drawer for live preview)
         subModalHost = new FrameLayout(context);
-        subModalHost.setBackgroundColor(Color.argb(190, 9, 11, 18));
+        subModalHost.setBackgroundColor(Color.argb(180, 9, 11, 18));
         subModalHost.setVisibility(View.GONE);
         subModalHost.setClickable(true);
 
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
-        int screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(context, 960);
-        int screenH = dm.heightPixels > 0 ? dm.heightPixels : UiHelper.dp(context, 540);
+        this.screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(context, 960);
+        this.screenH = dm.heightPixels > 0 ? dm.heightPixels : UiHelper.dp(context, 540);
         int modalW = Math.min(UiHelper.dp(context, 700), Math.round(screenW * 0.84f));
-        int modalMaxH = Math.round(screenH * 0.82f);
+        int modalMaxH = Math.round(screenH * 0.84f);
 
         subModalCard = new LinearLayout(context);
         subModalCard.setOrientation(LinearLayout.VERTICAL);
-        subModalCard.setPadding(UiHelper.dp(context, 22), UiHelper.dp(context, 18),
-                UiHelper.dp(context, 22), UiHelper.dp(context, 18));
-        UiHelper.applyGlassCardStyle(subModalCard, context, 20, UiHelper.COLOR_SURFACE_GLASS, 18);
+        subModalCard.setClipChildren(false);
+        subModalCard.setClipToPadding(false);
+        subModalCard.setPadding(UiHelper.dp(context, 22), UiHelper.dp(context, 16),
+                UiHelper.dp(context, 22), UiHelper.dp(context, 16));
+        UiHelper.applyGlassCardStyle(subModalCard, context, 24, UiHelper.COLOR_SURFACE_GLASS, 18);
 
         LinearLayout smHeader = new LinearLayout(context);
         smHeader.setOrientation(LinearLayout.HORIZONTAL);
         smHeader.setGravity(Gravity.CENTER_VERTICAL);
+        smHeader.setClipChildren(false);
+        smHeader.setClipToPadding(false);
         LinearLayout.LayoutParams smhLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        smhLp.bottomMargin = UiHelper.dp(context, 12);
+        smhLp.bottomMargin = UiHelper.dp(context, 10);
 
         subModalTitleTv = new TextView(context);
         subModalTitleTv.setTextColor(Color.WHITE);
@@ -1133,6 +1154,7 @@ public class PlayerScreenController {
         smHeader.addView(subModalTitleTv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         subModalCloseBtn = makeTextPill(context, "Đóng", false);
+        subModalCloseBtn.setId(View.generateViewId());
         subModalCloseBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -1144,13 +1166,18 @@ public class PlayerScreenController {
 
         subModalScroll = new ScrollView(context);
         subModalScroll.setVerticalScrollBarEnabled(false);
+        subModalScroll.setClipChildren(false);
+        subModalScroll.setClipToPadding(false);
+        subModalScroll.setPadding(UiHelper.dp(context, 4), UiHelper.dp(context, 4),
+                UiHelper.dp(context, 4), UiHelper.dp(context, 28));
         subModalBody = new LinearLayout(context);
         subModalBody.setOrientation(LinearLayout.VERTICAL);
         subModalBody.setClipChildren(false);
+        subModalBody.setClipToPadding(false);
         subModalScroll.addView(subModalBody, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
         subModalCard.addView(subModalScroll, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, modalMaxH - UiHelper.dp(context, 96)));
+                LinearLayout.LayoutParams.MATCH_PARENT, modalMaxH - UiHelper.dp(context, 84)));
 
         FrameLayout.LayoutParams smcLp = new FrameLayout.LayoutParams(
                 modalW, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
@@ -1206,8 +1233,10 @@ public class PlayerScreenController {
         if (!showing) return;
         persistProgressNow();
         showing = false;
+        updateBufferingIndicator(false);
         checkFilePolling = false;
         nextCountdownRunning = false;
+        serverOrchestrator.cancelPendingTasks();
         handler.removeCallbacksAndMessages(null);
         dubbingEngine.release();
         nativePlayer.stopMedia();
@@ -1230,6 +1259,7 @@ public class PlayerScreenController {
     public void release() {
         checkFilePolling = false;
         nextCountdownRunning = false;
+        serverOrchestrator.shutdown();
         handler.removeCallbacksAndMessages(null);
         dubbingEngine.release();
         nativePlayer.release();
@@ -1372,6 +1402,7 @@ public class PlayerScreenController {
         this.nextCountdownRunning = false;
         this.nextEpisodeTarget = null;
         this.checkFilePolling = false;
+        serverOrchestrator.cancelPendingTasks();
         handler.removeCallbacks(checkFilePollRunnable);
         handler.removeCallbacks(nextCountdownRunnable);
 
@@ -1386,9 +1417,8 @@ public class PlayerScreenController {
 
         skipIntroBtn.setVisibility(View.GONE);
         nextEpCard.setVisibility(View.GONE);
-        loadingCenter.setVisibility(View.VISIBLE);
-        loadingSpinner.setSpinning(true);
-        loadingStatusTv.setText("Đang giải mã nguồn phát phim...");
+        updateBufferingIndicator(true);
+        applySubtitleBgSetting();
         subtitleOverlay.setCues(new ArrayList<SubtitleEngine.Cue>(), new ArrayList<SubtitleEngine.Cue>(), "");
         dubbingEngine.setEpisodeSignature(req.streamCode);
 
@@ -1408,7 +1438,7 @@ public class PlayerScreenController {
             @Override
             public void onError(String message, int httpCode) {
                 if (!showing || seq != episodeSessionSeq) return;
-                loadingCenter.setVisibility(View.GONE);
+                updateBufferingIndicator(false);
                 fadeTransitionVeilOut();
                 toast(message != null ? message : "Không thể tải luồng phát", UiHelper.COLOR_ACCENT_RED);
             }
@@ -1464,20 +1494,10 @@ public class PlayerScreenController {
             @Override
             public void onResult(ServerOrchestrator.PingSnapshot snap) {
                 if (!showing || seq != episodeSessionSeq) return;
-                for (ServerOrchestrator.ServerState s : serverStates) {
-                    if ("11".equals(s.id)) {
-                        s.pingMs = snap.ping11;
-                        s.pingFailed = snap.ping11 < 0;
-                    } else if ("36".equals(s.id)) {
-                        s.pingMs = snap.ping36;
-                        s.pingFailed = snap.ping36 < 0;
-                    } else if ("40".equals(s.id)) {
-                        s.pingMs = snap.ping40;
-                    } else if ("3".equals(s.id)) {
-                        s.pingMs = snap.ping3;
-                    }
-                }
-                if (activeModal == MODAL_SERVERS) renderSubModalContent();
+                List<ServerOrchestrator.ServerState> updated = serverOrchestrator.applyPings(serverStates, snap);
+                serverStates.clear();
+                serverStates.addAll(updated);
+                if (activeModal == MODAL_SERVERS) refreshServersModalPreservingFocus();
             }
         });
 
@@ -1487,14 +1507,14 @@ public class PlayerScreenController {
                 public void onResult(ServerOrchestrator.GgdFlags flags) {
                     if (!showing || seq != episodeSessionSeq) return;
                     ggdFlags = flags;
-                    List<ServerOrchestrator.ServerState> rebuilt = serverOrchestrator.buildInitialServers(
-                            data.serverFileKey, data, flags, erroredServerIds);
+                    List<ServerOrchestrator.ServerState> updated = serverOrchestrator.applyGgdriver(
+                            serverStates, data.serverFileKey, data, flags);
                     serverStates.clear();
-                    serverStates.addAll(rebuilt);
+                    serverStates.addAll(updated);
                     if (activeStreamUrl.isEmpty()) {
                         tryStartBestPlayableServer(false);
                     }
-                    if (activeModal == MODAL_SERVERS) renderSubModalContent();
+                    if (activeModal == MODAL_SERVERS) refreshServersModalPreservingFocus();
                 }
             });
 
@@ -1519,7 +1539,7 @@ public class PlayerScreenController {
     }
 
     private void tryStartBestPlayableServer(boolean preserveCurrentPos) {
-        ServerOrchestrator.ServerState best = serverOrchestrator.selectOptimalServer(serverStates);
+        ServerOrchestrator.ServerState best = serverOrchestrator.selectOptimalServer(serverStates, lastPosSec);
         if (best != null && !best.streamUrl.isEmpty()) {
             switchToServer(best, preserveCurrentPos);
         } else if (resolvedData != null && !resolvedData.primaryUrl.isEmpty() && activeStreamUrl.isEmpty()) {
@@ -1566,16 +1586,10 @@ public class PlayerScreenController {
         this.isPlayingNow = isPlaying;
         playPauseIcon.setImageResource(isPlaying ? R.drawable.ic_pause : R.drawable.ic_play);
 
-        if (isBuffering && activeStreamUrl.isEmpty()) {
-            loadingCenter.setVisibility(View.VISIBLE);
-            loadingSpinner.setSpinning(true);
-            loadingStatusTv.setText("Đang đệm video...");
-        } else if (isBuffering) {
-            loadingCenter.setVisibility(View.VISIBLE);
-            loadingSpinner.setSpinning(true);
-            loadingStatusTv.setText("Đang tải khung hình...");
-        } else if (isReady || isPlaying) {
-            loadingCenter.setVisibility(View.GONE);
+        if (isBuffering) {
+            updateBufferingIndicator(true);
+        } else if (isReady || isPlaying || isEnded) {
+            updateBufferingIndicator(false);
             fadeTransitionVeilOut();
             double d = nativePlayer.getDurationSec();
             if (d > 0) {
@@ -1607,6 +1621,21 @@ public class PlayerScreenController {
         SubtitleEngine.Cue activeCue = subtitleOverlay.getActiveMainVnCue(posSec);
         int activeIdx = subtitleOverlay.getActiveMainVnIndex(posSec);
         dubbingEngine.updateTick(posSec, isPlayingNow, false, vnCues, activeCue, activeIdx);
+
+        // Check preview duration limit -> auto failover to full Tier 2 server
+        if (!activeServerId.isEmpty() && posSec > 60.0) {
+            for (ServerOrchestrator.ServerState s : serverStates) {
+                if (s.id.equals(activeServerId) && ServerOrchestrator.isPreviewLimitReached(s, posSec)) {
+                    ServerOrchestrator.ServerState alt = serverOrchestrator.selectFailoverServer(
+                            serverStates, activeServerId, posSec);
+                    if (alt != null && !alt.streamUrl.equals(activeStreamUrl)) {
+                        toast("Đang chuyển sang " + alt.label + " để xem tiếp đầy đủ...", UiHelper.COLOR_CYAN);
+                        switchToServer(alt, true);
+                    }
+                    break;
+                }
+            }
+        }
 
         // Save watch progress every 10s
         long nowElapsed = android.os.SystemClock.elapsedRealtime();
@@ -1664,12 +1693,12 @@ public class PlayerScreenController {
                 }
             }
         }
-        ServerOrchestrator.ServerState alt = serverOrchestrator.selectOptimalServer(serverStates);
+        ServerOrchestrator.ServerState alt = serverOrchestrator.selectFailoverServer(serverStates, activeServerId, lastPosSec);
         if (alt != null && !alt.streamUrl.equals(activeStreamUrl)) {
             toast("Đang tự chuyển sang " + alt.label + "...", UiHelper.COLOR_GOLD);
             switchToServer(alt, true);
         } else {
-            loadingCenter.setVisibility(View.GONE);
+            updateBufferingIndicator(false);
             toast("Nguồn phát đang bận (" + errMsg + "). Hãy chọn Máy chủ khác.", UiHelper.COLOR_ACCENT_RED);
             openSubModal(MODAL_SERVERS);
         }
@@ -1804,6 +1833,50 @@ public class PlayerScreenController {
                     if (!hudVisible) hudLayer.setVisibility(View.GONE);
                 }
             }).start();
+        }
+        syncBufferingIndicatorVisibility();
+    }
+
+    private void updateBufferingIndicator(boolean loading) {
+        this.isLoadingOrBuffering = loading;
+        syncBufferingIndicatorVisibility();
+    }
+
+    private void syncBufferingIndicatorVisibility() {
+        boolean loading = isLoadingOrBuffering && showing;
+        playPauseIcon.setVisibility(loading ? View.GONE : View.VISIBLE);
+        boolean showInHud = loading && hudVisible && activeModal == MODAL_NONE;
+        centerPlaySpinner.setVisibility(loading ? View.VISIBLE : View.GONE);
+        centerPlaySpinner.setSpinning(showInHud);
+
+        boolean showDetached = loading && !hudVisible && activeModal == MODAL_NONE;
+        detachedBufferingHost.setVisibility(showDetached ? View.VISIBLE : View.GONE);
+        detachedBufferingSpinner.setSpinning(showDetached);
+    }
+
+    private void applySubtitleBgSetting() {
+        if (subtitleOverlay.getChildCount() <= 1) return;
+        View bottomStack = subtitleOverlay.getChildAt(1);
+        if (bottomStack == null) return;
+        String style = Prefs.getSubBgStyle(context);
+        if ("semi".equals(style)) {
+            bottomStack.setBackground(UiHelper.createPillDrawable(
+                    context, 12, Color.argb(120, 0, 0, 0), Color.TRANSPARENT, 0f));
+            bottomStack.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 6),
+                    UiHelper.dp(context, 14), UiHelper.dp(context, 6));
+        } else if ("dark".equals(style)) {
+            bottomStack.setBackground(UiHelper.createPillDrawable(
+                    context, 12, Color.argb(195, 0, 0, 0), Color.TRANSPARENT, 0f));
+            bottomStack.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 8),
+                    UiHelper.dp(context, 16), UiHelper.dp(context, 8));
+        } else if ("solid".equals(style)) {
+            bottomStack.setBackground(UiHelper.createPillDrawable(
+                    context, 10, Color.argb(235, 8, 10, 14), Color.TRANSPARENT, 0f));
+            bottomStack.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 8),
+                    UiHelper.dp(context, 16), UiHelper.dp(context, 8));
+        } else {
+            bottomStack.setBackground(null);
+            bottomStack.setPadding(0, 0, 0, 0);
         }
     }
 
@@ -2015,6 +2088,29 @@ public class PlayerScreenController {
     private void openSubModal(int modalType) {
         this.activeModal = modalType;
         handler.removeCallbacks(hudAutoHideRunnable);
+        syncBufferingIndicatorVisibility();
+
+        FrameLayout.LayoutParams cardLp = (FrameLayout.LayoutParams) subModalCard.getLayoutParams();
+        LinearLayout.LayoutParams scrollLp = (LinearLayout.LayoutParams) subModalScroll.getLayoutParams();
+        if (modalType == MODAL_SUBTITLES) {
+            // Right-docked translucent panel so live video + real subtitles stay unobstructed
+            subModalHost.setBackgroundColor(Color.argb(88, 7, 9, 15));
+            cardLp.width = Math.min(UiHelper.dp(context, 520), Math.round(screenW * 0.56f));
+            cardLp.height = FrameLayout.LayoutParams.WRAP_CONTENT;
+            cardLp.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
+            cardLp.setMargins(0, UiHelper.dp(context, 14), UiHelper.dp(context, 20), UiHelper.dp(context, 14));
+            scrollLp.height = Math.round(screenH * 0.86f) - UiHelper.dp(context, 82);
+        } else {
+            subModalHost.setBackgroundColor(Color.argb(180, 9, 11, 18));
+            cardLp.width = Math.min(UiHelper.dp(context, 700), Math.round(screenW * 0.84f));
+            cardLp.height = FrameLayout.LayoutParams.WRAP_CONTENT;
+            cardLp.gravity = Gravity.CENTER;
+            cardLp.setMargins(0, 0, 0, 0);
+            scrollLp.height = Math.round(screenH * 0.84f) - UiHelper.dp(context, 84);
+        }
+        subModalCard.setLayoutParams(cardLp);
+        subModalScroll.setLayoutParams(scrollLp);
+
         subModalHost.setAlpha(0f);
         subModalHost.setVisibility(View.VISIBLE);
         subModalHost.animate().alpha(1f).setDuration(180).start();
@@ -2028,8 +2124,13 @@ public class PlayerScreenController {
             @Override
             public void run() {
                 View focusTarget = findFirstFocusableChild(subModalBody);
-                if (focusTarget != null) focusTarget.requestFocus();
-                else subModalCloseBtn.requestFocus();
+                if (focusTarget != null) {
+                    if (focusTarget.getId() == View.NO_ID) focusTarget.setId(View.generateViewId());
+                    subModalCloseBtn.setNextFocusDownId(focusTarget.getId());
+                    focusTarget.requestFocus();
+                } else {
+                    subModalCloseBtn.requestFocus();
+                }
             }
         });
     }
@@ -2040,6 +2141,7 @@ public class PlayerScreenController {
             @Override
             public void run() {
                 subModalHost.setVisibility(View.GONE);
+                syncBufferingIndicatorVisibility();
             }
         }).start();
         focusCenterPlayButton();
@@ -2201,7 +2303,7 @@ public class PlayerScreenController {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(UiHelper.dp(context, 12), UiHelper.dp(context, 10),
                 UiHelper.dp(context, 16), UiHelper.dp(context, 10));
-        UiHelper.applyFocusableGlassButton(row, context, 22, current);
+        applyPlayerFocusButton(row, context, 18, current, 1.03f);
 
         ImageView thumb = new ImageView(context);
         UiHelper.safeLoadImage(thumb, thumbUrl, R.drawable.default_poster, 14);
@@ -2277,33 +2379,61 @@ public class PlayerScreenController {
         return launchReq != null ? launchReq.posterUrl : "";
     }
 
+    private void refreshServersModalPreservingFocus() {
+        if (activeModal != MODAL_SERVERS) return;
+        View focused = subModalHost.findFocus();
+        final Object focusTag = focused != null ? focused.getTag() : null;
+        renderSubModalContent();
+        if (focusTag != null) {
+            View target = subModalBody.findViewWithTag(focusTag);
+            if (target != null) {
+                target.requestFocus();
+            }
+        }
+    }
+
     private void renderServersModal() {
         LinearLayout topTools = new LinearLayout(context);
         topTools.setOrientation(LinearLayout.HORIZONTAL);
+        topTools.setClipChildren(false);
+        topTools.setClipToPadding(false);
         boolean autoOpt = Prefs.isAutoOptimalServer(context);
-        TextView btnAutoOpt = makeTextPill(context, autoOpt ? "✓ Tự chọn máy chủ tối ưu: BẬT" : "Tự chọn máy chủ tối ưu: TẮT", autoOpt);
+        final TextView btnAutoOpt = makeTextPill(context, autoOpt ? "✓ Tự chọn máy chủ tối ưu: BẬT" : "Tự chọn máy chủ tối ưu: TẮT", autoOpt);
+        btnAutoOpt.setTag("srv_auto_opt");
         btnAutoOpt.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 boolean next = !Prefs.isAutoOptimalServer(context);
                 Prefs.setAutoOptimalServer(context, next);
-                renderSubModalContent();
+                btnAutoOpt.setText(next ? "✓ Tự chọn máy chủ tối ưu: BẬT" : "Tự chọn máy chủ tối ưu: TẮT");
+                btnAutoOpt.setBackground(createPlayerFocusSelector(context, 14, next));
             }
         });
         topTools.addView(btnAutoOpt, rightMarginLp(10));
 
         TextView btnPing = makeTextPill(context, "Đo lại tốc độ", false);
+        btnPing.setTag("srv_reping");
         btnPing.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                toast("Đang đo tốc độ máy chủ...", UiHelper.COLOR_CYAN);
                 serverOrchestrator.measurePings(new ServerOrchestrator.Callback<ServerOrchestrator.PingSnapshot>() {
                     @Override
                     public void onResult(ServerOrchestrator.PingSnapshot snap) {
                         for (ServerOrchestrator.ServerState s : serverStates) {
-                            if ("11".equals(s.id)) s.pingMs = snap.ping11;
-                            else if ("36".equals(s.id)) s.pingMs = snap.ping36;
+                            if ("11".equals(s.id)) {
+                                s.pingMs = snap.ping11;
+                                s.pingFailed = snap.ping11 < 0;
+                            } else if ("36".equals(s.id)) {
+                                s.pingMs = snap.ping36;
+                                s.pingFailed = snap.ping36 < 0;
+                            } else if ("40".equals(s.id)) {
+                                s.pingMs = snap.ping40;
+                            } else if ("3".equals(s.id)) {
+                                s.pingMs = snap.ping3;
+                            }
                         }
-                        if (activeModal == MODAL_SERVERS) renderSubModalContent();
+                        if (activeModal == MODAL_SERVERS) refreshServersModalPreservingFocus();
                     }
                 });
             }
@@ -2317,11 +2447,12 @@ public class PlayerScreenController {
         for (final ServerOrchestrator.ServerState srv : serverStates) {
             boolean active = srv.id.equals(activeServerId);
             LinearLayout card = new LinearLayout(context);
+            card.setTag("srv_card_" + srv.id);
             card.setOrientation(LinearLayout.HORIZONTAL);
             card.setGravity(Gravity.CENTER_VERTICAL);
             card.setPadding(UiHelper.dp(context, 18), UiHelper.dp(context, 14),
                     UiHelper.dp(context, 18), UiHelper.dp(context, 14));
-            UiHelper.applyFocusableGlassButton(card, context, 24, active);
+            applyPlayerFocusButton(card, context, 18, active, 1.03f);
 
             LinearLayout left = new LinearLayout(context);
             left.setOrientation(LinearLayout.VERTICAL);
@@ -2381,48 +2512,190 @@ public class PlayerScreenController {
     }
 
     private void renderSubtitlesAndDubModal() {
-        // Section 1: Display Toggles
-        addModalSectionLabel("Hiển thị phụ đề");
-        LinearLayout toggles = new LinearLayout(context);
-        toggles.setOrientation(LinearLayout.HORIZONTAL);
-        TextView tVi = makeTogglePill("Tiếng Việt", Prefs.isSubShowVi(context), new Runnable() {
+        final List<Runnable> stateUpdaters = new ArrayList<Runnable>();
+        final Runnable refreshAllInPlace = new Runnable() {
             @Override
             public void run() {
-                Prefs.setSubShowVi(context, !Prefs.isSubShowVi(context));
+                subtitleOverlay.renderAt(lastPosSec);
+                applySubtitleBgSetting();
+                refreshQuickBadges();
+                for (int i = 0; i < stateUpdaters.size(); i++) {
+                    stateUpdaters.get(i).run();
+                }
             }
-        });
-        TextView tEn = makeTogglePill("Tiếng Anh / Dịch", Prefs.isSubShowEn(context), new Runnable() {
-            @Override
-            public void run() {
-                Prefs.setSubShowEn(context, !Prefs.isSubShowEn(context));
-            }
-        });
-        TextView tRev = makeTogglePill("Đảo vị trí 2 dòng", Prefs.isSubReverse(context), new Runnable() {
-            @Override
-            public void run() {
-                Prefs.setSubReverse(context, !Prefs.isSubReverse(context));
-            }
-        });
-        TextView tAuto = makeTogglePill("Tự động cỡ & vị trí", Prefs.isSubAutoLayout(context), new Runnable() {
-            @Override
-            public void run() {
-                Prefs.setSubAutoLayout(context, !Prefs.isSubAutoLayout(context));
-            }
-        });
-        toggles.addView(tVi, rightMarginLp(8));
-        toggles.addView(tEn, rightMarginLp(8));
-        toggles.addView(tRev, rightMarginLp(8));
-        toggles.addView(tAuto);
-        addSpacedView(toggles, 14);
+        };
 
-        // Steppers: Font size, Position, Delay, Extend
-        addModalSectionLabel("Kích thước, Vị trí & Đồng bộ thời gian");
-        addStepperRow("Cỡ chữ thủ công", String.valueOf(Prefs.getSubFontStep(context)),
+        // Live Preview Banner (updates in-place alongside real video subtitles behind)
+        final LinearLayout previewCard = new LinearLayout(context);
+        previewCard.setOrientation(LinearLayout.VERTICAL);
+        previewCard.setGravity(Gravity.CENTER);
+        previewCard.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 10),
+                UiHelper.dp(context, 14), UiHelper.dp(context, 10));
+        previewCard.setBackground(UiHelper.createPillDrawable(
+                context, 14, Color.argb(145, 8, 10, 16), Color.argb(40, 255, 255, 255), 1f));
+
+        final LinearLayout previewPill = new LinearLayout(context);
+        previewPill.setOrientation(LinearLayout.VERTICAL);
+        previewPill.setGravity(Gravity.CENTER_HORIZONTAL);
+        final TextView previewLine1 = new TextView(context);
+        previewLine1.setGravity(Gravity.CENTER);
+        previewLine1.setMaxLines(1);
+        previewLine1.setEllipsize(TextUtils.TruncateAt.END);
+        previewPill.addView(previewLine1);
+
+        final TextView previewLine2 = new TextView(context);
+        previewLine2.setGravity(Gravity.CENTER);
+        previewLine2.setMaxLines(1);
+        previewLine2.setEllipsize(TextUtils.TruncateAt.END);
+        previewPill.addView(previewLine2);
+
+        previewCard.addView(previewPill, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        addSpacedView(previewCard, 12);
+
+        stateUpdaters.add(new Runnable() {
+            @Override
+            public void run() {
+                boolean showVi = Prefs.isSubShowVi(context);
+                boolean showEn = Prefs.isSubShowEn(context);
+                boolean rev = Prefs.isSubReverse(context);
+                SubtitleEngine.ColorOption col = SubtitleEngine.findColor(Prefs.getSubColor(context));
+                Typeface tf = SubtitleEngine.resolveTypeface(Prefs.getSubFont(context));
+                String outline = Prefs.getSubOutline(context);
+                String bgStyle = Prefs.getSubBgStyle(context);
+                int step = Prefs.getSubFontStep(context);
+                float spMain = Math.max(12f, Math.min(20f, 11f + step * 0.45f));
+                float spSub = Math.max(10.5f, spMain * 0.82f);
+
+                if ("semi".equals(bgStyle)) {
+                    previewPill.setBackground(UiHelper.createPillDrawable(context, 8, Color.argb(120, 0, 0, 0), Color.TRANSPARENT, 0f));
+                    previewPill.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 4), UiHelper.dp(context, 10), UiHelper.dp(context, 4));
+                } else if ("dark".equals(bgStyle)) {
+                    previewPill.setBackground(UiHelper.createPillDrawable(context, 8, Color.argb(195, 0, 0, 0), Color.TRANSPARENT, 0f));
+                    previewPill.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 4), UiHelper.dp(context, 10), UiHelper.dp(context, 4));
+                } else if ("solid".equals(bgStyle)) {
+                    previewPill.setBackground(UiHelper.createPillDrawable(context, 8, Color.argb(235, 8, 10, 14), Color.TRANSPARENT, 0f));
+                    previewPill.setPadding(UiHelper.dp(context, 10), UiHelper.dp(context, 4), UiHelper.dp(context, 10), UiHelper.dp(context, 4));
+                } else {
+                    previewPill.setBackground(null);
+                    previewPill.setPadding(0, 0, 0, 0);
+                }
+
+                float shadowR = "none".equals(outline) ? 0f : ("shadow".equals(outline) ? 5f : 3f);
+                previewLine1.setTypeface(tf, Typeface.BOLD);
+                previewLine2.setTypeface(tf, Typeface.NORMAL);
+                previewLine1.setShadowLayer(shadowR, 0f, shadowR > 0 ? 1.5f : 0f, Color.BLACK);
+                previewLine2.setShadowLayer(shadowR, 0f, shadowR > 0 ? 1.5f : 0f, Color.BLACK);
+
+                if (!showVi && !showEn) {
+                    previewLine1.setVisibility(View.VISIBLE);
+                    previewLine2.setVisibility(View.GONE);
+                    previewLine1.setText("Phụ đề đang tắt");
+                    previewLine1.setTextColor(UiHelper.COLOR_TEXT_MUTED);
+                    previewLine1.setTextSize(13f);
+                } else if (showVi && showEn) {
+                    String viSample = "Chào mừng bạn đến với rạp phim tại gia";
+                    String enSample = "Welcome to your home cinema";
+                    previewLine1.setVisibility(View.VISIBLE);
+                    previewLine2.setVisibility(View.VISIBLE);
+                    previewLine1.setText(rev ? enSample : viSample);
+                    previewLine2.setText(rev ? viSample : enSample);
+                    previewLine1.setTextColor(col.mainColor);
+                    previewLine2.setTextColor(col.subColor);
+                    previewLine1.setTextSize(spMain);
+                    previewLine2.setTextSize(spSub);
+                } else {
+                    previewLine1.setVisibility(View.VISIBLE);
+                    previewLine2.setVisibility(View.GONE);
+                    previewLine1.setText(showVi ? "Chào mừng bạn đến với rạp phim tại gia" : "Welcome to your home cinema");
+                    previewLine1.setTextColor(col.mainColor);
+                    previewLine1.setTextSize(spMain);
+                }
+            }
+        });
+
+        // Section 1: Hiển thị & Bố cục (Clean toggle rows — in-place update)
+        addModalSectionLabel("Hiển thị & Bố cục phụ đề");
+        LinearLayout rowShowVi = addSettingToggleRow(
+                "Phụ đề Tiếng Việt", null,
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isSubShowVi(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setSubShowVi(context, !Prefs.isSubShowVi(context));
+                        refreshAllInPlace.run();
+                    }
+                }, stateUpdaters);
+        rowShowVi.setNextFocusUpId(subModalCloseBtn.getId());
+
+        addSettingToggleRow(
+                "Phụ đề Tiếng Anh / Dịch", null,
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isSubShowEn(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setSubShowEn(context, !Prefs.isSubShowEn(context));
+                        refreshAllInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        addSettingToggleRow(
+                "Đảo vị trí 2 dòng", null,
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isSubReverse(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setSubReverse(context, !Prefs.isSubReverse(context));
+                        refreshAllInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        addSettingToggleRow(
+                "Tự động cỡ chữ & vị trí", null,
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isSubAutoLayout(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setSubAutoLayout(context, !Prefs.isSubAutoLayout(context));
+                        refreshAllInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        // Section 2: Kích thước, Vị trí & Đồng bộ thời gian (In-place Steppers — ZERO focus reset!)
+        addModalSectionLabel("Cỡ chữ, Vị trí & Đồng bộ thời gian");
+        addInPlaceStepperRow("Cỡ chữ thủ công",
+                new StringSupplierCompat() {
+                    @Override
+                    public String get() {
+                        return String.valueOf(Prefs.getSubFontStep(context));
+                    }
+                },
                 new Runnable() {
                     @Override
                     public void run() {
                         Prefs.setSubAutoLayout(context, false);
                         Prefs.setSubFontStep(context, Prefs.getSubFontStep(context) - 1);
+                        refreshAllInPlace.run();
                     }
                 },
                 new Runnable() {
@@ -2430,14 +2703,23 @@ public class PlayerScreenController {
                     public void run() {
                         Prefs.setSubAutoLayout(context, false);
                         Prefs.setSubFontStep(context, Prefs.getSubFontStep(context) + 1);
+                        refreshAllInPlace.run();
                     }
-                });
-        addStepperRow("Vị trí từ đáy màn hình (%)", Prefs.getSubPositionPct(context) + "%",
+                }, stateUpdaters);
+
+        addInPlaceStepperRow("Vị trí từ đáy màn hình",
+                new StringSupplierCompat() {
+                    @Override
+                    public String get() {
+                        return Prefs.getSubPositionPct(context) + "%";
+                    }
+                },
                 new Runnable() {
                     @Override
                     public void run() {
                         Prefs.setSubAutoLayout(context, false);
                         Prefs.setSubPositionPct(context, Prefs.getSubPositionPct(context) - 2);
+                        refreshAllInPlace.run();
                     }
                 },
                 new Runnable() {
@@ -2445,192 +2727,337 @@ public class PlayerScreenController {
                     public void run() {
                         Prefs.setSubAutoLayout(context, false);
                         Prefs.setSubPositionPct(context, Prefs.getSubPositionPct(context) + 2);
+                        refreshAllInPlace.run();
                     }
-                });
-        addStepperRow("Độ trễ phụ đề (giây)", String.format(Locale.US, "%+.1fs", Prefs.getSubDelaySec(context)),
-                new Runnable() {
+                }, stateUpdaters);
+
+        addInPlaceStepperRow("Độ trễ phụ đề",
+                new StringSupplierCompat() {
                     @Override
-                    public void run() {
-                        Prefs.setSubDelaySec(context, Prefs.getSubDelaySec(context) - 0.5f);
+                    public String get() {
+                        return String.format(Locale.US, "%+.1fs", Prefs.getSubDelaySec(context));
                     }
                 },
                 new Runnable() {
                     @Override
                     public void run() {
-                        Prefs.setSubDelaySec(context, Prefs.getSubDelaySec(context) + 0.5f);
+                        Prefs.setSubDelaySec(context, Math.max(-15f, Prefs.getSubDelaySec(context) - 0.5f));
+                        refreshAllInPlace.run();
                     }
-                });
-        addStepperRow("Kéo dài thời gian hiển thị", String.format(Locale.US, "+%.1fs", Prefs.getSubExtendSec(context)),
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setSubDelaySec(context, Math.min(15f, Prefs.getSubDelaySec(context) + 0.5f));
+                        refreshAllInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        addInPlaceStepperRow("Kéo dài hiển thị",
+                new StringSupplierCompat() {
+                    @Override
+                    public String get() {
+                        return String.format(Locale.US, "+%.1fs", Prefs.getSubExtendSec(context));
+                    }
+                },
                 new Runnable() {
                     @Override
                     public void run() {
                         Prefs.setSubExtendSec(context, Math.max(0f, Prefs.getSubExtendSec(context) - 0.5f));
+                        refreshAllInPlace.run();
                     }
                 },
                 new Runnable() {
                     @Override
                     public void run() {
-                        Prefs.setSubExtendSec(context, Prefs.getSubExtendSec(context) + 0.5f);
+                        Prefs.setSubExtendSec(context, Math.min(10f, Prefs.getSubExtendSec(context) + 0.5f));
+                        refreshAllInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        // Section 3: Phông chữ, Màu sắc, Viền chữ, Nền (Wrapped clean TV chip grids — in-place update)
+        addModalSectionLabel("Phông chữ");
+        {
+            final List<TextView> fontChips = new ArrayList<TextView>();
+            final List<String> fontVals = new ArrayList<String>();
+            List<View> gridItems = new ArrayList<View>();
+            for (final SubtitleEngine.FontOption f : SubtitleEngine.FONT_OPTIONS) {
+                TextView tv = makeGridChip(context, f.label, f.value.equals(Prefs.getSubFont(context)));
+                tv.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Prefs.setSubFont(context, f.value);
+                        refreshAllInPlace.run();
                     }
                 });
-
-        // Font, Color, Outline pickers
-        addModalSectionLabel("Phông chữ & Màu sắc");
-        HorizontalScrollView fontScroll = new HorizontalScrollView(context);
-        fontScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout fontRow = new LinearLayout(context);
-        fontScroll.addView(fontRow);
-        String curFont = Prefs.getSubFont(context);
-        for (final SubtitleEngine.FontOption f : SubtitleEngine.FONT_OPTIONS) {
-            TextView tv = makeTextPill(context, f.label, f.value.equals(curFont));
-            tv.setOnClickListener(new View.OnClickListener() {
+                fontChips.add(tv);
+                fontVals.add(f.value);
+                gridItems.add(tv);
+            }
+            addChipGridRows(gridItems, 3, 10);
+            stateUpdaters.add(new Runnable() {
                 @Override
-                public void onClick(View v) {
-                    Prefs.setSubFont(context, f.value);
-                    subtitleOverlay.renderAt(lastPosSec);
-                    renderSubModalContent();
+                public void run() {
+                    String cur = Prefs.getSubFont(context);
+                    for (int i = 0; i < fontChips.size(); i++) {
+                        boolean sel = fontVals.get(i).equals(cur);
+                        fontChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
+                    }
                 }
             });
-            fontRow.addView(tv, rightMarginLp(8));
         }
-        addSpacedView(fontScroll, 10);
 
-        HorizontalScrollView colorScroll = new HorizontalScrollView(context);
-        colorScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout colorRow = new LinearLayout(context);
-        colorScroll.addView(colorRow);
-        String curColor = Prefs.getSubColor(context);
-        for (final SubtitleEngine.ColorOption c : SubtitleEngine.COLOR_OPTIONS) {
-            TextView tv = makeTextPill(context, c.label, c.key.equals(curColor));
-            tv.setOnClickListener(new View.OnClickListener() {
+        addModalSectionLabel("Màu sắc chữ");
+        {
+            final List<LinearLayout> colorChips = new ArrayList<LinearLayout>();
+            final List<String> colorKeys = new ArrayList<String>();
+            List<View> gridItems = new ArrayList<View>();
+            for (final SubtitleEngine.ColorOption c : SubtitleEngine.COLOR_OPTIONS) {
+                LinearLayout chip = makeColorDotChip(context, c.label, c.mainColor, c.key.equals(Prefs.getSubColor(context)));
+                chip.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Prefs.setSubColor(context, c.key);
+                        refreshAllInPlace.run();
+                    }
+                });
+                colorChips.add(chip);
+                colorKeys.add(c.key);
+                gridItems.add(chip);
+            }
+            addChipGridRows(gridItems, 3, 10);
+            stateUpdaters.add(new Runnable() {
                 @Override
-                public void onClick(View v) {
-                    Prefs.setSubColor(context, c.key);
-                    subtitleOverlay.renderAt(lastPosSec);
-                    renderSubModalContent();
+                public void run() {
+                    String cur = Prefs.getSubColor(context);
+                    for (int i = 0; i < colorChips.size(); i++) {
+                        boolean sel = colorKeys.get(i).equals(cur);
+                        colorChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
+                    }
                 }
             });
-            colorRow.addView(tv, rightMarginLp(8));
         }
-        addSpacedView(colorScroll, 10);
 
-        HorizontalScrollView outScroll = new HorizontalScrollView(context);
-        outScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout outRow = new LinearLayout(context);
-        outScroll.addView(outRow);
-        String curOut = Prefs.getSubOutline(context);
-        for (final SubtitleEngine.OutlineOption o : SubtitleEngine.OUTLINE_OPTIONS) {
-            TextView tv = makeTextPill(context, o.label, o.key.equals(curOut));
-            tv.setOnClickListener(new View.OnClickListener() {
+        addModalSectionLabel("Viền chữ");
+        {
+            final List<TextView> outChips = new ArrayList<TextView>();
+            final List<String> outKeys = new ArrayList<String>();
+            List<View> gridItems = new ArrayList<View>();
+            for (final SubtitleEngine.OutlineOption o : SubtitleEngine.OUTLINE_OPTIONS) {
+                TextView tv = makeGridChip(context, o.label, o.key.equals(Prefs.getSubOutline(context)));
+                tv.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Prefs.setSubOutline(context, o.key);
+                        refreshAllInPlace.run();
+                    }
+                });
+                outChips.add(tv);
+                outKeys.add(o.key);
+                gridItems.add(tv);
+            }
+            addChipGridRows(gridItems, 3, 10);
+            stateUpdaters.add(new Runnable() {
                 @Override
-                public void onClick(View v) {
-                    Prefs.setSubOutline(context, o.key);
-                    subtitleOverlay.renderAt(lastPosSec);
-                    renderSubModalContent();
+                public void run() {
+                    String cur = Prefs.getSubOutline(context);
+                    for (int i = 0; i < outChips.size(); i++) {
+                        boolean sel = outKeys.get(i).equals(cur);
+                        outChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
+                    }
                 }
             });
-            outRow.addView(tv, rightMarginLp(8));
         }
-        addSpacedView(outScroll, 14);
 
-        // Translation Language (108 Languages)
+        addModalSectionLabel("Nền phụ đề");
+        {
+            final String[] bgKeys = {"none", "semi", "dark", "solid"};
+            final String[] bgLabels = {"Trong suốt", "Mờ nhẹ", "Tối đậm", "Đen đặc"};
+            final List<TextView> bgChips = new ArrayList<TextView>();
+            List<View> gridItems = new ArrayList<View>();
+            for (int i = 0; i < bgKeys.length; i++) {
+                final String key = bgKeys[i];
+                TextView tv = makeGridChip(context, bgLabels[i], key.equals(Prefs.getSubBgStyle(context)));
+                tv.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Prefs.setSubBgStyle(context, key);
+                        refreshAllInPlace.run();
+                    }
+                });
+                bgChips.add(tv);
+                gridItems.add(tv);
+            }
+            addChipGridRows(gridItems, 4, 12);
+            stateUpdaters.add(new Runnable() {
+                @Override
+                public void run() {
+                    String cur = Prefs.getSubBgStyle(context);
+                    for (int i = 0; i < bgChips.size(); i++) {
+                        boolean sel = bgKeys[i].equals(cur);
+                        bgChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
+                    }
+                }
+            });
+        }
+
+        // Section 4: Dịch phụ đề trực tiếp (108 ngôn ngữ — in-place)
         addModalSectionLabel("Dịch phụ đề trực tiếp (108 ngôn ngữ)");
-        final String curLang = Prefs.getSubTranslateLang(context);
-        LinearLayout langCtrl = new LinearLayout(context);
-        langCtrl.setOrientation(LinearLayout.HORIZONTAL);
-        langCtrl.setGravity(Gravity.CENTER_VERTICAL);
+        {
+            LinearLayout langRow = new LinearLayout(context);
+            langRow.setOrientation(LinearLayout.HORIZONTAL);
+            langRow.setGravity(Gravity.CENTER_VERTICAL);
+            langRow.setClipChildren(false);
+            langRow.setClipToPadding(false);
+            langRow.setPadding(UiHelper.dp(context, 12), UiHelper.dp(context, 8),
+                    UiHelper.dp(context, 12), UiHelper.dp(context, 8));
+            langRow.setBackground(UiHelper.createPillDrawable(
+                    context, 14, Color.argb(120, 26, 30, 44), Color.TRANSPARENT, 0f));
 
-        TextView btnLangOff = makeTextPill(context, "Tắt dịch (EN gốc)", curLang.isEmpty());
-        btnLangOff.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Prefs.setSubTranslateLang(context, "");
-                subtitleOverlay.renderAt(lastPosSec);
-                renderSubModalContent();
-            }
-        });
-        langCtrl.addView(btnLangOff, rightMarginLp(8));
-
-        TextView btnLangPrev = makeTextPill(context, "◀ Trước", false);
-        btnLangPrev.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                cycleTranslateLanguage(-1);
-            }
-        });
-        langCtrl.addView(btnLangPrev, rightMarginLp(8));
-
-        TextView curLangLabel = new TextView(context);
-        curLangLabel.setText(findTranslateLangName(curLang));
-        curLangLabel.setTextColor(UiHelper.COLOR_CYAN);
-        curLangLabel.setTextSize(14f);
-        curLangLabel.setTypeface(null, Typeface.BOLD);
-        curLangLabel.setPadding(UiHelper.dp(context, 12), UiHelper.dp(context, 6), UiHelper.dp(context, 12), UiHelper.dp(context, 6));
-        langCtrl.addView(curLangLabel, rightMarginLp(8));
-
-        TextView btnLangNext = makeTextPill(context, "Sau ▶", false);
-        btnLangNext.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                cycleTranslateLanguage(1);
-            }
-        });
-        langCtrl.addView(btnLangNext);
-        addSpacedView(langCtrl, 14);
-
-        // AI Voice Dubbing
-        addModalSectionLabel("Thuyết minh thông minh (AI Voice)");
-        LinearLayout dubRow = new LinearLayout(context);
-        dubRow.setOrientation(LinearLayout.HORIZONTAL);
-        dubRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView dubToggle = makeTogglePill("Bật Thuyết minh AI", Prefs.isSubAiVoiceEnabled(context), new Runnable() {
-            @Override
-            public void run() {
-                boolean next = !Prefs.isSubAiVoiceEnabled(context);
-                Prefs.setSubAiVoiceEnabled(context, next);
-                if (!next) dubbingEngine.pauseNow();
-                refreshQuickBadges();
-            }
-        });
-        dubRow.addView(dubToggle, rightMarginLp(8));
-
-        String[] vModes = {"adaptive", "hoaimy", "namminh", "google"};
-        String[] vLabels = {"Đổi giọng tự động", "Hoài My", "Nam Minh", "Google"};
-        String curMode = Prefs.getSubAiVoiceMode(context);
-        for (int i = 0; i < vModes.length; i++) {
-            final String vm = vModes[i];
-            TextView tv = makeTextPill(context, vLabels[i], vm.equals(curMode));
-            tv.setOnClickListener(new View.OnClickListener() {
+            final TextView btnLangOff = makeTextPill(context, "Tắt dịch", Prefs.getSubTranslateLang(context).isEmpty());
+            btnLangOff.setId(View.generateViewId());
+            btnLangOff.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    Prefs.setSubAiVoiceMode(context, vm);
-                    dubbingEngine.pauseNow();
-                    renderSubModalContent();
+                    Prefs.setSubTranslateLang(context, "");
+                    refreshAllInPlace.run();
                 }
             });
-            dubRow.addView(tv, rightMarginLp(8));
-        }
-        addSpacedView(dubRow, 10);
+            langRow.addView(btnLangOff, rightMarginLp(8));
 
-        addStepperRow("Âm lượng Thuyết minh", Prefs.getSubAiVoiceVolume(context) + "%",
+            TextView btnLangPrev = makeTextPill(context, "◀", false);
+            btnLangPrev.setId(View.generateViewId());
+            btnLangPrev.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    cycleTranslateLanguageInPlace(-1);
+                    refreshAllInPlace.run();
+                }
+            });
+            langRow.addView(btnLangPrev, rightMarginLp(6));
+
+            final TextView curLangLabel = new TextView(context);
+            curLangLabel.setTextColor(UiHelper.COLOR_CYAN);
+            curLangLabel.setTextSize(13f);
+            curLangLabel.setTypeface(null, Typeface.BOLD);
+            curLangLabel.setGravity(Gravity.CENTER);
+            curLangLabel.setMaxLines(1);
+            curLangLabel.setEllipsize(TextUtils.TruncateAt.END);
+            langRow.addView(curLangLabel, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+            TextView btnLangNext = makeTextPill(context, "▶", false);
+            btnLangNext.setId(View.generateViewId());
+            btnLangNext.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    cycleTranslateLanguageInPlace(1);
+                    refreshAllInPlace.run();
+                }
+            });
+            LinearLayout.LayoutParams lnLp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lnLp.leftMargin = UiHelper.dp(context, 6);
+            langRow.addView(btnLangNext, lnLp);
+
+            btnLangOff.setNextFocusRightId(btnLangPrev.getId());
+            btnLangPrev.setNextFocusLeftId(btnLangOff.getId());
+            btnLangPrev.setNextFocusRightId(btnLangNext.getId());
+            btnLangNext.setNextFocusLeftId(btnLangPrev.getId());
+
+            addSpacedView(langRow, 12);
+
+            stateUpdaters.add(new Runnable() {
+                @Override
+                public void run() {
+                    String lang = Prefs.getSubTranslateLang(context);
+                    curLangLabel.setText(findTranslateLangName(lang));
+                    btnLangOff.setBackground(createPlayerFocusSelector(context, 14, lang.isEmpty()));
+                }
+            });
+        }
+
+        // Section 5: Thuyết minh AI (in-place)
+        addModalSectionLabel("Thuyết minh AI");
+        addSettingToggleRow(
+                "Bật Thuyết minh AI", null,
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isSubAiVoiceEnabled(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        boolean next = !Prefs.isSubAiVoiceEnabled(context);
+                        Prefs.setSubAiVoiceEnabled(context, next);
+                        if (!next) dubbingEngine.pauseNow();
+                        refreshAllInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        {
+            final String[] vModes = {"adaptive", "hoaimy", "namminh", "google"};
+            final String[] vLabels = {"Tự động", "Hoài My", "Nam Minh", "Google"};
+            final List<TextView> vChips = new ArrayList<TextView>();
+            List<View> gridItems = new ArrayList<View>();
+            for (int i = 0; i < vModes.length; i++) {
+                final String vm = vModes[i];
+                TextView tv = makeGridChip(context, vLabels[i], vm.equals(Prefs.getSubAiVoiceMode(context)));
+                tv.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Prefs.setSubAiVoiceMode(context, vm);
+                        dubbingEngine.pauseNow();
+                        refreshAllInPlace.run();
+                    }
+                });
+                vChips.add(tv);
+                gridItems.add(tv);
+            }
+            addChipGridRows(gridItems, 4, 8);
+            stateUpdaters.add(new Runnable() {
+                @Override
+                public void run() {
+                    String cur = Prefs.getSubAiVoiceMode(context);
+                    for (int i = 0; i < vChips.size(); i++) {
+                        boolean sel = vModes[i].equals(cur);
+                        vChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
+                    }
+                }
+            });
+        }
+
+        addInPlaceStepperRow("Âm lượng Thuyết minh",
+                new StringSupplierCompat() {
+                    @Override
+                    public String get() {
+                        return Prefs.getSubAiVoiceVolume(context) + "%";
+                    }
+                },
                 new Runnable() {
                     @Override
                     public void run() {
                         Prefs.setSubAiVoiceVolume(context, Prefs.getSubAiVoiceVolume(context) - 10);
+                        refreshAllInPlace.run();
                     }
                 },
                 new Runnable() {
                     @Override
                     public void run() {
                         Prefs.setSubAiVoiceVolume(context, Prefs.getSubAiVoiceVolume(context) + 10);
+                        refreshAllInPlace.run();
                     }
-                });
+                }, stateUpdaters);
 
-        // Reload / Reset Actions
+        // Section 6: Reload / Reset Actions (in-place)
         LinearLayout utilRow = new LinearLayout(context);
         utilRow.setOrientation(LinearLayout.HORIZONTAL);
-        TextView btnReloadSub = makeTextPill(context, "Tải lại phụ đề", false);
+        utilRow.setClipChildren(false);
+        utilRow.setClipToPadding(false);
+
+        TextView btnReloadSub = makeGridChip(context, "Tải lại phụ đề", false);
+        btnReloadSub.setId(View.generateViewId());
         btnReloadSub.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -2650,150 +3077,290 @@ public class PlayerScreenController {
                 });
             }
         });
-        utilRow.addView(btnReloadSub, rightMarginLp(10));
+        LinearLayout.LayoutParams u1Lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        u1Lp.rightMargin = UiHelper.dp(context, 10);
+        utilRow.addView(btnReloadSub, u1Lp);
 
-        TextView btnResetSub = makeTextPill(context, "Khôi phục mặc định", true);
+        TextView btnResetSub = makeGridChip(context, "Khôi phục mặc định", true);
+        btnResetSub.setId(View.generateViewId());
         btnResetSub.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Prefs.resetSubtitlePrefs(context);
                 dubbingEngine.pauseNow();
-                subtitleOverlay.renderAt(lastPosSec);
-                refreshQuickBadges();
-                renderSubModalContent();
+                refreshAllInPlace.run();
                 toast("Đã khôi phục cài đặt phụ đề mặc định", UiHelper.COLOR_CYAN);
             }
         });
-        utilRow.addView(btnResetSub);
-        subModalBody.addView(utilRow);
+        utilRow.addView(btnResetSub, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        btnReloadSub.setNextFocusRightId(btnResetSub.getId());
+        btnResetSub.setNextFocusLeftId(btnReloadSub.getId());
+        addSpacedView(utilRow, 8);
+
+        // Initial state sync
+        for (int i = 0; i < stateUpdaters.size(); i++) {
+            stateUpdaters.get(i).run();
+        }
     }
 
     private void renderSettingsModal() {
+        final List<Runnable> stateUpdaters = new ArrayList<Runnable>();
+        final Runnable refreshSettingsInPlace = new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < stateUpdaters.size(); i++) {
+                    stateUpdaters.get(i).run();
+                }
+            }
+        };
+
+        // 1. Tốc độ phát (7 equal-width chips in 1 clean row)
         addModalSectionLabel("Tốc độ phát video");
-        float[] rates = {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f};
-        float curRate = Prefs.getPlaybackRate(context);
-        LinearLayout speedRow = new LinearLayout(context);
-        speedRow.setOrientation(LinearLayout.HORIZONTAL);
-        for (final float r : rates) {
-            TextView tv = makeTextPill(context, formatRate(r), Math.abs(curRate - r) < 0.05f);
-            tv.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    applySpeedSetting(r);
-                    renderSubModalContent();
-                }
-            });
-            speedRow.addView(tv, rightMarginLp(8));
-        }
-        addSpacedView(speedRow, 14);
-
-        addModalSectionLabel("Chế độ phát & Chuyển tập");
-        LinearLayout r1 = new LinearLayout(context);
-        r1.addView(makeTogglePill("Tràn viền màn hình", Prefs.isVideoFillCover(context), new Runnable() {
-            @Override
-            public void run() {
-                Prefs.setVideoFillCover(context, !Prefs.isVideoFillCover(context));
-                applyResizeSetting();
-            }
-        }), rightMarginLp(8));
-        r1.addView(makeTogglePill("Tự chuyển tập", Prefs.isAutoPlayNext(context), new Runnable() {
-            @Override
-            public void run() {
-                Prefs.setAutoPlayNext(context, !Prefs.isAutoPlayNext(context));
-                refreshQuickBadges();
-            }
-        }), rightMarginLp(8));
-        r1.addView(makeTogglePill("Tải trước tập kế mượt mà", Prefs.isSeamlessPreload(context), new Runnable() {
-            @Override
-            public void run() {
-                Prefs.setSeamlessPreload(context, !Prefs.isSeamlessPreload(context));
-            }
-        }));
-        addSpacedView(r1, 8);
-
-        LinearLayout r2 = new LinearLayout(context);
-        r2.addView(makeTogglePill("Hiệu ứng chuyển cảnh", Prefs.isTransitionEffect(context), new Runnable() {
-            @Override
-            public void run() {
-                Prefs.setTransitionEffect(context, !Prefs.isTransitionEffect(context));
-            }
-        }), rightMarginLp(8));
-        r2.addView(makeTogglePill("Tự bỏ qua giới thiệu", Prefs.isAutoSkipIntro(context), new Runnable() {
-            @Override
-            public void run() {
-                Prefs.setAutoSkipIntro(context, !Prefs.isAutoSkipIntro(context));
-            }
-        }), rightMarginLp(8));
-        r2.addView(makeTogglePill("Giữ Thuyết minh khi chuyển tập", Prefs.isAutoDubNext(context), new Runnable() {
-            @Override
-            public void run() {
-                Prefs.setAutoDubNext(context, !Prefs.isAutoDubNext(context));
-            }
-        }));
-        addSpacedView(r2, 14);
-
-        addModalSectionLabel("Thời gian đếm ngược chuyển tập");
-        int[] delays = {5, 10, 15, 20};
-        int curDelay = Prefs.getNextEpisodeDelaySec(context);
-        LinearLayout dRow = new LinearLayout(context);
-        for (final int sec : delays) {
-            TextView tv = makeTextPill(context, sec + " giây", sec == curDelay);
-            tv.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    Prefs.setNextEpisodeDelaySec(context, sec);
-                    renderSubModalContent();
-                }
-            });
-            dRow.addView(tv, rightMarginLp(8));
-        }
-        addSpacedView(dRow, 14);
-
-        addModalSectionLabel("Độ tương phản dịu mắt (Phòng tối / Máy chiếu)");
-        List<String> contrasts = Arrays.asList("Thấp", "Mặc định", "Cao", "Rất cao");
-        String curContrast = Prefs.getContrastLevel(context);
-        LinearLayout cRow = new LinearLayout(context);
-        for (final String lv : contrasts) {
-            TextView tv = makeTextPill(context, lv, lv.equals(curContrast));
-            tv.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    Prefs.setContrastLevel(context, lv);
-                    applyContrastSetting();
-                    renderSubModalContent();
-                }
-            });
-            cRow.addView(tv, rightMarginLp(8));
-        }
-        addSpacedView(cRow, 14);
-
-        addModalSectionLabel("Hẹn giờ tự động tắt phát");
-        int[] sleepOpts = {0, 15, 30, 60, 90};
-        LinearLayout slRow = new LinearLayout(context);
-        for (final int min : sleepOpts) {
-            TextView tv = makeTextPill(context, min == 0 ? "Tắt" : (min + " phút"), min == sleepMinutesSetting);
-            tv.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    sleepMinutesSetting = min;
-                    handler.removeCallbacks(sleepTickRunnable);
-                    if (min == 0) {
-                        sleepTargetElapsedMs = 0L;
-                        sleepBadgeTv.setVisibility(View.GONE);
-                        toast("Đã tắt Hẹn giờ phát", UiHelper.COLOR_TEXT_MUTED);
-                    } else {
-                        sleepTargetElapsedMs = android.os.SystemClock.elapsedRealtime() + (min * 60000L);
-                        handler.post(sleepTickRunnable);
-                        toast("Sẽ tự tắt sau " + min + " phút", UiHelper.COLOR_GOLD);
+        {
+            final float[] rates = {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f};
+            final List<TextView> speedChips = new ArrayList<TextView>();
+            List<View> items = new ArrayList<View>();
+            for (final float r : rates) {
+                TextView tv = makeGridChip(context, formatRate(r), Math.abs(Prefs.getPlaybackRate(context) - r) < 0.05f);
+                tv.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        applySpeedSetting(r);
+                        refreshSettingsInPlace.run();
                     }
-                    renderSubModalContent();
+                });
+                speedChips.add(tv);
+                items.add(tv);
+            }
+            addChipGridRows(items, 7, 14);
+            if (!items.isEmpty()) {
+                for (int i = 0; i < items.size(); i++) {
+                    items.get(i).setNextFocusUpId(subModalCloseBtn.getId());
+                }
+            }
+            stateUpdaters.add(new Runnable() {
+                @Override
+                public void run() {
+                    float cur = Prefs.getPlaybackRate(context);
+                    for (int i = 0; i < speedChips.size(); i++) {
+                        boolean sel = Math.abs(cur - rates[i]) < 0.05f;
+                        speedChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
+                    }
                 }
             });
-            slRow.addView(tv, rightMarginLp(8));
         }
-        addSpacedView(slRow, 16);
 
-        TextView btnReload = makeTextPill(context, "Tải lại trình phát hiện tại", true);
+        // 2. Chế độ phát & Chuyển tập (Clean full-width TV toggle rows — zero overflow, in-place toggle)
+        addModalSectionLabel("Chế độ phát & Chuyển tập");
+        addSettingToggleRow(
+                "Tràn viền màn hình", "Phóng to video lấp đầy khung hình TV",
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isVideoFillCover(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        boolean next = !Prefs.isVideoFillCover(context);
+                        Prefs.setVideoFillCover(context, next);
+                        applyResizeSetting();
+                        refreshSettingsInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        addSettingToggleRow(
+                "Tự chuyển tập", "Tự động chuyển sang tập tiếp theo khi xem xong",
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isAutoPlayNext(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setAutoPlayNext(context, !Prefs.isAutoPlayNext(context));
+                        refreshQuickBadges();
+                        refreshSettingsInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        addSettingToggleRow(
+                "Tải trước tập kế", "Chuẩn bị sẵn tập kế tiếp giúp chuyển tập không khựng",
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isSeamlessPreload(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setSeamlessPreload(context, !Prefs.isSeamlessPreload(context));
+                        refreshSettingsInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        addSettingToggleRow(
+                "Hiệu ứng chuyển cảnh", "Chuyển cảnh êm dịu khi sang tập mới",
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isTransitionEffect(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setTransitionEffect(context, !Prefs.isTransitionEffect(context));
+                        refreshSettingsInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        addSettingToggleRow(
+                "Tự bỏ qua giới thiệu", "Tự động lướt qua đoạn mở đầu của phim",
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isAutoSkipIntro(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setAutoSkipIntro(context, !Prefs.isAutoSkipIntro(context));
+                        refreshSettingsInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        addSettingToggleRow(
+                "Giữ Thuyết minh khi chuyển tập", "Tự động giữ trạng thái Thuyết minh AI ở tập sau",
+                new BooleanSupplierCompat() {
+                    @Override
+                    public boolean get() {
+                        return Prefs.isAutoDubNext(context);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setAutoDubNext(context, !Prefs.isAutoDubNext(context));
+                        refreshSettingsInPlace.run();
+                    }
+                }, stateUpdaters);
+
+        // 3. Thời gian đếm ngược chuyển tập
+        addModalSectionLabel("Thời gian đếm ngược chuyển tập");
+        {
+            final int[] delays = {5, 10, 15, 20};
+            final List<TextView> delayChips = new ArrayList<TextView>();
+            List<View> items = new ArrayList<View>();
+            for (final int sec : delays) {
+                TextView tv = makeGridChip(context, sec + " giây", sec == Prefs.getNextEpisodeDelaySec(context));
+                tv.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Prefs.setNextEpisodeDelaySec(context, sec);
+                        refreshSettingsInPlace.run();
+                    }
+                });
+                delayChips.add(tv);
+                items.add(tv);
+            }
+            addChipGridRows(items, 4, 14);
+            stateUpdaters.add(new Runnable() {
+                @Override
+                public void run() {
+                    int cur = Prefs.getNextEpisodeDelaySec(context);
+                    for (int i = 0; i < delayChips.size(); i++) {
+                        boolean sel = delays[i] == cur;
+                        delayChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
+                    }
+                }
+            });
+        }
+
+        // 4. Độ tương phản dịu mắt
+        addModalSectionLabel("Độ tương phản dịu mắt (Phòng tối / Máy chiếu)");
+        {
+            final String[] contrasts = {"Thấp", "Mặc định", "Cao", "Rất cao"};
+            final List<TextView> cChips = new ArrayList<TextView>();
+            List<View> items = new ArrayList<View>();
+            for (final String lv : contrasts) {
+                TextView tv = makeGridChip(context, lv, lv.equals(Prefs.getContrastLevel(context)));
+                tv.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Prefs.setContrastLevel(context, lv);
+                        applyContrastSetting();
+                        refreshQuickBadges();
+                        refreshSettingsInPlace.run();
+                    }
+                });
+                cChips.add(tv);
+                items.add(tv);
+            }
+            addChipGridRows(items, 4, 14);
+            stateUpdaters.add(new Runnable() {
+                @Override
+                public void run() {
+                    String cur = Prefs.getContrastLevel(context);
+                    for (int i = 0; i < cChips.size(); i++) {
+                        boolean sel = contrasts[i].equals(cur);
+                        cChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
+                    }
+                }
+            });
+        }
+
+        // 5. Hẹn giờ tự động tắt phát
+        addModalSectionLabel("Hẹn giờ tự động tắt phát");
+        {
+            final int[] sleepOpts = {0, 15, 30, 60, 90};
+            final List<TextView> slChips = new ArrayList<TextView>();
+            List<View> items = new ArrayList<View>();
+            for (final int min : sleepOpts) {
+                TextView tv = makeGridChip(context, min == 0 ? "Tắt" : (min + " phút"), min == sleepMinutesSetting);
+                tv.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        sleepMinutesSetting = min;
+                        handler.removeCallbacks(sleepTickRunnable);
+                        if (min == 0) {
+                            sleepTargetElapsedMs = 0L;
+                            sleepBadgeTv.setVisibility(View.GONE);
+                            toast("Đã tắt Hẹn giờ phát", UiHelper.COLOR_TEXT_MUTED);
+                        } else {
+                            sleepTargetElapsedMs = android.os.SystemClock.elapsedRealtime() + (min * 60000L);
+                            handler.post(sleepTickRunnable);
+                            toast("Sẽ tự tắt sau " + min + " phút", UiHelper.COLOR_GOLD);
+                        }
+                        refreshSettingsInPlace.run();
+                    }
+                });
+                slChips.add(tv);
+                items.add(tv);
+            }
+            addChipGridRows(items, 5, 16);
+            stateUpdaters.add(new Runnable() {
+                @Override
+                public void run() {
+                    for (int i = 0; i < slChips.size(); i++) {
+                        boolean sel = sleepOpts[i] == sleepMinutesSetting;
+                        slChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
+                    }
+                }
+            });
+        }
+
+        // 6. Tải lại trình phát hiện tại (Full-width button with generous bottom clearance)
+        TextView btnReload = makeGridChip(context, "Tải lại trình phát hiện tại", true);
+        btnReload.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 11),
+                UiHelper.dp(context, 16), UiHelper.dp(context, 11));
+        btnReload.setTextSize(13.5f);
         btnReload.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -2801,7 +3368,10 @@ public class PlayerScreenController {
                 reloadCurrentEpisode();
             }
         });
-        subModalBody.addView(btnReload);
+        addSpacedView(btnReload, 12);
+
+        // Initial sync
+        refreshSettingsInPlace.run();
     }
 
     private void renderInfoAndMemberModal() {
@@ -2871,12 +3441,14 @@ public class PlayerScreenController {
             addSpacedView(card, 14);
 
             LinearLayout acts = new LinearLayout(context);
-            TextView wBtn = makeTextPill(context, wishlistLocalState ? "✓ Đã trong Danh sách" : "+ Thêm vào Danh sách", wishlistLocalState);
+            final TextView wBtn = makeTextPill(context, wishlistLocalState ? "✓ Đã trong Danh sách" : "+ Thêm vào Danh sách", wishlistLocalState);
             wBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     toggleWishlist();
-                    renderSubModalContent();
+                    boolean nextState = !wishlistLocalState;
+                    wBtn.setText(nextState ? "✓ Đã trong Danh sách" : "+ Thêm vào Danh sách");
+                    wBtn.setBackground(createPlayerFocusSelector(context, 14, nextState));
                 }
             });
             acts.addView(wBtn);
@@ -2936,17 +3508,26 @@ public class PlayerScreenController {
         subModalBody.addView(mCard);
     }
 
-    // ---- Modal Helper Widgets ----
+    // ---- Modal Helper Widgets (In-Place State Updates & Crisp White Border TV Focus) ----
+
+    private interface BooleanSupplierCompat {
+        boolean get();
+    }
+
+    private interface StringSupplierCompat {
+        String get();
+    }
 
     private void addModalSectionLabel(String text) {
         TextView tv = new TextView(context);
         tv.setText(text);
         tv.setTextColor(UiHelper.COLOR_TEXT_MUTED);
-        tv.setTextSize(13f);
+        tv.setTextSize(12.5f);
         tv.setTypeface(null, Typeface.BOLD);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = UiHelper.dp(context, 8);
+        lp.topMargin = UiHelper.dp(context, 4);
+        lp.bottomMargin = UiHelper.dp(context, 7);
         subModalBody.addView(tv, lp);
     }
 
@@ -2957,68 +3538,232 @@ public class PlayerScreenController {
         subModalBody.addView(v, lp);
     }
 
-    private void addStepperRow(String label, String value, final Runnable onDec, final Runnable onInc) {
+    private LinearLayout addSettingToggleRow(
+            String title,
+            String subtitle,
+            final BooleanSupplierCompat getter,
+            final Runnable onToggle,
+            List<Runnable> stateUpdaters) {
+        LinearLayout row = new LinearLayout(context);
+        row.setId(View.generateViewId());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 10),
+                UiHelper.dp(context, 14), UiHelper.dp(context, 10));
+        applyPlayerFocusButton(row, context, 14, false, 1.025f);
+
+        LinearLayout textCol = new LinearLayout(context);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        TextView titleTv = new TextView(context);
+        titleTv.setText(title);
+        titleTv.setTextColor(Color.WHITE);
+        titleTv.setTextSize(13.5f);
+        titleTv.setTypeface(null, Typeface.BOLD);
+        textCol.addView(titleTv);
+
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView subTv = new TextView(context);
+            subTv.setText(subtitle);
+            subTv.setTextColor(UiHelper.COLOR_TEXT_MUTED);
+            subTv.setTextSize(11.5f);
+            LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            sLp.topMargin = UiHelper.dp(context, 2);
+            textCol.addView(subTv, sLp);
+        }
+        row.addView(textCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        final TextView badgeTv = new TextView(context);
+        badgeTv.setTextSize(11.5f);
+        badgeTv.setTypeface(null, Typeface.BOLD);
+        badgeTv.setGravity(Gravity.CENTER);
+        badgeTv.setMinWidth(UiHelper.dp(context, 54));
+        badgeTv.setPadding(UiHelper.dp(context, 12), UiHelper.dp(context, 5),
+                UiHelper.dp(context, 12), UiHelper.dp(context, 5));
+        LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        bLp.leftMargin = UiHelper.dp(context, 12);
+        row.addView(badgeTv, bLp);
+
+        Runnable updater = new Runnable() {
+            @Override
+            public void run() {
+                boolean on = getter.get();
+                badgeTv.setText(on ? "BẬT" : "TẮT");
+                badgeTv.setTextColor(on ? Color.WHITE : UiHelper.COLOR_TEXT_MUTED);
+                badgeTv.setBackground(UiHelper.createPillDrawable(
+                        context, 12,
+                        on ? UiHelper.COLOR_GREEN : Color.argb(60, 255, 255, 255),
+                        Color.TRANSPARENT, 0f));
+            }
+        };
+        updater.run();
+        if (stateUpdaters != null) stateUpdaters.add(updater);
+
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                onToggle.run();
+            }
+        });
+        addSpacedView(row, 8);
+        return row;
+    }
+
+    private void addInPlaceStepperRow(
+            String label,
+            final StringSupplierCompat valueSupplier,
+            final Runnable onDec,
+            final Runnable onInc,
+            List<Runnable> stateUpdaters) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setClipChildren(false);
+        row.setClipToPadding(false);
         row.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 8),
                 UiHelper.dp(context, 14), UiHelper.dp(context, 8));
-        UiHelper.applyGlassCardStyle(row, context, 22, UiHelper.COLOR_SURFACE_CARD, 8);
+        row.setBackground(UiHelper.createPillDrawable(
+                context, 14, Color.argb(120, 26, 30, 44), Color.TRANSPARENT, 0f));
 
         TextView lbl = new TextView(context);
         lbl.setText(label);
         lbl.setTextColor(Color.WHITE);
-        lbl.setTextSize(14f);
+        lbl.setTextSize(13.5f);
+        lbl.setTypeface(null, Typeface.BOLD);
         row.addView(lbl, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView minus = makeTextPill(context, "−", false);
+        TextView minus = makeStepperBtn(context, "−");
+        minus.setId(View.generateViewId());
         minus.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 onDec.run();
-                subtitleOverlay.renderAt(lastPosSec);
-                renderSubModalContent();
             }
         });
-        row.addView(minus, rightMarginLp(10));
+        row.addView(minus, rightMarginLp(8));
 
-        TextView valTv = new TextView(context);
-        valTv.setText(value);
+        final TextView valTv = new TextView(context);
+        valTv.setText(valueSupplier.get());
         valTv.setTextColor(UiHelper.COLOR_CYAN);
-        valTv.setTextSize(14f);
+        valTv.setTextSize(13.5f);
         valTv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         valTv.setGravity(Gravity.CENTER);
-        valTv.setMinWidth(UiHelper.dp(context, 62));
-        row.addView(valTv, rightMarginLp(10));
+        valTv.setMinWidth(UiHelper.dp(context, 64));
+        row.addView(valTv, rightMarginLp(8));
 
-        TextView plus = makeTextPill(context, "+", false);
+        TextView plus = makeStepperBtn(context, "+");
+        plus.setId(View.generateViewId());
         plus.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 onInc.run();
-                subtitleOverlay.renderAt(lastPosSec);
-                renderSubModalContent();
             }
         });
         row.addView(plus);
 
+        minus.setNextFocusRightId(plus.getId());
+        plus.setNextFocusLeftId(minus.getId());
+
+        if (stateUpdaters != null) {
+            stateUpdaters.add(new Runnable() {
+                @Override
+                public void run() {
+                    valTv.setText(valueSupplier.get());
+                }
+            });
+        }
         addSpacedView(row, 8);
     }
 
-    private TextView makeTogglePill(String label, boolean on, final Runnable onToggle) {
-        TextView tv = makeTextPill(context, (on ? "✓ " : "") + label, on);
-        tv.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                onToggle.run();
-                subtitleOverlay.renderAt(lastPosSec);
-                renderSubModalContent();
-            }
-        });
+    private TextView makeStepperBtn(Context ctx, String symbol) {
+        TextView tv = new TextView(ctx);
+        tv.setText(symbol);
+        tv.setTextColor(Color.WHITE);
+        tv.setTextSize(16f);
+        tv.setTypeface(null, Typeface.BOLD);
+        tv.setGravity(Gravity.CENTER);
+        tv.setMinWidth(UiHelper.dp(ctx, 40));
+        tv.setMinHeight(UiHelper.dp(ctx, 34));
+        tv.setPadding(UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 4));
+        applyPlayerFocusButton(tv, ctx, 12, false, 1.08f);
         return tv;
     }
 
-    private void cycleTranslateLanguage(int step) {
+    private TextView makeGridChip(Context ctx, String text, boolean selected) {
+        TextView tv = new TextView(ctx);
+        tv.setId(View.generateViewId());
+        tv.setText(text);
+        tv.setTextColor(Color.WHITE);
+        tv.setTextSize(12f);
+        tv.setTypeface(null, Typeface.BOLD);
+        tv.setGravity(Gravity.CENTER);
+        tv.setMaxLines(1);
+        tv.setEllipsize(TextUtils.TruncateAt.END);
+        tv.setPadding(UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 8));
+        applyPlayerFocusButton(tv, ctx, 12, selected, 1.05f);
+        return tv;
+    }
+
+    private LinearLayout makeColorDotChip(Context ctx, String label, int dotColor, boolean selected) {
+        LinearLayout chip = new LinearLayout(ctx);
+        chip.setId(View.generateViewId());
+        chip.setOrientation(LinearLayout.HORIZONTAL);
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 8));
+        applyPlayerFocusButton(chip, ctx, 12, selected, 1.05f);
+
+        View dot = new View(ctx);
+        dot.setBackground(UiHelper.createPillDrawable(ctx, 6, dotColor, Color.argb(140, 255, 255, 255), 1f));
+        LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 11));
+        dLp.rightMargin = UiHelper.dp(ctx, 6);
+        chip.addView(dot, dLp);
+
+        TextView tv = new TextView(ctx);
+        tv.setText(label);
+        tv.setTextColor(Color.WHITE);
+        tv.setTextSize(12f);
+        tv.setTypeface(null, Typeface.BOLD);
+        tv.setMaxLines(1);
+        tv.setEllipsize(TextUtils.TruncateAt.END);
+        chip.addView(tv);
+        return chip;
+    }
+
+    private void addChipGridRows(List<View> items, int cols, int bottomSpaceDp) {
+        if (items == null || items.isEmpty() || cols <= 0) return;
+        int total = items.size();
+        for (int start = 0; start < total; start += cols) {
+            LinearLayout row = new LinearLayout(context);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setClipChildren(false);
+            row.setClipToPadding(false);
+            int end = Math.min(total, start + cols);
+            for (int i = start; i < end; i++) {
+                View v = items.get(i);
+                if (v.getId() == View.NO_ID) v.setId(View.generateViewId());
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                if (i < end - 1) lp.rightMargin = UiHelper.dp(context, 8);
+                row.addView(v, lp);
+            }
+            // Wire horizontal D-Pad cleanly inside the row
+            for (int i = start; i < end; i++) {
+                View cur = items.get(i);
+                if (i > start) cur.setNextFocusLeftId(items.get(i - 1).getId());
+                if (i < end - 1) cur.setNextFocusRightId(items.get(i + 1).getId());
+            }
+            int remaining = cols - (end - start);
+            for (int r = 0; r < remaining; r++) {
+                LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(0, 1, 1f);
+                if (r < remaining - 1) spLp.rightMargin = UiHelper.dp(context, 8);
+                row.addView(new View(context), spLp);
+            }
+            boolean isLastRow = (end >= total);
+            addSpacedView(row, isLastRow ? bottomSpaceDp : 8);
+        }
+    }
+
+    private void cycleTranslateLanguageInPlace(int step) {
         List<SubtitleEngine.LangOption> langs = SubtitleEngine.TRANSLATE_LANGUAGES;
         if (langs.isEmpty()) return;
         String cur = Prefs.getSubTranslateLang(context);
@@ -3036,8 +3781,6 @@ public class PlayerScreenController {
         String newCode = langs.get(idx).code;
         Prefs.setSubTranslateLang(context, newCode);
         Prefs.setSubShowEn(context, true);
-        subtitleOverlay.renderAt(lastPosSec);
-        renderSubModalContent();
     }
 
     private String findTranslateLangName(String code) {
@@ -3060,6 +3803,94 @@ public class PlayerScreenController {
         return null;
     }
 
+    // ---- Unified Crisp White-Border Focus Helpers (Zero Red/Pink Glow) ----
+
+    private android.graphics.drawable.StateListDrawable createPlayerFocusSelector(
+            Context ctx, int radiusDp, boolean isActiveAccent) {
+        android.graphics.drawable.Drawable normal;
+        android.graphics.drawable.Drawable focused;
+        int whiteBorder = Color.argb(245, 255, 255, 255);
+        int borderPx = Math.max(2, UiHelper.dp(ctx, 2.5f));
+        float rPx = UiHelper.dpF(ctx, radiusDp);
+
+        if (isActiveAccent) {
+            GradientDrawable n = new GradientDrawable(
+                    GradientDrawable.Orientation.LEFT_RIGHT,
+                    new int[]{Color.parseColor("#E50914"), Color.parseColor("#C90052")});
+            n.setCornerRadius(rPx);
+            normal = n;
+
+            GradientDrawable f = new GradientDrawable(
+                    GradientDrawable.Orientation.LEFT_RIGHT,
+                    new int[]{Color.parseColor("#F01424"), Color.parseColor("#D50055")});
+            f.setCornerRadius(rPx);
+            f.setStroke(borderPx, whiteBorder);
+            focused = f;
+        } else {
+            normal = UiHelper.createPillDrawable(ctx, radiusDp, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f);
+            focused = UiHelper.createPillDrawable(ctx, radiusDp, UiHelper.getGlassFocusedBackgroundColor(), whiteBorder, 2.5f);
+        }
+
+        android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_pressed}, focused);
+        states.addState(new int[]{android.R.attr.state_focused}, focused);
+        states.addState(new int[]{}, normal);
+        return states;
+    }
+
+    private void applyPlayerFocusButton(
+            final View view, final Context ctx, final int radiusDp, boolean isActiveAccent, final float scaleOnFocus) {
+        view.setBackground(createPlayerFocusSelector(ctx, radiusDp, isActiveAccent));
+        view.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline outline) {
+                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), radiusDp));
+            }
+        });
+        view.setClipToOutline(true);
+        applyPlayerTvFocusAnimation(view, ctx, scaleOnFocus, 10);
+    }
+
+    private void applyPlayerTvFocusAnimation(
+            final View view, final Context ctx, final float scaleOnFocus, final int baseShadowDp) {
+        if (view == null || ctx == null) return;
+        view.setFocusable(true);
+        view.setClickable(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            view.setDefaultFocusHighlightEnabled(false);
+        }
+        view.setElevation(UiHelper.dp(ctx, baseShadowDp));
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            view.setOutlineSpotShadowColor(UiHelper.COLOR_GLASS_SHADOW_SPOT);
+            view.setOutlineAmbientShadowColor(UiHelper.COLOR_GLASS_SHADOW_AMBIENT);
+        }
+        view.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                applyNeutralFocusScale(v, ctx, hasFocus, scaleOnFocus, baseShadowDp);
+            }
+        });
+    }
+
+    private void applyNeutralFocusScale(
+            View view, Context ctx, boolean hasFocus, float scaleOnFocus, int baseShadowDp) {
+        if (view == null || ctx == null) return;
+        float targetScale = hasFocus ? scaleOnFocus : 1.0f;
+        float targetZ = hasFocus ? UiHelper.dpF(ctx, 8) : 0f;
+        view.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationZ(targetZ)
+                .setDuration(130)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
+        view.setElevation(hasFocus ? UiHelper.dp(ctx, baseShadowDp + 6) : UiHelper.dp(ctx, baseShadowDp));
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            view.setOutlineSpotShadowColor(UiHelper.COLOR_GLASS_SHADOW_SPOT);
+            view.setOutlineAmbientShadowColor(UiHelper.COLOR_GLASS_SHADOW_AMBIENT);
+        }
+    }
+
     private TextView makeTextPill(Context ctx, String text, boolean accent) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
@@ -3067,7 +3898,7 @@ public class PlayerScreenController {
         tv.setTextSize(12f);
         tv.setTypeface(null, Typeface.BOLD);
         tv.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 7), UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 7));
-        UiHelper.applyFocusableGlassButton(tv, ctx, 14, accent);
+        applyPlayerFocusButton(tv, ctx, 14, accent, 1.07f);
         return tv;
     }
 
@@ -3076,7 +3907,7 @@ public class PlayerScreenController {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(UiHelper.dp(ctx, 12), UiHelper.dp(ctx, 7), UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 7));
-        UiHelper.applyFocusableGlassButton(row, ctx, 14, false);
+        applyPlayerFocusButton(row, ctx, 14, false, 1.07f);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -3099,7 +3930,7 @@ public class PlayerScreenController {
         android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
                 ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.argb(245, 255, 255, 255), 2.5f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
@@ -3112,7 +3943,7 @@ public class PlayerScreenController {
             }
         });
         box.setClipToOutline(true);
-        UiHelper.applyTvFocusZoomGlow(box, ctx, 1.15f, 20, UiHelper.COLOR_FOCUS_GLOW);
+        applyPlayerTvFocusAnimation(box, ctx, 1.12f, 14);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -3138,13 +3969,13 @@ public class PlayerScreenController {
     private FrameLayout makeGroupSlotIcon(Context ctx, int iconRes) {
         FrameLayout slot = new FrameLayout(ctx);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.argb(245, 255, 255, 255), 2.5f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         slot.setBackground(states);
-        UiHelper.applyTvFocusZoomGlow(slot, ctx, 1.16f, 20, UiHelper.COLOR_FOCUS_GLOW);
+        applyPlayerTvFocusAnimation(slot, ctx, 1.12f, 12);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -3159,7 +3990,7 @@ public class PlayerScreenController {
         android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
                 ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.argb(245, 255, 255, 255), 2.5f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);
@@ -3172,7 +4003,7 @@ public class PlayerScreenController {
             }
         });
         box.setClipToOutline(true);
-        UiHelper.applyTvFocusZoomGlow(box, ctx, 1.18f, 20, UiHelper.COLOR_FOCUS_GLOW);
+        applyPlayerTvFocusAnimation(box, ctx, 1.12f, 14);
 
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
@@ -3185,7 +4016,7 @@ public class PlayerScreenController {
         android.graphics.drawable.Drawable normal = UiHelper.createPillDrawable(
                 ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassBackgroundColor(), Color.TRANSPARENT, 0f);
         android.graphics.drawable.Drawable focused = UiHelper.createPillDrawable(
-                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.TRANSPARENT, 0f);
+                ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.getGlassFocusedBackgroundColor(), Color.argb(245, 255, 255, 255), 2.5f);
         android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, focused);
         states.addState(new int[]{android.R.attr.state_focused}, focused);

@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.PorterDuff;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -14,7 +15,6 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -23,6 +23,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -37,15 +38,17 @@ import com.dangvietanh.cast.data.Models;
 
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
- * Full-bleed cinematic Movie Detail Screen matching the target Android TV design:
- * - Slim 56dp left icon rail (always clean, quick navigation)
- * - Right-weighted full-bleed backdrop + luminous-rimmed portrait poster
+ * Full-bleed cinematic Movie Detail Screen synchronized with the unified left TvNavigationRail:
+ * - Right-weighted full-bleed landscape backdrop + portrait poster
  * - Primary title + original subtitle, IMDb / Runtime / Year / Quality pill stats row
  * - Frosted genre & country tags, synopsis, capsule icon-text CTA buttons
- * - 5-column 16:9 thumbnail episode grid with active crimson-pink highlight + equalizer
+ * - Compact vertical scrollable 5-column episode grid sorted ascending (Tập 1 -> Tập cuối)
+ * - Crisp white focus borders + smooth TV D-Pad navigation
  */
 public class MovieDetailScreenView extends FrameLayout {
 
@@ -57,13 +60,13 @@ public class MovieDetailScreenView extends FrameLayout {
         void onOpenSettings();
     }
 
+    private static final int EPISODE_COLS = 5;
+
     private final ApiClient apiClient;
     private final Listener listener;
     private final List<Integer> historyStack = new ArrayList<>();
 
     private final ImageView backdropIv;
-    private final LinearLayout leftIconRail;
-    private FrameLayout firstRailIcon;
     private final ScrollView scrollView;
     private final LinearLayout contentCol;
     private final LinearLayout loadingBox;
@@ -89,7 +92,8 @@ public class MovieDetailScreenView extends FrameLayout {
     private final LinearLayout seasonSection;
     private final TextView epTotalCountTv;
     private final LinearLayout seasonTabsRow;
-    private final LinearLayout episodeGridWrap;
+    private final FrameLayout episodeListFrame;
+    private final RecyclerView episodeRv;
     private final LinearLayout sourcesSection;
     private final LinearLayout sourcesRow;
     private final LinearLayout castSection;
@@ -98,6 +102,11 @@ public class MovieDetailScreenView extends FrameLayout {
     private final RecyclerView relatedRv;
 
     private Models.MovieDetail currentDetail;
+    private final List<Models.EpisodeItem> displayedEpisodes = new ArrayList<>();
+    private final EpisodeAdapter episodeAdapter = new EpisodeAdapter();
+    private String currentEpFallbackUrl = "";
+    private int activeEpisodeIndex = 0;
+
     private final List<Models.MovieItem> relatedMovies = new ArrayList<>();
     private final RelatedAdapter relatedAdapter = new RelatedAdapter();
     private int selectedSeasonId = 0;
@@ -144,7 +153,7 @@ public class MovieDetailScreenView extends FrameLayout {
         addView(bottomScrim, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-        // 2. Main Content ScrollView (to the right of 56dp left icon rail)
+        // 2. Main Content ScrollView (sits cleanly beside the shared TvNavigationRail in MainActivity)
         setClipChildren(false);
         setClipToPadding(false);
         scrollView = new ScrollView(context);
@@ -153,7 +162,7 @@ public class MovieDetailScreenView extends FrameLayout {
         scrollView.setClipToPadding(false);
         FrameLayout.LayoutParams svLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
-        svLp.leftMargin = UiHelper.dp(context, 56);
+        svLp.leftMargin = 0;
         addView(scrollView, svLp);
 
         contentCol = new LinearLayout(context);
@@ -165,13 +174,7 @@ public class MovieDetailScreenView extends FrameLayout {
         scrollView.addView(contentCol, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
 
-        // 3. Slim Left Icon-Only Rail (56dp)
-        leftIconRail = buildLeftIconRail(context);
-        leftIconRail.setElevation(UiHelper.dp(context, 24));
-        addView(leftIconRail, new FrameLayout.LayoutParams(
-                UiHelper.dp(context, 56), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START));
-
-        // 4. Open Split Hero Header Row (Poster + Info Stack)
+        // 3. Open Split Hero Header Row (Poster + Info Stack)
         LinearLayout heroRow = new LinearLayout(context);
         heroRow.setOrientation(LinearLayout.HORIZONTAL);
         heroRow.setGravity(Gravity.TOP);
@@ -292,9 +295,6 @@ public class MovieDetailScreenView extends FrameLayout {
         btnDislike.setId(View.generateViewId());
         btnBack.setId(View.generateViewId());
 
-        if (firstRailIcon != null) {
-            btnPlay.setNextFocusLeftId(firstRailIcon.getId());
-        }
         btnPlay.setNextFocusRightId(btnWishlist.getId());
         btnWishlist.setNextFocusLeftId(btnPlay.getId());
         btnWishlist.setNextFocusRightId(btnLike.getId());
@@ -303,6 +303,21 @@ public class MovieDetailScreenView extends FrameLayout {
         btnDislike.setNextFocusLeftId(btnLike.getId());
         btnDislike.setNextFocusRightId(btnBack.getId());
         btnBack.setNextFocusLeftId(btnDislike.getId());
+
+        OnKeyListener heroDownKeyListener = new OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    return focusFirstSectionBelowHero();
+                }
+                return false;
+            }
+        };
+        btnPlay.setOnKeyListener(heroDownKeyListener);
+        btnWishlist.setOnKeyListener(heroDownKeyListener);
+        btnLike.setOnKeyListener(heroDownKeyListener);
+        btnDislike.setOnKeyListener(heroDownKeyListener);
+        btnBack.setOnKeyListener(heroDownKeyListener);
 
         actionsRow.addView(btnPlay, marginRightLp(context, 9));
         actionsRow.addView(btnWishlist, marginRightLp(context, 9));
@@ -313,7 +328,7 @@ public class MovieDetailScreenView extends FrameLayout {
 
         contentCol.addView(heroRow, hrLp);
 
-        // 5. Episodes Section (5-Column Thumbnail Grid)
+        // 5. Episodes Section (Compact Vertical Scrollable 5-Column Grid, Sorted Tập 1 -> Tập cuối)
         seasonSection = new LinearLayout(context);
         seasonSection.setOrientation(LinearLayout.VERTICAL);
         seasonSection.setClipChildren(false);
@@ -324,6 +339,7 @@ public class MovieDetailScreenView extends FrameLayout {
         epHdrRow.setOrientation(LinearLayout.HORIZONTAL);
         epHdrRow.setGravity(Gravity.CENTER_VERTICAL);
         epHdrRow.setClipChildren(false);
+        epHdrRow.setClipToPadding(false);
         LinearLayout.LayoutParams ehrLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         ehrLp.bottomMargin = UiHelper.dp(context, 10);
@@ -349,6 +365,8 @@ public class MovieDetailScreenView extends FrameLayout {
         seasonTabsRow.setOrientation(LinearLayout.HORIZONTAL);
         seasonTabsRow.setClipChildren(false);
         seasonTabsRow.setClipToPadding(false);
+        seasonTabsRow.setPadding(UiHelper.dp(context, 2), UiHelper.dp(context, 3),
+                UiHelper.dp(context, 2), UiHelper.dp(context, 3));
         seasonScroll.addView(seasonTabsRow);
         epHdrRow.addView(seasonScroll, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -359,11 +377,30 @@ public class MovieDetailScreenView extends FrameLayout {
         epHdrRow.addView(epTotalCountTv);
         seasonSection.addView(epHdrRow, ehrLp);
 
-        episodeGridWrap = new LinearLayout(context);
-        episodeGridWrap.setOrientation(LinearLayout.VERTICAL);
-        episodeGridWrap.setClipChildren(false);
-        episodeGridWrap.setClipToPadding(false);
-        seasonSection.addView(episodeGridWrap);
+        episodeListFrame = new FrameLayout(context);
+        episodeListFrame.setClipChildren(false);
+        episodeListFrame.setClipToPadding(false);
+        episodeListFrame.setBackground(UiHelper.createGlassRect(
+                context, 14, Color.argb(92, 16, 19, 30), Color.argb(28, 255, 255, 255), 1));
+
+        episodeRv = new RecyclerView(context);
+        episodeRv.setId(View.generateViewId());
+        episodeRv.setLayoutManager(new GridLayoutManager(context, EPISODE_COLS));
+        episodeRv.setItemAnimator(null);
+        episodeRv.setVerticalScrollBarEnabled(true);
+        episodeRv.setScrollbarFadingEnabled(false);
+        episodeRv.setNestedScrollingEnabled(true);
+        episodeRv.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        episodeRv.setClipChildren(false);
+        episodeRv.setClipToPadding(false);
+        episodeRv.setPadding(UiHelper.dp(context, 8), UiHelper.dp(context, 8),
+                UiHelper.dp(context, 8), UiHelper.dp(context, 8));
+        episodeRv.setAdapter(episodeAdapter);
+        episodeListFrame.addView(episodeRv, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+        seasonSection.addView(episodeListFrame, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(context, 268)));
         LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         secLp.bottomMargin = UiHelper.dp(context, 18);
@@ -458,119 +495,66 @@ public class MovieDetailScreenView extends FrameLayout {
         bindActionListeners();
     }
 
-    private LinearLayout buildLeftIconRail(Context ctx) {
-        LinearLayout rail = new LinearLayout(ctx);
-        rail.setOrientation(LinearLayout.HORIZONTAL);
-        rail.setClipChildren(false);
-        rail.setClipToPadding(false);
-
-        LinearLayout inner = new LinearLayout(ctx);
-        inner.setOrientation(LinearLayout.VERTICAL);
-        inner.setGravity(Gravity.CENTER);
-        inner.setClipChildren(false);
-        inner.setClipToPadding(false);
-        UiHelper.applyGlassCardStyle(inner, ctx, UiHelper.GLASS_RADIUS_DP, UiHelper.COLOR_SURFACE_GLASS, 20);
-        inner.setClipToOutline(false);
-        inner.setPadding(0, UiHelper.dp(ctx, 14), 0, UiHelper.dp(ctx, 14));
-
-        addRailIcon(ctx, inner, R.drawable.ic_home, true, new Runnable() {
-            @Override
-            public void run() {
-                if (listener != null) listener.onNavigateTab("home");
-            }
-        });
-        addRailIcon(ctx, inner, R.drawable.ic_search, false, new Runnable() {
-            @Override
-            public void run() {
-                if (listener != null) listener.onNavigateTab("search");
-            }
-        });
-        addRailIcon(ctx, inner, R.drawable.ic_movie, false, new Runnable() {
-            @Override
-            public void run() {
-                if (listener != null) listener.onNavigateTab("movies");
-            }
-        });
-        addRailIcon(ctx, inner, R.drawable.ic_tv, false, new Runnable() {
-            @Override
-            public void run() {
-                if (listener != null) listener.onNavigateTab("series");
-            }
-        });
-        addRailIcon(ctx, inner, R.drawable.ic_explore, false, new Runnable() {
-            @Override
-            public void run() {
-                if (listener != null) listener.onNavigateTab("explore");
-            }
-        });
-        addRailIcon(ctx, inner, R.drawable.ic_bookmark, false, new Runnable() {
-            @Override
-            public void run() {
-                if (listener != null) listener.onNavigateTab("library");
-            }
-        });
-        addRailIcon(ctx, inner, R.drawable.ic_settings, false, new Runnable() {
-            @Override
-            public void run() {
-                if (listener != null) listener.onOpenSettings();
-            }
-        });
-        addRailIcon(ctx, inner, R.drawable.ic_back, false, new Runnable() {
-            @Override
-            public void run() {
-                if (!handleBack() && listener != null) listener.onCloseDetail();
-            }
-        });
-
-        LinearLayout.LayoutParams innerLp = new LinearLayout.LayoutParams(
-                UiHelper.dp(ctx, 48), LinearLayout.LayoutParams.MATCH_PARENT);
-        innerLp.setMargins(UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 10), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 10));
-        rail.addView(inner, innerLp);
-        return rail;
+    @Override
+    public boolean requestFocus(int direction, Rect previouslyFocusedRect) {
+        if (btnPlay != null && loadingBox.getVisibility() != VISIBLE && errorBox.getVisibility() != VISIBLE) {
+            scrollView.smoothScrollTo(0, 0);
+            return btnPlay.requestFocus();
+        }
+        return super.requestFocus(direction, previouslyFocusedRect);
     }
 
-    private void addRailIcon(final Context ctx, LinearLayout parent, int iconRes, final boolean accentActive, final Runnable action) {
-        FrameLayout btn = new FrameLayout(ctx);
-        btn.setId(View.generateViewId());
-        if (firstRailIcon == null) {
-            firstRailIcon = btn;
-        }
-        if (accentActive) {
-            UiHelper.applyFocusableGlassButton(btn, ctx, UiHelper.GLASS_RADIUS_DP, true);
-        } else {
-            UiHelper.applyCircularIconButtonStyle(btn, ctx, 36);
-        }
-        final ImageView iv = new ImageView(ctx);
-        iv.setImageResource(iconRes);
-        iv.setColorFilter(accentActive ? Color.WHITE : UiHelper.COLOR_TEXT_MUTED, PorterDuff.Mode.SRC_IN);
-        btn.addView(iv, new FrameLayout.LayoutParams(UiHelper.dp(ctx, 18), UiHelper.dp(ctx, 18), Gravity.CENTER));
-        btn.setOnFocusChangeListener(new OnFocusChangeListener() {
-            @Override
-            public void onFocusChange(View v, boolean hasFocus) {
-                UiHelper.applyFocusVisualEffects(v, ctx, hasFocus, 1.16f, 6, UiHelper.COLOR_FOCUS_GLOW);
-                iv.setColorFilter((hasFocus || accentActive) ? Color.WHITE : UiHelper.COLOR_TEXT_MUTED, PorterDuff.Mode.SRC_IN);
+    private boolean focusFirstSectionBelowHero() {
+        if (seasonSection.getVisibility() == VISIBLE) {
+            if (seasonTabsRow.getChildCount() > 0) {
+                return seasonTabsRow.getChildAt(0).requestFocus();
             }
-        });
-        btn.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                action.run();
+            if (focusEpisodeGrid()) {
+                return true;
             }
-        });
-        btn.setOnKeyListener(new OnKeyListener() {
+        }
+        return focusFirstBelowEpisodes();
+    }
+
+    private boolean focusEpisodeGrid() {
+        if (seasonSection.getVisibility() != VISIBLE || displayedEpisodes.isEmpty()) return false;
+        int targetPos = Math.max(0, Math.min(activeEpisodeIndex, displayedEpisodes.size() - 1));
+        RecyclerView.ViewHolder vh = episodeRv.findViewHolderForAdapterPosition(targetPos);
+        if (vh instanceof EpisodeHolder) {
+            return ((EpisodeHolder) vh).card.requestFocus();
+        }
+        if (episodeRv.getChildCount() > 0) {
+            return episodeRv.getChildAt(0).requestFocus();
+        }
+        episodeRv.scrollToPosition(targetPos);
+        episodeRv.post(new Runnable() {
             @Override
-            public boolean onKey(View v, int keyCode, KeyEvent event) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    btnPlay.requestFocus();
-                    return true;
+            public void run() {
+                RecyclerView.ViewHolder holder = episodeRv.findViewHolderForAdapterPosition(activeEpisodeIndex);
+                if (holder instanceof EpisodeHolder) {
+                    ((EpisodeHolder) holder).card.requestFocus();
+                } else if (episodeRv.getChildCount() > 0) {
+                    episodeRv.getChildAt(0).requestFocus();
                 }
-                return false;
             }
         });
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 36), UiHelper.dp(ctx, 36));
-        lp.topMargin = UiHelper.dp(ctx, 6);
-        lp.bottomMargin = UiHelper.dp(ctx, 6);
-        parent.addView(btn, lp);
+        return true;
+    }
+
+    private boolean focusFirstBelowEpisodes() {
+        if (sourcesSection.getVisibility() == VISIBLE && sourcesRow.getChildCount() > 0) {
+            return sourcesRow.getChildAt(0).requestFocus();
+        }
+        if (castSection.getVisibility() == VISIBLE && castRow.getChildCount() > 0) {
+            return castRow.getChildAt(0).requestFocus();
+        }
+        if (relatedSection.getVisibility() == VISIBLE) {
+            if (relatedRv.getChildCount() > 0) {
+                return relatedRv.getChildAt(0).requestFocus();
+            }
+            return relatedRv.requestFocus();
+        }
+        return false;
     }
 
     public void openMovie(int videosId, boolean pushHistory) {
@@ -627,10 +611,11 @@ public class MovieDetailScreenView extends FrameLayout {
         Models.MovieDetail m = res.movie;
         currentDetail = m;
 
-        String bgUrl = !m.thumbnailUrl.isEmpty() ? m.thumbnailUrl : m.posterUrl;
-        String posterUrl = !m.posterUrl.isEmpty() ? m.posterUrl : bgUrl;
-        UiHelper.safeLoadBackdrop(backdropIv, bgUrl);
-        UiHelper.safeLoadImage(posterIv, posterUrl, R.drawable.default_poster, 0);
+        // Landscape (poster_image) for wide backdrop & episode fallback; Portrait (video_thumb) for vertical poster
+        String landscapeUrl = m.getLandscapeUrl();
+        String portraitUrl = m.getPortraitUrl();
+        UiHelper.safeLoadBackdrop(backdropIv, landscapeUrl);
+        UiHelper.safeLoadImage(posterIv, portraitUrl, R.drawable.default_poster, 0);
 
         // Split Title + Original Subtitle cleanly
         String rawTitle = m.title != null ? m.title.trim() : "";
@@ -721,8 +706,8 @@ public class MovieDetailScreenView extends FrameLayout {
         updateWishlistVisual();
         updateReactionVisuals();
 
-        // Seasons & 5-Column Thumbnail Episode Grid
-        renderSeasonsAndEpisodes(m, posterUrl);
+        // Seasons & Compact Vertical Scrollable 5-Column Episode Grid
+        renderSeasonsAndEpisodes(m, landscapeUrl);
 
         // Sources
         sourcesRow.removeAllViews();
@@ -731,9 +716,6 @@ public class MovieDetailScreenView extends FrameLayout {
             for (int sIdx = 0; sIdx < m.sources.size(); sIdx++) {
                 final Models.SourceItem src = m.sources.get(sIdx);
                 LinearLayout sBtn = makeCapsuleCta(ctx, R.drawable.ic_play, src.label, false);
-                if (sIdx == 0 && firstRailIcon != null) {
-                    sBtn.setNextFocusLeftId(firstRailIcon.getId());
-                }
                 sBtn.setOnClickListener(new OnClickListener() {
                     @Override
                     public void onClick(View v) {
@@ -760,9 +742,6 @@ public class MovieDetailScreenView extends FrameLayout {
                 personCard.setGravity(Gravity.CENTER_HORIZONTAL);
                 personCard.setPadding(UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 8));
                 UiHelper.applyFocusableGlassButton(personCard, ctx, 14, false);
-                if (pIdx == 0 && firstRailIcon != null) {
-                    personCard.setNextFocusLeftId(firstRailIcon.getId());
-                }
 
                 ImageView iv = new ImageView(ctx);
                 UiHelper.safeLoadAvatar(iv, st.imageUrl);
@@ -835,9 +814,10 @@ public class MovieDetailScreenView extends FrameLayout {
 
     private void renderSeasonsAndEpisodes(final Models.MovieDetail m, final String fallbackThumbUrl) {
         seasonTabsRow.removeAllViews();
-        episodeGridWrap.removeAllViews();
+        displayedEpisodes.clear();
+        currentEpFallbackUrl = fallbackThumbUrl != null ? fallbackThumbUrl : "";
 
-        List<Models.EpisodeItem> displayEps = new ArrayList<>();
+        List<Models.EpisodeItem> rawEps = new ArrayList<>();
         if (!m.seasons.isEmpty()) {
             boolean foundSelected = false;
             for (Models.SeasonItem s : m.seasons) {
@@ -853,6 +833,7 @@ public class MovieDetailScreenView extends FrameLayout {
             if (m.seasons.size() > 1) {
                 for (int sIdx = 0; sIdx < m.seasons.size(); sIdx++) {
                     final Models.SeasonItem s = m.seasons.get(sIdx);
+                    final int tabIndex = sIdx;
                     boolean active = s.seasonsId == selectedSeasonId;
                     TextView tab = new TextView(ctx);
                     tab.setId(View.generateViewId());
@@ -863,14 +844,30 @@ public class MovieDetailScreenView extends FrameLayout {
                     tab.setPadding(UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 4));
                     UiHelper.applyCompactChipStyle(tab, ctx, 12, active);
                     tab.setNextFocusUpId(btnPlay.getId());
-                    if (sIdx == 0 && firstRailIcon != null) {
-                        tab.setNextFocusLeftId(firstRailIcon.getId());
-                    }
+                    tab.setOnKeyListener(new OnKeyListener() {
+                        @Override
+                        public boolean onKey(View v, int keyCode, KeyEvent event) {
+                            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                                    scrollView.smoothScrollTo(0, 0);
+                                    btnPlay.requestFocus();
+                                    return true;
+                                }
+                                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                                    return focusEpisodeGrid();
+                                }
+                            }
+                            return false;
+                        }
+                    });
                     tab.setOnClickListener(new OnClickListener() {
                         @Override
                         public void onClick(View v) {
                             selectedSeasonId = s.seasonsId;
                             renderSeasonsAndEpisodes(m, fallbackThumbUrl);
+                            if (tabIndex < seasonTabsRow.getChildCount()) {
+                                seasonTabsRow.getChildAt(tabIndex).requestFocus();
+                            }
                         }
                     });
                     seasonTabsRow.addView(tab, marginRightLp(ctx, 8));
@@ -878,56 +875,357 @@ public class MovieDetailScreenView extends FrameLayout {
             }
             for (Models.SeasonItem s : m.seasons) {
                 if (s.seasonsId == selectedSeasonId) {
-                    displayEps.addAll(s.episodes);
+                    rawEps.addAll(s.episodes);
                     break;
                 }
             }
         } else {
-            displayEps.addAll(m.episodes);
+            rawEps.addAll(m.episodes);
         }
 
-        if (displayEps.isEmpty()) {
+        if (rawEps.isEmpty()) {
             seasonSection.setVisibility(GONE);
+            episodeAdapter.notifyDataSetChanged();
             return;
         }
+
+        sortEpisodesAscending(rawEps);
+        displayedEpisodes.addAll(rawEps);
+
+        // Determine currently watching episode index
+        activeEpisodeIndex = 0;
+        boolean matchedHistory = false;
+        if (m.watchHistory != null) {
+            for (int i = 0; i < displayedEpisodes.size(); i++) {
+                Models.EpisodeItem ep = displayedEpisodes.get(i);
+                if ((ep.episodesId > 0 && ep.episodesId == m.watchHistory.lastEpisodeId)
+                        || (!ep.streamCode.isEmpty() && ep.streamCode.equals(m.watchHistory.lastStreamCode))) {
+                    activeEpisodeIndex = i;
+                    matchedHistory = true;
+                    break;
+                }
+            }
+        }
+        if (!matchedHistory) {
+            activeEpisodeIndex = 0;
+        }
+
         seasonSection.setVisibility(VISIBLE);
-        epTotalCountTv.setText("Tổng " + displayEps.size() + " tập  ›");
+        int totalRows = (displayedEpisodes.size() + EPISODE_COLS - 1) / EPISODE_COLS;
+        epTotalCountTv.setText(totalRows >= 3
+                ? ("Tổng " + displayedEpisodes.size() + " tập  ·  Cuộn dọc")
+                : ("Tổng " + displayedEpisodes.size() + " tập"));
 
-        final int firstSeasonTabId = seasonTabsRow.getChildCount() > 0
-                ? seasonTabsRow.getChildAt(0).getId()
-                : View.NO_ID;
+        // Compact fixed-height vertical scroll container (max ~2.7 rows so screen stays balanced)
         Context ctx = getContext();
-        int cols = 5;
-        LinearLayout currentRow = null;
-        for (int i = 0; i < displayEps.size(); i++) {
-            if (i % cols == 0) {
-                currentRow = new LinearLayout(ctx);
-                currentRow.setOrientation(LinearLayout.HORIZONTAL);
-                currentRow.setClipChildren(false);
-                currentRow.setClipToPadding(false);
-                LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                rLp.bottomMargin = UiHelper.dp(ctx, 10);
-                episodeGridWrap.addView(currentRow, rLp);
+        int containerHeightDp;
+        if (totalRows <= 1) {
+            containerHeightDp = 112;
+        } else if (totalRows == 2) {
+            containerHeightDp = 206;
+        } else {
+            containerHeightDp = 268;
+        }
+        ViewGroup.LayoutParams flp = episodeListFrame.getLayoutParams();
+        if (flp != null) {
+            flp.height = UiHelper.dp(ctx, containerHeightDp);
+            episodeListFrame.setLayoutParams(flp);
+        }
+
+        episodeAdapter.notifyDataSetChanged();
+        if (activeEpisodeIndex > 0) {
+            episodeRv.scrollToPosition(activeEpisodeIndex);
+        } else {
+            episodeRv.scrollToPosition(0);
+        }
+    }
+
+    private static void sortEpisodesAscending(List<Models.EpisodeItem> list) {
+        if (list == null || list.size() <= 1) return;
+        Collections.sort(list, new Comparator<Models.EpisodeItem>() {
+            @Override
+            public int compare(Models.EpisodeItem a, Models.EpisodeItem b) {
+                if (a == b) return 0;
+                if (a == null) return 1;
+                if (b == null) return -1;
+                int numA = extractEpisodeNumber(a.episodesName);
+                int numB = extractEpisodeNumber(b.episodesName);
+                if (numA != Integer.MAX_VALUE || numB != Integer.MAX_VALUE) {
+                    if (numA != numB) {
+                        return numA < numB ? -1 : 1;
+                    }
+                }
+                if (a.order > 0 && b.order > 0 && a.order != b.order) {
+                    return a.order < b.order ? -1 : 1;
+                }
+                if (a.episodesId != b.episodesId) {
+                    return a.episodesId < b.episodesId ? -1 : 1;
+                }
+                return 0;
             }
-            final Models.EpisodeItem ep = displayEps.get(i);
-            final int epNum = i + 1;
-            boolean isActiveEp = m.watchHistory != null
-                    && ((ep.episodesId > 0 && ep.episodesId == m.watchHistory.lastEpisodeId)
-                    || (!ep.streamCode.isEmpty() && ep.streamCode.equals(m.watchHistory.lastStreamCode)));
-            if (!isActiveEp && i == 0 && (m.watchHistory == null || m.watchHistory.lastStreamCode.isEmpty())) {
-                isActiveEp = true;
+        });
+    }
+
+    private static int extractEpisodeNumber(String name) {
+        if (name == null) return Integer.MAX_VALUE;
+        int len = name.length();
+        int i = 0;
+        while (i < len && !Character.isDigit(name.charAt(i))) {
+            i++;
+        }
+        if (i >= len) return Integer.MAX_VALUE;
+        int val = 0;
+        while (i < len && Character.isDigit(name.charAt(i))) {
+            int d = name.charAt(i) - '0';
+            if (val > 100000) break;
+            val = val * 10 + d;
+            i++;
+        }
+        return val;
+    }
+
+    private static final class EpisodeHolder extends RecyclerView.ViewHolder {
+        final FrameLayout card;
+        final ImageView thumbIv;
+        final ImageView playIconIv;
+        final FrameLayout playBadgeWrap;
+        final TextView epTv;
+        final TextView watchingBadgeTv;
+        final LinearLayout eqRow;
+        final FrameLayout progressTrack;
+        final View progressFill;
+        final View activeRim;
+        final View focusFrame;
+
+        EpisodeHolder(
+                FrameLayout root,
+                FrameLayout card,
+                ImageView thumbIv,
+                ImageView playIconIv,
+                FrameLayout playBadgeWrap,
+                TextView epTv,
+                TextView watchingBadgeTv,
+                LinearLayout eqRow,
+                FrameLayout progressTrack,
+                View progressFill,
+                View activeRim,
+                View focusFrame) {
+            super(root);
+            this.card = card;
+            this.thumbIv = thumbIv;
+            this.playIconIv = playIconIv;
+            this.playBadgeWrap = playBadgeWrap;
+            this.epTv = epTv;
+            this.watchingBadgeTv = watchingBadgeTv;
+            this.eqRow = eqRow;
+            this.progressTrack = progressTrack;
+            this.progressFill = progressFill;
+            this.activeRim = activeRim;
+            this.focusFrame = focusFrame;
+        }
+    }
+
+    private class EpisodeAdapter extends RecyclerView.Adapter<EpisodeHolder> {
+        @NonNull
+        @Override
+        public EpisodeHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            final Context ctx = parent.getContext();
+            final int radiusDp = 10;
+
+            FrameLayout wrapper = new FrameLayout(ctx);
+            wrapper.setClipChildren(false);
+            wrapper.setClipToPadding(false);
+            wrapper.setPadding(UiHelper.dp(ctx, 5), UiHelper.dp(ctx, 5),
+                    UiHelper.dp(ctx, 5), UiHelper.dp(ctx, 5));
+            RecyclerView.LayoutParams wLp = new RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, UiHelper.dp(ctx, 94));
+            wrapper.setLayoutParams(wLp);
+
+            final FrameLayout card = new FrameLayout(ctx);
+            card.setFocusable(true);
+            card.setClickable(true);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                card.setDefaultFocusHighlightEnabled(false);
+            }
+            card.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View v, Outline outline) {
+                    outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), radiusDp));
+                }
+            });
+            card.setClipToOutline(true);
+            card.setElevation(UiHelper.dp(ctx, 6));
+            wrapper.addView(card, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+            ImageView thumbIv = new ImageView(ctx);
+            thumbIv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            card.addView(thumbIv, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+            View scrim = new View(ctx);
+            scrim.setBackground(new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{Color.TRANSPARENT, Color.argb(220, 9, 11, 18)}));
+            card.addView(scrim, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(ctx, 44), Gravity.BOTTOM));
+
+            // Top-Left "Đang xem" pill badge for active episode
+            TextView watchingBadgeTv = new TextView(ctx);
+            watchingBadgeTv.setText("Đang xem");
+            watchingBadgeTv.setTextColor(Color.WHITE);
+            watchingBadgeTv.setTextSize(9f);
+            watchingBadgeTv.setTypeface(null, Typeface.BOLD);
+            watchingBadgeTv.setPadding(UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 2),
+                    UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 2));
+            watchingBadgeTv.setBackground(UiHelper.createGlassRect(
+                    ctx, 6, Color.argb(215, 229, 9, 20), Color.TRANSPARENT, 0));
+            watchingBadgeTv.setVisibility(GONE);
+            FrameLayout.LayoutParams wbLp = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP | Gravity.START);
+            wbLp.setMargins(UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 6), 0, 0);
+            card.addView(watchingBadgeTv, wbLp);
+
+            // Bottom-Left: Play indicator + Episode Title
+            LinearLayout leftLabelRow = new LinearLayout(ctx);
+            leftLabelRow.setOrientation(LinearLayout.HORIZONTAL);
+            leftLabelRow.setGravity(Gravity.CENTER_VERTICAL);
+
+            FrameLayout playBadgeWrap = new FrameLayout(ctx);
+            ImageView playIconIv = new ImageView(ctx);
+            playIconIv.setImageResource(R.drawable.ic_play);
+            playIconIv.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+            playBadgeWrap.addView(playIconIv, new FrameLayout.LayoutParams(
+                    UiHelper.dp(ctx, 9), UiHelper.dp(ctx, 9), Gravity.CENTER));
+            LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 16));
+            pbLp.rightMargin = UiHelper.dp(ctx, 5);
+            leftLabelRow.addView(playBadgeWrap, pbLp);
+
+            TextView epTv = new TextView(ctx);
+            epTv.setTextColor(Color.WHITE);
+            epTv.setTextSize(11.5f);
+            epTv.setTypeface(null, Typeface.BOLD);
+            epTv.setMaxLines(1);
+            epTv.setEllipsize(TextUtils.TruncateAt.END);
+            leftLabelRow.addView(epTv);
+
+            FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM | Gravity.START);
+            llp.setMargins(UiHelper.dp(ctx, 7), 0, UiHelper.dp(ctx, 26), UiHelper.dp(ctx, 7));
+            card.addView(leftLabelRow, llp);
+
+            // Equalizer mini bars on active episode (bottom-right)
+            LinearLayout eqRow = new LinearLayout(ctx);
+            eqRow.setOrientation(LinearLayout.HORIZONTAL);
+            eqRow.setGravity(Gravity.BOTTOM);
+            int[] heights = {7, 12, 9};
+            for (int i = 0; i < heights.length; i++) {
+                View bar = new View(ctx);
+                bar.setBackground(UiHelper.createGlassRect(ctx, 1, UiHelper.COLOR_ACCENT_RED, Color.TRANSPARENT, 0));
+                LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                        UiHelper.dp(ctx, 2.2f), UiHelper.dp(ctx, heights[i]));
+                if (i > 0) blp.leftMargin = UiHelper.dp(ctx, 2);
+                eqRow.addView(bar, blp);
+            }
+            eqRow.setVisibility(GONE);
+            FrameLayout.LayoutParams eqLp = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM | Gravity.END);
+            eqLp.setMargins(0, 0, UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 8));
+            card.addView(eqRow, eqLp);
+
+            // Bottom progress bar for active episode
+            FrameLayout progressTrack = new FrameLayout(ctx);
+            progressTrack.setBackgroundColor(Color.argb(95, 255, 255, 255));
+            progressTrack.setVisibility(GONE);
+            View progressFill = new View(ctx);
+            progressFill.setBackgroundColor(UiHelper.COLOR_ACCENT_RED);
+            progressTrack.addView(progressFill, new FrameLayout.LayoutParams(0, FrameLayout.LayoutParams.MATCH_PARENT));
+            card.addView(progressTrack, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(ctx, 3), Gravity.BOTTOM));
+
+            // Subtle unfocused active indicator rim
+            View activeRim = new View(ctx);
+            activeRim.setBackground(UiHelper.createFocusRingDrawable(
+                    ctx, radiusDp, Color.argb(175, 229, 9, 20), 1.5f));
+            activeRim.setAlpha(0f);
+            card.addView(activeRim, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+            // Crisp White Focus Border (NO pink/red glow)
+            View focusFrame = new View(ctx);
+            focusFrame.setBackground(UiHelper.createWhiteFocusBorderDrawable(ctx, radiusDp, UiHelper.FOCUS_BORDER_DP));
+            focusFrame.setAlpha(0f);
+            card.addView(focusFrame, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+            return new EpisodeHolder(wrapper, card, thumbIv, playIconIv, playBadgeWrap,
+                    epTv, watchingBadgeTv, eqRow, progressTrack, progressFill, activeRim, focusFrame);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull final EpisodeHolder h, int position) {
+            final Context ctx = h.card.getContext();
+            final int pos = position;
+            final Models.EpisodeItem ep = displayedEpisodes.get(pos);
+            final int epNum = pos + 1;
+            final boolean isActiveEp = (pos == activeEpisodeIndex);
+
+            loadEpisodeThumbWithFallback(ctx, h.thumbIv, ep.streamCode, currentEpFallbackUrl);
+
+            String name = (ep.episodesName != null && !ep.episodesName.isEmpty())
+                    ? ep.episodesName : ("Tập " + epNum);
+            h.epTv.setText(name);
+
+            if (isActiveEp) {
+                h.playBadgeWrap.setBackground(UiHelper.createGlassRect(
+                        ctx, 8, UiHelper.COLOR_ACCENT_RED, Color.TRANSPARENT, 0));
+                h.watchingBadgeTv.setVisibility(VISIBLE);
+                h.eqRow.setVisibility(VISIBLE);
+                int pct = (currentDetail != null && currentDetail.watchHistory != null)
+                        ? currentDetail.watchHistory.progressPercent : 0;
+                if (pct > 0) {
+                    h.progressTrack.setVisibility(VISIBLE);
+                    final int clamped = Math.max(4, Math.min(100, pct));
+                    h.progressTrack.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            int w = h.progressTrack.getWidth();
+                            if (w > 0) {
+                                ViewGroup.LayoutParams lp = h.progressFill.getLayoutParams();
+                                lp.width = Math.round(w * (clamped / 100f));
+                                h.progressFill.setLayoutParams(lp);
+                            }
+                        }
+                    });
+                } else {
+                    h.progressTrack.setVisibility(GONE);
+                }
+            } else {
+                h.playBadgeWrap.setBackground(null);
+                h.watchingBadgeTv.setVisibility(GONE);
+                h.eqRow.setVisibility(GONE);
+                h.progressTrack.setVisibility(GONE);
             }
 
-            FrameLayout epCard = buildThumbnailEpisodeCard(ctx, ep, epNum, isActiveEp, fallbackThumbUrl);
-            epCard.setId(View.generateViewId());
-            if ((i % cols) == 0 && firstRailIcon != null) {
-                epCard.setNextFocusLeftId(firstRailIcon.getId());
-            }
-            if (i < cols) {
-                epCard.setNextFocusUpId(firstSeasonTabId != View.NO_ID ? firstSeasonTabId : btnPlay.getId());
-            }
-            epCard.setOnClickListener(new OnClickListener() {
+            boolean focused = h.card.hasFocus();
+            h.focusFrame.setAlpha(focused ? 1f : 0f);
+            h.activeRim.setAlpha((!focused && isActiveEp) ? 1f : 0f);
+            h.card.setScaleX(focused ? 1.055f : 1f);
+            h.card.setScaleY(focused ? 1.055f : 1f);
+
+            h.card.setOnFocusChangeListener(new OnFocusChangeListener() {
+                @Override
+                public void onFocusChange(View v, boolean hasFocus) {
+                    UiHelper.applyTvFocusEffect(v, ctx, hasFocus, 1.055f, 6);
+                    h.focusFrame.animate().alpha(hasFocus ? 1f : 0f).setDuration(120).start();
+                    h.activeRim.animate().alpha((!hasFocus && isActiveEp) ? 1f : 0f).setDuration(120).start();
+                }
+            });
+
+            h.card.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     launchWithStream(ep.streamCode, ep.episodesId, epNum,
@@ -935,151 +1233,51 @@ public class MovieDetailScreenView extends FrameLayout {
                 }
             });
 
-            LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(0, UiHelper.dp(ctx, 82), 1f);
-            if ((i % cols) < cols - 1) bLp.rightMargin = UiHelper.dp(ctx, 10);
-            currentRow.addView(epCard, bLp);
-        }
-
-        // Pad incomplete final row so 16:9 width matches cleanly across all rows
-        int rem = displayEps.size() % cols;
-        if (rem != 0 && currentRow != null) {
-            for (int k = rem; k < cols; k++) {
-                View spacer = new View(ctx);
-                LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(0, UiHelper.dp(ctx, 82), 1f);
-                if (k < cols - 1) spLp.rightMargin = UiHelper.dp(ctx, 10);
-                currentRow.addView(spacer, spLp);
-            }
-        }
-    }
-
-    private FrameLayout buildThumbnailEpisodeCard(
-            final Context ctx, Models.EpisodeItem ep, int epNum, final boolean isActiveEp, String fallbackThumbUrl) {
-        final int radiusDp = 10;
-        final FrameLayout card = new FrameLayout(ctx);
-        card.setFocusable(true);
-        card.setClickable(true);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            card.setDefaultFocusHighlightEnabled(false);
-        }
-        card.setOutlineProvider(new ViewOutlineProvider() {
-            @Override
-            public void getOutline(View v, Outline outline) {
-                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), radiusDp));
-            }
-        });
-        card.setClipToOutline(true);
-        card.setElevation(UiHelper.dp(ctx, isActiveEp ? 12 : 6));
-
-        ImageView thumbIv = new ImageView(ctx);
-        thumbIv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        card.addView(thumbIv, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-        loadEpisodeThumbWithFallback(ctx, thumbIv, ep.streamCode, fallbackThumbUrl);
-
-        // Dark bottom scrim inside thumbnail card
-        View scrim = new View(ctx);
-        scrim.setBackground(new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.TRANSPARENT, Color.argb(215, 9, 11, 18)}));
-        card.addView(scrim, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(ctx, 44), Gravity.BOTTOM));
-
-        // Bottom-Left: Play indicator + Episode Title
-        LinearLayout leftLabelRow = new LinearLayout(ctx);
-        leftLabelRow.setOrientation(LinearLayout.HORIZONTAL);
-        leftLabelRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        if (isActiveEp) {
-            FrameLayout pinkPlayDot = new FrameLayout(ctx);
-            GradientDrawable pg = new GradientDrawable(
-                    GradientDrawable.Orientation.LEFT_RIGHT,
-                    new int[]{Color.parseColor("#FF2E63"), Color.parseColor("#D50055")});
-            pg.setCornerRadius(UiHelper.dp(ctx, 8));
-            pinkPlayDot.setBackground(pg);
-            ImageView piv = new ImageView(ctx);
-            piv.setImageResource(R.drawable.ic_play);
-            piv.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-            pinkPlayDot.addView(piv, new FrameLayout.LayoutParams(
-                    UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 8), Gravity.CENTER));
-            LinearLayout.LayoutParams pdLp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 16), UiHelper.dp(ctx, 16));
-            pdLp.rightMargin = UiHelper.dp(ctx, 6);
-            leftLabelRow.addView(pinkPlayDot, pdLp);
-        } else {
-            ImageView piv = new ImageView(ctx);
-            piv.setImageResource(R.drawable.ic_play);
-            piv.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-            LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 11), UiHelper.dp(ctx, 11));
-            pLp.rightMargin = UiHelper.dp(ctx, 5);
-            leftLabelRow.addView(piv, pLp);
-        }
-
-        TextView epTv = new TextView(ctx);
-        String name = (ep.episodesName != null && !ep.episodesName.isEmpty()) ? ep.episodesName : ("Tập " + epNum);
-        epTv.setText(name);
-        epTv.setTextColor(Color.WHITE);
-        epTv.setTextSize(11.5f);
-        epTv.setTypeface(null, Typeface.BOLD);
-        epTv.setMaxLines(1);
-        epTv.setEllipsize(TextUtils.TruncateAt.END);
-        leftLabelRow.addView(epTv);
-
-        FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM | Gravity.START);
-        llp.setMargins(UiHelper.dp(ctx, 8), 0, UiHelper.dp(ctx, 28), UiHelper.dp(ctx, 7));
-        card.addView(leftLabelRow, llp);
-
-        // Equalizer mini bars on active episode (bottom-right)
-        if (isActiveEp) {
-            LinearLayout eqRow = new LinearLayout(ctx);
-            eqRow.setOrientation(LinearLayout.HORIZONTAL);
-            eqRow.setGravity(Gravity.BOTTOM);
-            int[] heights = {7, 12, 9};
-            for (int i = 0; i < heights.length; i++) {
-                View bar = new View(ctx);
-                bar.setBackground(UiHelper.createGlassRect(ctx, 1, Color.parseColor("#FF3B7F"), Color.TRANSPARENT, 0));
-                LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
-                        UiHelper.dp(ctx, 2.2f), UiHelper.dp(ctx, heights[i]));
-                if (i > 0) blp.leftMargin = UiHelper.dp(ctx, 2);
-                eqRow.addView(bar, blp);
-            }
-            FrameLayout.LayoutParams eqLp = new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
-                    Gravity.BOTTOM | Gravity.END);
-            eqLp.setMargins(0, 0, UiHelper.dp(ctx, 8), UiHelper.dp(ctx, 8));
-            card.addView(eqRow, eqLp);
-        }
-
-        // Luminous Crimson-Pink Focus Frame Overlay
-        final View focusFrame = new View(ctx);
-        focusFrame.setBackground(UiHelper.createGlowingFocusRingDrawable(
-                ctx, radiusDp, Color.parseColor("#FF2E63"), 2.6f));
-        focusFrame.setAlpha(isActiveEp ? 0.65f : 0f);
-        card.addView(focusFrame, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-        final int baseElevDp = isActiveEp ? 12 : 6;
-        final float baseElev = UiHelper.dp(ctx, baseElevDp);
-        final float focusElev = UiHelper.dp(ctx, 22);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && isActiveEp) {
-            card.setOutlineSpotShadowColor(UiHelper.COLOR_FOCUS_GLOW);
-            card.setOutlineAmbientShadowColor(Color.argb(180, 255, 46, 99));
-        }
-        card.setOnFocusChangeListener(new OnFocusChangeListener() {
-            @Override
-            public void onFocusChange(View v, boolean hasFocus) {
-                UiHelper.applyFocusVisualEffects(v, ctx, hasFocus, 1.085f, baseElevDp, UiHelper.COLOR_FOCUS_GLOW);
-                card.setElevation(hasFocus ? focusElev : baseElev);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && !hasFocus && isActiveEp) {
-                    card.setOutlineSpotShadowColor(UiHelper.COLOR_FOCUS_GLOW);
-                    card.setOutlineAmbientShadowColor(Color.argb(180, 255, 46, 99));
+            h.card.setOnKeyListener(new OnKeyListener() {
+                @Override
+                public boolean onKey(View v, int keyCode, KeyEvent event) {
+                    if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                    int total = displayedEpisodes.size();
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_UP && pos < EPISODE_COLS) {
+                        if (seasonTabsRow.getChildCount() > 0) {
+                            seasonTabsRow.getChildAt(0).requestFocus();
+                        } else {
+                            scrollView.smoothScrollTo(0, 0);
+                            btnPlay.requestFocus();
+                        }
+                        return true;
+                    }
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        int lastRow = (total - 1) / EPISODE_COLS;
+                        int curRow = pos / EPISODE_COLS;
+                        if (curRow == lastRow) {
+                            return focusFirstBelowEpisodes();
+                        }
+                        int nextPos = pos + EPISODE_COLS;
+                        if (nextPos >= total) {
+                            final int fallbackPos = total - 1;
+                            episodeRv.scrollToPosition(fallbackPos);
+                            episodeRv.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    RecyclerView.ViewHolder vh = episodeRv.findViewHolderForAdapterPosition(fallbackPos);
+                                    if (vh instanceof EpisodeHolder) {
+                                        ((EpisodeHolder) vh).card.requestFocus();
+                                    }
+                                }
+                            });
+                            return true;
+                        }
+                    }
+                    return false;
                 }
-                focusFrame.animate().alpha(hasFocus ? 1f : (isActiveEp ? 0.65f : 0f)).setDuration(130).start();
-            }
-        });
+            });
+        }
 
-        return card;
+        @Override
+        public int getItemCount() {
+            return displayedEpisodes.size();
+        }
     }
 
     private void loadEpisodeThumbWithFallback(Context ctx, ImageView target, String streamCode, String fallbackUrl) {
@@ -1268,6 +1466,7 @@ public class MovieDetailScreenView extends FrameLayout {
                 out.addAll(s.episodes);
             }
         }
+        sortEpisodesAscending(out);
         return out;
     }
 
@@ -1343,7 +1542,7 @@ public class MovieDetailScreenView extends FrameLayout {
         @Override
         public void onBindViewHolder(@NonNull MovieCardView.Holder holder, int position) {
             MovieCardView.bind(holder, relatedMovies.get(position), MovieCardView.TYPE_VERTICAL, position);
-            holder.itemView.setNextFocusLeftId(position == 0 && firstRailIcon != null ? firstRailIcon.getId() : View.NO_ID);
+            holder.itemView.setNextFocusLeftId(View.NO_ID);
         }
 
         @Override

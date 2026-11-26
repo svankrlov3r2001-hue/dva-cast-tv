@@ -135,6 +135,7 @@ public final class MovieCardView {
         outer.setClipChildren(false);
         outer.setClipToPadding(false);
         outer.setFocusable(true);
+        outer.setFocusableInTouchMode(false);
         outer.setClickable(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             outer.setDefaultFocusHighlightEnabled(false);
@@ -153,7 +154,7 @@ public final class MovieCardView {
             rankTv.setTextSize(44f);
             rankTv.setTypeface(null, Typeface.BOLD);
             rankTv.setIncludeFontPadding(false);
-            rankTv.setShadowLayer(UiHelper.dp(ctx, 6), 0, UiHelper.dp(ctx, 2), Color.argb(180, 229, 9, 20));
+            rankTv.setShadowLayer(UiHelper.dp(ctx, 6), 0, UiHelper.dp(ctx, 2), Color.argb(180, 0, 0, 0));
             LinearLayout.LayoutParams rkLp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             rkLp.rightMargin = UiHelper.dp(ctx, -4);
@@ -264,10 +265,10 @@ public final class MovieCardView {
         ptLp.gravity = Gravity.BOTTOM;
         posterContainer.addView(progressTrack, ptLp);
 
-        // Luminous Focus Border Overlay (double-layer neon halo + core rim)
+        // Crisp White TV Focus Border Overlay (2.5dp, zero pink/red glow)
         final View focusBorderOverlay = new View(ctx);
-        focusBorderOverlay.setBackground(UiHelper.createGlowingFocusRingDrawable(
-                ctx, radiusDp, UiHelper.COLOR_FOCUS_GLOW, 2.6f));
+        focusBorderOverlay.setBackground(UiHelper.createWhiteFocusBorderDrawable(
+                ctx, radiusDp, UiHelper.FOCUS_BORDER_DP));
         focusBorderOverlay.setAlpha(0f);
         posterContainer.addView(focusBorderOverlay, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -319,15 +320,15 @@ public final class MovieCardView {
         outer.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
-                UiHelper.applyFocusVisualEffects(v, fCtx, hasFocus, 1.085f, 6, UiHelper.COLOR_FOCUS_GLOW);
+                UiHelper.applyTvFocusEffect(v, fCtx, hasFocus, UiHelper.FOCUS_SCALE_DEFAULT, 6);
                 posterContainer.setElevation(hasFocus ? focusElev : baseElev);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     if (hasFocus) {
-                        posterContainer.setOutlineSpotShadowColor(UiHelper.COLOR_FOCUS_GLOW);
-                        posterContainer.setOutlineAmbientShadowColor(Color.argb(195, 255, 46, 99));
+                        posterContainer.setOutlineSpotShadowColor(UiHelper.COLOR_FOCUS_SHADOW_SPOT);
+                        posterContainer.setOutlineAmbientShadowColor(UiHelper.COLOR_FOCUS_SHADOW_AMBIENT);
                     } else {
-                        posterContainer.setOutlineSpotShadowColor(Color.argb(190, 0, 0, 0));
-                        posterContainer.setOutlineAmbientShadowColor(Color.argb(145, 0, 0, 0));
+                        posterContainer.setOutlineSpotShadowColor(UiHelper.COLOR_GLASS_SHADOW_SPOT);
+                        posterContainer.setOutlineAmbientShadowColor(UiHelper.COLOR_GLASS_SHADOW_AMBIENT);
                     }
                 }
                 focusBorderOverlay.animate().alpha(hasFocus ? 1f : 0f).setDuration(130).start();
@@ -349,9 +350,7 @@ public final class MovieCardView {
 
         Context ctx = h.itemView.getContext();
         boolean isLandscape = (cardType == TYPE_LANDSCAPE || cardType == TYPE_ANIME_HERO);
-        String imgUrl = isLandscape
-                ? (!item.thumbnailUrl.isEmpty() ? item.thumbnailUrl : item.posterUrl)
-                : (!item.posterUrl.isEmpty() ? item.posterUrl : item.thumbnailUrl);
+        String imgUrl = isLandscape ? item.getLandscapeUrl() : item.getPortraitUrl();
         UiHelper.safeLoadImage(h.posterIv, imgUrl, R.drawable.default_poster, 0);
 
         String leftBadge = item.episodeBadge != null && !item.episodeBadge.isEmpty()

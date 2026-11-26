@@ -2,6 +2,7 @@ package com.dangvietanh.cast.ui;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
@@ -55,6 +56,7 @@ public class LibraryScreenView extends FrameLayout {
         root.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 16),
                 UiHelper.dp(context, 20), UiHelper.dp(context, 14));
         root.setClipChildren(false);
+        root.setClipToPadding(false);
         addView(root, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -62,9 +64,12 @@ public class LibraryScreenView extends FrameLayout {
         LinearLayout topRow = new LinearLayout(context);
         topRow.setOrientation(LinearLayout.HORIZONTAL);
         topRow.setGravity(Gravity.CENTER_VERTICAL);
+        topRow.setClipChildren(false);
+        topRow.setClipToPadding(false);
+        topRow.setPadding(0, UiHelper.dp(context, 3), 0, UiHelper.dp(context, 3));
         LinearLayout.LayoutParams trLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        trLp.bottomMargin = UiHelper.dp(context, 12);
+        trLp.bottomMargin = UiHelper.dp(context, 10);
 
         TextView titleTv = new TextView(context);
         titleTv.setText("Danh sách & Đang xem");
@@ -80,11 +85,13 @@ public class LibraryScreenView extends FrameLayout {
         topRow.addView(spinner, spLp);
 
         tabWishlistBtn = makeTabBtn(context, "Danh sách của tôi", true);
+        tabWishlistBtn.setId(View.generateViewId());
         tabWishlistBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 showingWatched = false;
                 updateTabVisuals();
+                tabWishlistBtn.requestFocus();
             }
         });
         LinearLayout.LayoutParams t1Lp = new LinearLayout.LayoutParams(
@@ -93,11 +100,13 @@ public class LibraryScreenView extends FrameLayout {
         topRow.addView(tabWishlistBtn, t1Lp);
 
         tabWatchedBtn = makeTabBtn(context, "Đang xem gần đây", false);
+        tabWatchedBtn.setId(View.generateViewId());
         tabWatchedBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 showingWatched = true;
                 updateTabVisuals();
+                tabWatchedBtn.requestFocus();
             }
         });
         LinearLayout.LayoutParams t2Lp = new LinearLayout.LayoutParams(
@@ -106,6 +115,7 @@ public class LibraryScreenView extends FrameLayout {
         topRow.addView(tabWatchedBtn, t2Lp);
 
         TextView refreshBtn = makeTabBtn(context, "Làm mới", false);
+        refreshBtn.setId(View.generateViewId());
         refreshBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -125,13 +135,32 @@ public class LibraryScreenView extends FrameLayout {
         root.addView(emptyTv);
 
         gridRv = new RecyclerView(context);
+        gridRv.setId(View.generateViewId());
         gridRv.setLayoutManager(new GridLayoutManager(context, 5));
+        gridRv.setItemAnimator(null);
         gridRv.setClipChildren(false);
         gridRv.setClipToPadding(false);
         gridRv.setPadding(0, UiHelper.dp(context, 6), 0, UiHelper.dp(context, 24));
         gridRv.setAdapter(adapter);
         root.addView(gridRv, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        tabWishlistBtn.setNextFocusRightId(tabWatchedBtn.getId());
+        tabWishlistBtn.setNextFocusDownId(gridRv.getId());
+        tabWatchedBtn.setNextFocusLeftId(tabWishlistBtn.getId());
+        tabWatchedBtn.setNextFocusRightId(refreshBtn.getId());
+        tabWatchedBtn.setNextFocusDownId(gridRv.getId());
+        refreshBtn.setNextFocusLeftId(tabWatchedBtn.getId());
+        refreshBtn.setNextFocusDownId(gridRv.getId());
+    }
+
+    @Override
+    public boolean requestFocus(int direction, Rect previouslyFocusedRect) {
+        TextView target = showingWatched ? tabWatchedBtn : tabWishlistBtn;
+        if (target != null) {
+            return target.requestFocus();
+        }
+        return super.requestFocus(direction, previouslyFocusedRect);
     }
 
     public void refresh() {

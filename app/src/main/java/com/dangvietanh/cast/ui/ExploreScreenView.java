@@ -2,8 +2,10 @@ package com.dangvietanh.cast.ui;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -65,6 +67,7 @@ public class ExploreScreenView extends FrameLayout {
         root.setPadding(UiHelper.dp(context, 20), UiHelper.dp(context, 16),
                 UiHelper.dp(context, 20), UiHelper.dp(context, 14));
         root.setClipChildren(false);
+        root.setClipToPadding(false);
         addView(root, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -89,9 +92,12 @@ public class ExploreScreenView extends FrameLayout {
         // Filter Panel (Compact Frosted Surface)
         LinearLayout filterCard = new LinearLayout(context);
         filterCard.setOrientation(LinearLayout.VERTICAL);
+        filterCard.setClipChildren(false);
+        filterCard.setClipToPadding(false);
         filterCard.setPadding(UiHelper.dp(context, 12), UiHelper.dp(context, 8),
                 UiHelper.dp(context, 12), UiHelper.dp(context, 4));
         UiHelper.applyGlassCardStyle(filterCard, context, 14, UiHelper.COLOR_SURFACE_GLASS, 12);
+        filterCard.setClipToOutline(false);
         LinearLayout.LayoutParams fcLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         fcLp.bottomMargin = UiHelper.dp(context, 10);
@@ -103,7 +109,9 @@ public class ExploreScreenView extends FrameLayout {
         root.addView(filterCard, fcLp);
 
         gridRv = new RecyclerView(context);
+        gridRv.setId(View.generateViewId());
         gridRv.setLayoutManager(new GridLayoutManager(context, 5));
+        gridRv.setItemAnimator(null);
         gridRv.setClipChildren(false);
         gridRv.setClipToPadding(false);
         gridRv.setPadding(0, UiHelper.dp(context, 6), 0, UiHelper.dp(context, 14));
@@ -112,6 +120,7 @@ public class ExploreScreenView extends FrameLayout {
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         btnLoadMore = new TextView(context);
+        btnLoadMore.setId(View.generateViewId());
         btnLoadMore.setText("Tải thêm phim");
         btnLoadMore.setTextColor(Color.WHITE);
         btnLoadMore.setTextSize(13.5f);
@@ -121,6 +130,7 @@ public class ExploreScreenView extends FrameLayout {
                 UiHelper.dp(context, 24), UiHelper.dp(context, 10));
         UiHelper.applyFocusableGlassButton(btnLoadMore, context, 24, false);
         btnLoadMore.setVisibility(GONE);
+        btnLoadMore.setNextFocusUpId(gridRv.getId());
         btnLoadMore.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -142,12 +152,16 @@ public class ExploreScreenView extends FrameLayout {
         HorizontalScrollView hsv = new HorizontalScrollView(ctx);
         hsv.setHorizontalScrollBarEnabled(false);
         hsv.setClipChildren(false);
+        hsv.setClipToPadding(false);
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setClipChildren(false);
+        row.setClipToPadding(false);
+        row.setPadding(UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 3), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 3));
         hsv.addView(row);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = UiHelper.dp(ctx, 8);
+        lp.bottomMargin = UiHelper.dp(ctx, 4);
         parent.addView(hsv, lp);
         return row;
     }
@@ -156,6 +170,28 @@ public class ExploreScreenView extends FrameLayout {
         if (items.isEmpty()) {
             fetchCatalog(1, false);
         }
+        requestInitialFocus();
+    }
+
+    public void requestInitialFocus() {
+        post(new Runnable() {
+            @Override
+            public void run() {
+                if (typeRow.getChildCount() > 0) {
+                    typeRow.getChildAt(0).requestFocus();
+                } else {
+                    gridRv.requestFocus();
+                }
+            }
+        });
+    }
+
+    @Override
+    public boolean requestFocus(int direction, Rect previouslyFocusedRect) {
+        if (typeRow.getChildCount() > 0) {
+            return typeRow.getChildAt(0).requestFocus();
+        }
+        return super.requestFocus(direction, previouslyFocusedRect);
     }
 
     private void renderStaticFilters() {
@@ -188,12 +224,13 @@ public class ExploreScreenView extends FrameLayout {
     }
 
     private void addTypeChip(final String key, String label) {
-        TextView tv = makeChip(label, key.equals(selectedType));
+        final TextView tv = makeChip(label, key.equals(selectedType));
+        tv.setTag(key);
         tv.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 selectedType = key;
-                renderStaticFilters();
+                updateRowSelectionVisuals(typeRow, selectedType);
                 fetchCatalog(1, false);
             }
         });
@@ -201,12 +238,13 @@ public class ExploreScreenView extends FrameLayout {
     }
 
     private void addSortChip(final String key, String label) {
-        TextView tv = makeChip(label, key.equals(selectedSort));
+        final TextView tv = makeChip(label, key.equals(selectedSort));
+        tv.setTag(key);
         tv.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 selectedSort = key;
-                renderStaticFilters();
+                updateRowSelectionVisuals(sortRow, selectedSort);
                 fetchCatalog(1, false);
             }
         });
@@ -214,12 +252,13 @@ public class ExploreScreenView extends FrameLayout {
     }
 
     private void addGenreChip(final String key, String label) {
-        TextView tv = makeChip(label, key.equals(selectedGenre));
+        final TextView tv = makeChip(label, key.equals(selectedGenre));
+        tv.setTag(key);
         tv.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 selectedGenre = key;
-                renderDynamicFilters();
+                updateRowSelectionVisuals(genreRow, selectedGenre);
                 fetchCatalog(1, false);
             }
         });
@@ -227,16 +266,31 @@ public class ExploreScreenView extends FrameLayout {
     }
 
     private void addCountryChip(final String key, String label) {
-        TextView tv = makeChip(label, key.equals(selectedCountry));
+        final TextView tv = makeChip(label, key.equals(selectedCountry));
+        tv.setTag(key);
         tv.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 selectedCountry = key;
-                renderDynamicFilters();
+                updateRowSelectionVisuals(countryRow, selectedCountry);
                 fetchCatalog(1, false);
             }
         });
         countryRow.addView(tv, chipLp());
+    }
+
+    private void updateRowSelectionVisuals(LinearLayout row, String activeKey) {
+        Context ctx = getContext();
+        for (int i = 0; i < row.getChildCount(); i++) {
+            View child = row.getChildAt(i);
+            boolean sel = activeKey != null && activeKey.equals(child.getTag());
+            boolean hadFocus = child.hasFocus();
+            UiHelper.setButtonSelectedVisual(child, ctx, 20, sel);
+            if (hadFocus) {
+                UiHelper.applyTvFocusEffect(child, ctx, true, 1.06f, 16);
+                child.requestFocus();
+            }
+        }
     }
 
     private TextView makeChip(String label, boolean selected) {
@@ -319,6 +373,22 @@ public class ExploreScreenView extends FrameLayout {
         @Override
         public void onBindViewHolder(@NonNull MovieCardView.Holder holder, int position) {
             MovieCardView.bind(holder, items.get(position), MovieCardView.TYPE_VERTICAL, position);
+            final int pos = position;
+            holder.itemView.setOnKeyListener(new OnKeyListener() {
+                @Override
+                public boolean onKey(View v, int keyCode, KeyEvent event) {
+                    if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        int total = items.size();
+                        int lastRow = (total - 1) / 5;
+                        int curRow = pos / 5;
+                        if (curRow == lastRow && btnLoadMore.getVisibility() == VISIBLE) {
+                            btnLoadMore.requestFocus();
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            });
         }
 
         @Override

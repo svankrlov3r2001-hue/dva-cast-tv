@@ -271,7 +271,7 @@ public class MainActivity extends Activity {
         contentHost.setClipChildren(false);
         FrameLayout.LayoutParams chLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        chLp.leftMargin = UiHelper.dp(this, 188);
+        chLp.leftMargin = UiHelper.dp(this, TvNavigationRail.COLLAPSED_WIDTH_DP);
         mainShell.addView(contentHost, chLp);
 
         homeScreen = new HomeScreenView(this, apiClient, new HomeScreenView.Listener() {
@@ -356,36 +356,7 @@ public class MainActivity extends Activity {
         libraryScreen.setVisibility(View.GONE);
         contentHost.addView(libraryScreen);
 
-        // Floating Borderless Liquid Glass Left Rail
-        navRail = new TvNavigationRail(this, new TvNavigationRail.Listener() {
-            @Override
-            public void onSelectTab(String tabId) {
-                switchMainTab(tabId);
-            }
-
-            @Override
-            public void onOpenAccountProfile() {
-                if (accountModal != null) {
-                    accountModal.show(apiClient.getCachedUser());
-                }
-            }
-
-            @Override
-            public void onOpenSettingsMenu() {
-                if (overlayMenu != null) {
-                    overlayMenu.show();
-                }
-            }
-
-            @Override
-            public void onMoveFocusToContent() {
-                focusCurrentMainTab();
-            }
-        });
-        navRail.setElevation(UiHelper.dp(this, 32));
-        mainShell.addView(navRail);
-
-        // Movie Detail Screen Overlay
+        // Movie Detail Screen Overlay (inside mainShell below navRail so rail is shared seamlessly)
         detailScreen = new MovieDetailScreenView(this, apiClient, new MovieDetailScreenView.Listener() {
             @Override
             public void onCloseDetail() {
@@ -417,8 +388,39 @@ public class MainActivity extends Activity {
             }
         });
         detailScreen.setVisibility(View.GONE);
-        appContainer.addView(detailScreen, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        FrameLayout.LayoutParams detailLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        detailLp.leftMargin = UiHelper.dp(this, TvNavigationRail.COLLAPSED_WIDTH_DP);
+        mainShell.addView(detailScreen, detailLp);
+
+        // Shared Collapsible Left Rail (always above contentHost and detailScreen)
+        navRail = new TvNavigationRail(this, new TvNavigationRail.Listener() {
+            @Override
+            public void onSelectTab(String tabId) {
+                switchMainTab(tabId);
+            }
+
+            @Override
+            public void onOpenAccountProfile() {
+                if (accountModal != null) {
+                    accountModal.show(apiClient.getCachedUser());
+                }
+            }
+
+            @Override
+            public void onOpenSettingsMenu() {
+                if (overlayMenu != null) {
+                    overlayMenu.show();
+                }
+            }
+
+            @Override
+            public void onMoveFocusToContent() {
+                focusCurrentMainTab();
+            }
+        });
+        navRail.setElevation(UiHelper.dp(this, 36));
+        mainShell.addView(navRail);
 
         // Native Player Screen Overlay
         playerScreen = new PlayerScreenController(this, apiClient, new PlayerScreenController.Listener() {
@@ -574,6 +576,7 @@ public class MainActivity extends Activity {
 
     private void switchMainTab(String tabId) {
         navRail.setActiveTab(tabId);
+        detailScreen.clearHistory();
         detailScreen.setVisibility(View.GONE);
 
         homeScreen.setVisibility(View.GONE);
@@ -611,7 +614,9 @@ public class MainActivity extends Activity {
     }
 
     private void focusCurrentMainTab() {
-        if (searchScreen.getVisibility() == View.VISIBLE) {
+        if (detailScreen != null && detailScreen.getVisibility() == View.VISIBLE) {
+            detailScreen.requestFocus();
+        } else if (searchScreen.getVisibility() == View.VISIBLE) {
             searchScreen.requestFocus();
         } else if (exploreScreen.getVisibility() == View.VISIBLE) {
             exploreScreen.requestFocus();
@@ -635,8 +640,8 @@ public class MainActivity extends Activity {
         req.videosId = item.videosId;
         req.streamCode = !item.streamCode.isEmpty() ? item.streamCode : String.valueOf(item.videosId);
         req.title = item.getDisplayTitle();
-        req.posterUrl = item.posterUrl;
-        req.thumbnailUrl = item.thumbnailUrl;
+        req.posterUrl = item.getLandscapeUrl();
+        req.thumbnailUrl = item.getPortraitUrl();
         req.initialResumeSec = item.resumeSeconds > 5 ? item.resumeSeconds : -1;
         playerScreen.open(req);
     }

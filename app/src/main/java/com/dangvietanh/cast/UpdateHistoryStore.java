@@ -78,7 +78,7 @@ public final class UpdateHistoryStore {
                 return entry.date;
             }
         }
-        return "23/11/2026";
+        return "26/11/2026";
     }
 
     private static List<HistoryEntry> parseServerJson(String rawJson) {
@@ -124,6 +124,13 @@ public final class UpdateHistoryStore {
 
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
+
+        List<String> v15 = new ArrayList<>();
+        v15.add("Nâng cấp thanh menu bên trái thiết kế vuông góc gọn gàng, tự động thu gọn chỉ hiện biểu tượng khi xem danh sách phim và mở rộng đầy đủ khi di chuyển sang thanh menu ở cả Trang chủ lẫn Thông tin phim");
+        v15.add("Thay hiệu ứng chọn bằng viền trắng sắc nét kết hợp phóng to nhẹ nhàng, chuẩn hóa hiển thị áp phích dọc và hình nền ngang rõ nét trên toàn bộ ứng dụng");
+        v15.add("Khắc phục lỗi cuộn ngược lên đầu Trang chủ và tối ưu điều khiển bằng remote TV lên cụm nút góc trên phải cùng danh sách tập phim sắp xếp từ Tập 1 gọn gàng");
+        v15.add("Thiết kế lại bảng Tùy chỉnh phụ đề & thuyết minh (giữ nguyên vị trí chọn khi bấm tăng giảm), bảng Cài đặt trình phát gọn gàng, thay khung tải bằng vòng xoay ngay nút Phát/Tạm dừng và tối ưu tốc độ chuyển máy chủ phát phim");
+        list.add(new HistoryEntry(15L, "4.6", "26/11/2026", "Tối Ưu Điều Khiển Remote TV, Thanh Menu Tự Thu Gọn & Trình Phát Mượt Mà", v15));
 
         List<String> v14 = new ArrayList<>();
         v14.add("Đồng bộ toàn bộ nút bấm, biểu tượng, thanh menu và thẻ điều khiển sang phong cách kính mờ trong suốt bo tròn 40dp không viền kèm bóng đổ sâu sang trọng");

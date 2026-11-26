@@ -312,11 +312,23 @@ public class LoginScreenView extends FrameLayout {
         rightCol.addView(statusRow, srLp);
 
         // Focusable Actions Row
+        rightCol.setClipChildren(false);
+        rightCol.setClipToPadding(false);
+        glassCard.setClipChildren(false);
+        glassCard.setClipToPadding(false);
+        glassCard.setClipToOutline(false);
+        outerCol.setClipChildren(false);
+        outerCol.setClipToPadding(false);
+
         LinearLayout btnRow = new LinearLayout(ctx);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
         btnRow.setGravity(Gravity.CENTER_VERTICAL);
+        btnRow.setClipChildren(false);
+        btnRow.setClipToPadding(false);
+        btnRow.setPadding(UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 4), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 4));
 
         btnRefreshQr = new TextView(ctx);
+        btnRefreshQr.setId(View.generateViewId());
         btnRefreshQr.setText("Làm mới mã QR");
         btnRefreshQr.setTextColor(Color.WHITE);
         btnRefreshQr.setTextSize(13f);
@@ -336,6 +348,7 @@ public class LoginScreenView extends FrameLayout {
         btnRow.addView(btnRefreshQr, rLp);
 
         btnSettings = new TextView(ctx);
+        btnSettings.setId(View.generateViewId());
         btnSettings.setText("Cài đặt & Cập nhật");
         btnSettings.setTextColor(UiHelper.COLOR_TEXT_PRIMARY);
         btnSettings.setTextSize(13f);
@@ -351,7 +364,15 @@ public class LoginScreenView extends FrameLayout {
         });
         btnRow.addView(btnSettings);
 
-        btnRefreshQr.setNextFocusRightId(btnSettings.getId() != View.NO_ID ? btnSettings.getId() : View.NO_ID);
+        btnRefreshQr.setNextFocusRightId(btnSettings.getId());
+        btnRefreshQr.setNextFocusLeftId(btnRefreshQr.getId());
+        btnRefreshQr.setNextFocusUpId(btnRefreshQr.getId());
+        btnRefreshQr.setNextFocusDownId(btnRefreshQr.getId());
+
+        btnSettings.setNextFocusLeftId(btnRefreshQr.getId());
+        btnSettings.setNextFocusRightId(btnSettings.getId());
+        btnSettings.setNextFocusUpId(btnSettings.getId());
+        btnSettings.setNextFocusDownId(btnSettings.getId());
         rightCol.addView(btnRow);
     }
 

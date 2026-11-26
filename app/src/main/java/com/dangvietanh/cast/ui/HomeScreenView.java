@@ -118,8 +118,13 @@ public class HomeScreenView extends FrameLayout {
     private final OnKeyListener topUtilDownListener = new OnKeyListener() {
         @Override
         public boolean onKey(View v, int keyCode, KeyEvent event) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                scrollHomeToTop();
                 focusFirstMainContent();
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                 return true;
             }
             return false;
@@ -201,6 +206,7 @@ public class HomeScreenView extends FrameLayout {
         // 2. Main Vertical RecyclerView (Hero + Carousels)
         verticalRv = new RecyclerView(context);
         verticalRv.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
+        verticalRv.setItemViewCacheSize(4);
         verticalRv.setClipToPadding(false);
         verticalRv.setClipChildren(false);
         verticalRv.setPadding(0, 0, 0, UiHelper.dp(context, 28));
@@ -250,6 +256,9 @@ public class HomeScreenView extends FrameLayout {
         btnTopAccount = new FrameLayout(context);
         btnTopAccount.setId(View.generateViewId());
         UiHelper.applyCircularIconButtonStyle(btnTopAccount, context, 32);
+        btnTopAccount.setFocusable(true);
+        btnTopAccount.setFocusableInTouchMode(false);
+        attachTopUtilFocusEffect(btnTopAccount);
         topAvatarIv = new ImageView(context);
         topAvatarIv.setImageResource(R.drawable.ic_person);
         btnTopAccount.addView(topAvatarIv, new FrameLayout.LayoutParams(
@@ -266,11 +275,16 @@ public class HomeScreenView extends FrameLayout {
 
         // Deterministic D-Pad routing inside Top Utility Bar
         btnTopSearch.setNextFocusRightId(btnTopLibrary.getId());
+        btnTopSearch.setNextFocusUpId(btnTopSearch.getId());
         btnTopLibrary.setNextFocusLeftId(btnTopSearch.getId());
         btnTopLibrary.setNextFocusRightId(btnTopSettings.getId());
+        btnTopLibrary.setNextFocusUpId(btnTopLibrary.getId());
         btnTopSettings.setNextFocusLeftId(btnTopLibrary.getId());
         btnTopSettings.setNextFocusRightId(btnTopAccount.getId());
+        btnTopSettings.setNextFocusUpId(btnTopSettings.getId());
         btnTopAccount.setNextFocusLeftId(btnTopSettings.getId());
+        btnTopAccount.setNextFocusRightId(btnTopAccount.getId());
+        btnTopAccount.setNextFocusUpId(btnTopAccount.getId());
 
         btnTopSearch.setOnKeyListener(new OnKeyListener() {
             @Override
@@ -280,16 +294,65 @@ public class HomeScreenView extends FrameLayout {
                     listener.onMoveFocusToRail();
                     return true;
                 }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    btnTopLibrary.requestFocus();
+                    return true;
+                }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    scrollHomeToTop();
                     focusFirstMainContent();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                     return true;
                 }
                 return false;
             }
         });
-        btnTopLibrary.setOnKeyListener(topUtilDownListener);
-        btnTopSettings.setOnKeyListener(topUtilDownListener);
-        btnTopAccount.setOnKeyListener(topUtilDownListener);
+        btnTopLibrary.setOnKeyListener(new OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    btnTopSearch.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    btnTopSettings.requestFocus();
+                    return true;
+                }
+                return topUtilDownListener.onKey(v, keyCode, event);
+            }
+        });
+        btnTopSettings.setOnKeyListener(new OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    btnTopLibrary.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    btnTopAccount.requestFocus();
+                    return true;
+                }
+                return topUtilDownListener.onKey(v, keyCode, event);
+            }
+        });
+        btnTopAccount.setOnKeyListener(new OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    btnTopSettings.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    return true;
+                }
+                return topUtilDownListener.onKey(v, keyCode, event);
+            }
+        });
 
         clockTv = new TextView(context);
         clockTv.setText(clockFormat.format(new Date()));
@@ -423,12 +486,110 @@ public class HomeScreenView extends FrameLayout {
         });
     }
 
+    public void scrollHomeToTop() {
+        if (verticalRv == null) return;
+        RecyclerView.LayoutManager rawLm = verticalRv.getLayoutManager();
+        if (!(rawLm instanceof LinearLayoutManager)) {
+            verticalRv.smoothScrollToPosition(0);
+            return;
+        }
+        LinearLayoutManager lm = (LinearLayoutManager) rawLm;
+        int firstPos = lm.findFirstVisibleItemPosition();
+        if (firstPos == 0) {
+            View firstChild = lm.findViewByPosition(0);
+            if (firstChild != null && firstChild.getTop() < 0) {
+                verticalRv.smoothScrollBy(0, firstChild.getTop());
+            }
+        } else if (firstPos > 0) {
+            lm.scrollToPositionWithOffset(0, 0);
+        }
+    }
+
+    private boolean hasHeroRow() {
+        return !rows.isEmpty() && rows.get(0).kind == RowEntry.KIND_HERO;
+    }
+
+    private void focusHeroOrTopBar() {
+        scrollHomeToTop();
+        if (hasHeroRow()) {
+            if (activeHeroHolder != null && activeHeroHolder.btnPlay != null
+                    && activeHeroHolder.itemView.getParent() != null) {
+                activeHeroHolder.btnPlay.requestFocus();
+            } else {
+                verticalRv.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        RecyclerView.ViewHolder vh = verticalRv.findViewHolderForAdapterPosition(0);
+                        if (vh instanceof HeroHolder) {
+                            ((HeroHolder) vh).btnPlay.requestFocus();
+                        } else if (activeHeroHolder != null && activeHeroHolder.btnPlay != null) {
+                            activeHeroHolder.btnPlay.requestFocus();
+                        }
+                    }
+                });
+            }
+        } else if (btnTopSearch != null) {
+            btnTopSearch.requestFocus();
+        }
+    }
+
+    private void focusFirstContentRowBelowHero() {
+        if (rows.size() <= 1) return;
+        RecyclerView.ViewHolder vh = verticalRv.findViewHolderForAdapterPosition(1);
+        if (vh != null) {
+            if (vh instanceof CarouselHolder) {
+                CarouselHolder ch = (CarouselHolder) vh;
+                View firstCard = ch.rv.getChildAt(0);
+                if (firstCard != null) {
+                    firstCard.requestFocus();
+                    return;
+                }
+            } else if (vh instanceof GenreStripHolder) {
+                GenreStripHolder gh = (GenreStripHolder) vh;
+                if (gh.row.getChildCount() > 0) {
+                    gh.row.getChildAt(0).requestFocus();
+                    return;
+                }
+            } else if (vh instanceof TopicsHolder) {
+                TopicsHolder th = (TopicsHolder) vh;
+                View firstTopic = th.rv.getChildAt(0);
+                if (firstTopic != null) {
+                    firstTopic.requestFocus();
+                    return;
+                }
+            }
+            vh.itemView.requestFocus();
+        } else {
+            verticalRv.scrollToPosition(1);
+            verticalRv.post(new Runnable() {
+                @Override
+                public void run() {
+                    RecyclerView.ViewHolder loaded = verticalRv.findViewHolderForAdapterPosition(1);
+                    if (loaded != null) {
+                        loaded.itemView.requestFocus();
+                    }
+                }
+            });
+        }
+    }
+
     private void focusFirstMainContent() {
+        scrollHomeToTop();
         if (activeHeroHolder != null && activeHeroHolder.btnPlay != null
                 && activeHeroHolder.itemView.getParent() != null) {
             activeHeroHolder.btnPlay.requestFocus();
         } else {
-            verticalRv.requestFocus();
+            verticalRv.post(new Runnable() {
+                @Override
+                public void run() {
+                    RecyclerView.ViewHolder vh = verticalRv.findViewHolderForAdapterPosition(0);
+                    if (vh instanceof HeroHolder) {
+                        ((HeroHolder) vh).btnPlay.requestFocus();
+                    } else {
+                        verticalRv.requestFocus();
+                    }
+                }
+            });
         }
     }
 
@@ -489,7 +650,7 @@ public class HomeScreenView extends FrameLayout {
 
     private void updateBackdropDebounced(final Models.MovieItem item) {
         if (item == null) return;
-        final String url = !item.thumbnailUrl.isEmpty() ? item.thumbnailUrl : item.posterUrl;
+        final String url = item.getLandscapeUrl();
         if (url.isEmpty() || url.equals(lastBackdropUrl)) return;
         if (pendingBackdropRunnable != null) {
             handler.removeCallbacks(pendingBackdropRunnable);
@@ -502,6 +663,18 @@ public class HomeScreenView extends FrameLayout {
             }
         };
         handler.postDelayed(pendingBackdropRunnable, 140L);
+    }
+
+    private void attachTopUtilFocusEffect(final View view) {
+        view.setOnFocusChangeListener(new OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                UiHelper.applyTvFocusEffect(v, v.getContext(), hasFocus, 1.07f, 16);
+                if (hasFocus) {
+                    scrollHomeToTop();
+                }
+            }
+        });
     }
 
     private void scrollToSectionId(String targetId) {
@@ -518,6 +691,9 @@ public class HomeScreenView extends FrameLayout {
     private FrameLayout makeCircleUtilIcon(Context ctx, int iconRes) {
         FrameLayout box = new FrameLayout(ctx);
         UiHelper.applyCircularIconButtonStyle(box, ctx, 32);
+        box.setFocusable(true);
+        box.setFocusableInTouchMode(false);
+        attachTopUtilFocusEffect(box);
         ImageView iv = new ImageView(ctx);
         iv.setImageResource(iconRes);
         iv.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
@@ -699,7 +875,17 @@ public class HomeScreenView extends FrameLayout {
                 btnPrev.setNextFocusUpId(btnTopSettings.getId());
                 btnNext.setNextFocusUpId(btnTopAccount.getId());
             }
-            btnPlay.setOnKeyListener(moveFocusToRailLeftListener);
+            attachHeroButtonKeys(btnPlay, true, false, btnTopSearch);
+            attachHeroButtonKeys(btnWishlist, false, false, btnTopSearch);
+            attachHeroButtonKeys(btnInfo, false, false, btnTopLibrary);
+            attachHeroButtonKeys(btnPrev, false, false, btnTopSettings);
+            attachHeroButtonKeys(btnNext, false, true, btnTopAccount);
+
+            attachHeroButtonFocus(btnPlay, UiHelper.FOCUS_SCALE_DEFAULT);
+            attachHeroButtonFocus(btnWishlist, UiHelper.FOCUS_SCALE_DEFAULT);
+            attachHeroButtonFocus(btnInfo, UiHelper.FOCUS_SCALE_DEFAULT);
+            attachHeroButtonFocus(btnPrev, 1.07f);
+            attachHeroButtonFocus(btnNext, 1.07f);
 
             btnRow.addView(btnPlay, heroBtnLp(ctx, 10));
             btnRow.addView(btnWishlist, heroBtnLp(ctx, 10));
@@ -865,6 +1051,43 @@ public class HomeScreenView extends FrameLayout {
             return lp;
         }
 
+        private void attachHeroButtonKeys(View btn, final boolean isLeftEdge, final boolean isRightEdge, final View upTarget) {
+            btn.setOnKeyListener(new OnKeyListener() {
+                @Override
+                public boolean onKey(View v, int keyCode, KeyEvent event) {
+                    if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && isLeftEdge) {
+                        if (listener != null) {
+                            listener.onMoveFocusToRail();
+                            return true;
+                        }
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && isRightEdge) {
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP && upTarget != null) {
+                        scrollHomeToTop();
+                        upTarget.requestFocus();
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && rows.size() > 1) {
+                        focusFirstContentRowBelowHero();
+                        return true;
+                    }
+                    return false;
+                }
+            });
+        }
+
+        private void attachHeroButtonFocus(View btn, final float scale) {
+            btn.setOnFocusChangeListener(new OnFocusChangeListener() {
+                @Override
+                public void onFocusChange(View v, boolean hasFocus) {
+                    UiHelper.applyTvFocusEffect(v, v.getContext(), hasFocus, scale, 16);
+                    if (hasFocus) {
+                        scrollHomeToTop();
+                    }
+                }
+            });
+        }
+
         private LinearLayout.LayoutParams arrowBtnLp(Context ctx, int rightMarginDp) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, 30), UiHelper.dp(ctx, 30));
             lp.rightMargin = UiHelper.dp(ctx, rightMarginDp);
@@ -911,8 +1134,47 @@ public class HomeScreenView extends FrameLayout {
             chip.setPadding(UiHelper.dp(ctx, 13), UiHelper.dp(ctx, 6), UiHelper.dp(ctx, 13), UiHelper.dp(ctx, 6));
             UiHelper.applyCompactChipStyle(chip, ctx, 14, selected);
             if (isFirst) {
-                chip.setOnKeyListener(moveFocusToRailLeftListener);
+                chip.setOnKeyListener(new OnKeyListener() {
+                    @Override
+                    public boolean onKey(View v, int keyCode, KeyEvent event) {
+                        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && listener != null) {
+                            listener.onMoveFocusToRail();
+                            return true;
+                        }
+                        int rowPos = getBindingAdapterPosition();
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_UP && rowPos >= 0 && rowPos <= 1) {
+                            focusHeroOrTopBar();
+                            return true;
+                        }
+                        return false;
+                    }
+                });
+            } else {
+                chip.setOnKeyListener(new OnKeyListener() {
+                    @Override
+                    public boolean onKey(View v, int keyCode, KeyEvent event) {
+                        int rowPos = getBindingAdapterPosition();
+                        if (event.getAction() == KeyEvent.ACTION_DOWN
+                                && keyCode == KeyEvent.KEYCODE_DPAD_UP
+                                && rowPos >= 0 && rowPos <= 1) {
+                            focusHeroOrTopBar();
+                            return true;
+                        }
+                        return false;
+                    }
+                });
             }
+            chip.setOnFocusChangeListener(new OnFocusChangeListener() {
+                @Override
+                public void onFocusChange(View v, boolean hasFocus) {
+                    UiHelper.applyTvFocusEffect(v, v.getContext(), hasFocus, UiHelper.FOCUS_SCALE_DEFAULT, 16);
+                    int rowPos = getBindingAdapterPosition();
+                    if (hasFocus && rowPos >= 0 && rowPos <= 1) {
+                        scrollHomeToTop();
+                    }
+                }
+            });
             chip.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -1009,7 +1271,32 @@ public class HomeScreenView extends FrameLayout {
                         scrollToSectionId(t.targetSection);
                     }
                 });
-                box.setOnKeyListener(position == 0 ? moveFocusToRailLeftListener : null);
+                box.setOnKeyListener(new OnKeyListener() {
+                    @Override
+                    public boolean onKey(View v, int keyCode, KeyEvent event) {
+                        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                        if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_LEFT && listener != null) {
+                            listener.onMoveFocusToRail();
+                            return true;
+                        }
+                        int rowPos = TopicsHolder.this.getBindingAdapterPosition();
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_UP && rowPos >= 0 && rowPos <= 1) {
+                            focusHeroOrTopBar();
+                            return true;
+                        }
+                        return false;
+                    }
+                });
+                box.setOnFocusChangeListener(new OnFocusChangeListener() {
+                    @Override
+                    public void onFocusChange(View v, boolean hasFocus) {
+                        UiHelper.applyTvFocusEffect(v, v.getContext(), hasFocus, UiHelper.FOCUS_SCALE_DEFAULT, 16);
+                        int rowPos = TopicsHolder.this.getBindingAdapterPosition();
+                        if (hasFocus && rowPos >= 0 && rowPos <= 1) {
+                            scrollHomeToTop();
+                        }
+                    }
+                });
             }
 
             @Override
@@ -1056,6 +1343,32 @@ public class HomeScreenView extends FrameLayout {
             rv.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 10));
             rv.setAdapter(adapter);
             seeAllTv.setNextFocusDownId(rv.getId());
+            seeAllTv.setOnKeyListener(new OnKeyListener() {
+                @Override
+                public boolean onKey(View v, int keyCode, KeyEvent event) {
+                    if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && listener != null) {
+                        listener.onMoveFocusToRail();
+                        return true;
+                    }
+                    int rowPos = CarouselHolder.this.getBindingAdapterPosition();
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_UP && rowPos >= 0 && rowPos <= 1) {
+                        focusHeroOrTopBar();
+                        return true;
+                    }
+                    return false;
+                }
+            });
+            seeAllTv.setOnFocusChangeListener(new OnFocusChangeListener() {
+                @Override
+                public void onFocusChange(View v, boolean hasFocus) {
+                    UiHelper.applyTvFocusEffect(v, v.getContext(), hasFocus, UiHelper.FOCUS_SCALE_DEFAULT, 16);
+                    int rowPos = CarouselHolder.this.getBindingAdapterPosition();
+                    if (hasFocus && rowPos >= 0 && rowPos <= 1) {
+                        scrollHomeToTop();
+                    }
+                }
+            });
             root.addView(rv, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         }
@@ -1089,15 +1402,36 @@ public class HomeScreenView extends FrameLayout {
                         new MovieCardView.OnMovieFocusListener() {
                             @Override
                             public void onMovieFocused(Models.MovieItem item, boolean hasFocus) {
-                                if (hasFocus) updateBackdropDebounced(item);
+                                if (hasFocus) {
+                                    updateBackdropDebounced(item);
+                                    int rowPos = CarouselHolder.this.getBindingAdapterPosition();
+                                    if (rowPos >= 0 && rowPos <= 1) {
+                                        scrollHomeToTop();
+                                    }
+                                }
                             }
                         });
             }
 
             @Override
-            public void onBindViewHolder(@NonNull MovieCardView.Holder holder, int position) {
+            public void onBindViewHolder(@NonNull MovieCardView.Holder holder, final int position) {
                 MovieCardView.bind(holder, items.get(position), cardType, position);
-                holder.itemView.setOnKeyListener(position == 0 ? moveFocusToRailLeftListener : null);
+                holder.itemView.setOnKeyListener(new OnKeyListener() {
+                    @Override
+                    public boolean onKey(View v, int keyCode, KeyEvent event) {
+                        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                        if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_LEFT && listener != null) {
+                            listener.onMoveFocusToRail();
+                            return true;
+                        }
+                        int rowPos = CarouselHolder.this.getBindingAdapterPosition();
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_UP && rowPos >= 0 && rowPos <= 1) {
+                            focusHeroOrTopBar();
+                            return true;
+                        }
+                        return false;
+                    }
+                });
             }
 
             @Override

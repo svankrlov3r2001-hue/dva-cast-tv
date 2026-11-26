@@ -439,10 +439,15 @@ public class OverlayMenuController {
         historyScrollView.setVerticalScrollBarEnabled(true);
         historyScrollView.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
         historyScrollView.setFocusable(false);
+        historyScrollView.setClipChildren(false);
+        historyScrollView.setClipToPadding(false);
 
         historyListContainer = new LinearLayout(context);
         historyListContainer.setOrientation(LinearLayout.VERTICAL);
-        historyListContainer.setPadding(0, 0, UiHelper.dp(context, 4), 0);
+        historyListContainer.setClipChildren(false);
+        historyListContainer.setClipToPadding(false);
+        historyListContainer.setPadding(UiHelper.dp(context, 4), UiHelper.dp(context, 4),
+                UiHelper.dp(context, 6), UiHelper.dp(context, 4));
         historyScrollView.addView(historyListContainer, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -600,7 +605,8 @@ public class OverlayMenuController {
         headerSubTv.setText("Đặng Việt Anh · Thiết lập rạp phim trên TV");
         settingsSection.setVisibility(View.VISIBLE);
         historySection.setVisibility(View.GONE);
-        closeBtn.setNextFocusDownId(tileChangelog.getId());
+        closeBtn.setNextFocusDownId(tileCache.getId());
+        closeBtn.setNextFocusLeftId(tileReload.getId());
         tileChangelog.post(new Runnable() {
             @Override
             public void run() {
@@ -616,6 +622,7 @@ public class OverlayMenuController {
         headerSubTv.setText("Lịch sử phiên bản & tính năng mới trên TV");
         settingsSection.setVisibility(View.GONE);
         historySection.setVisibility(View.VISIBLE);
+        closeBtn.setNextFocusLeftId(backBtn.getId());
 
         populateHistoryList();
         actions.onFetchHistory(new Runnable() {
@@ -643,11 +650,14 @@ public class OverlayMenuController {
         for (int i = 0; i < entries.size(); i++) {
             UpdateHistoryStore.HistoryEntry entry = entries.get(i);
             LinearLayout card = new LinearLayout(context);
+            card.setId(View.generateViewId());
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 14),
                     UiHelper.dp(context, 16), UiHelper.dp(context, 14));
             UiHelper.applyFocusableTileStyle(card, context, 24,
                     UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BTN_FOCUSED);
+            card.setNextFocusLeftId(card.getId());
+            card.setNextFocusRightId(card.getId());
 
             LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -737,6 +747,20 @@ public class OverlayMenuController {
 
             historyListContainer.addView(card, cardLp);
         }
+        int cardCount = historyListContainer.getChildCount();
+        for (int i = 0; i < cardCount; i++) {
+            View cur = historyListContainer.getChildAt(i);
+            cur.setNextFocusUpId(i == 0 ? backBtn.getId() : historyListContainer.getChildAt(i - 1).getId());
+            cur.setNextFocusDownId(i == cardCount - 1 ? cur.getId() : historyListContainer.getChildAt(i + 1).getId());
+        }
+        if (cardCount > 0) {
+            int firstCardId = historyListContainer.getChildAt(0).getId();
+            backBtn.setNextFocusDownId(firstCardId);
+            closeBtn.setNextFocusDownId(firstCardId);
+        } else {
+            backBtn.setNextFocusDownId(closeBtn.getId());
+            closeBtn.setNextFocusDownId(closeBtn.getId());
+        }
         historyScrollView.scrollTo(0, 0);
     }
 
@@ -785,6 +809,8 @@ public class OverlayMenuController {
         tileAutoStart.setNextFocusDownId(nextDown);
         tileUpdate.setNextFocusDownId(nextDown);
         tileChangelog.setNextFocusUpId(loggedIn ? tileLogout.getId() : tileAutoStart.getId());
+        closeBtn.setNextFocusLeftId(tileReload.getId());
+        closeBtn.setNextFocusDownId(tileCache.getId());
 
         refreshNetworkInfo();
         refreshAutoStartBadge();
