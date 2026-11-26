@@ -55,6 +55,8 @@ public class OverlayMenuController {
     private TextView changelogBadge;
     private TextView logoutSubTv;
     private View firstTile;
+    private View tileReload;
+    private View tileCache;
     private View tileChangelog;
     private View tileLogout;
     private View tileAutoStart;
@@ -303,7 +305,7 @@ public class OverlayMenuController {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         row2Lp.bottomMargin = UiHelper.dp(context, 10);
 
-        View tileReload = createHorizontalActionTile(
+        tileReload = createHorizontalActionTile(
                 R.drawable.ic_reload, "#64D2FF",
                 "Làm mới nội dung", "Tải lại danh sách phim & tiến trình đang xem",
                 null,
@@ -315,7 +317,7 @@ public class OverlayMenuController {
                     }
                 });
 
-        View tileCache = createHorizontalActionTile(
+        tileCache = createHorizontalActionTile(
                 R.drawable.ic_clean, "#FFD60A",
                 "Dọn bộ nhớ đệm", "Làm sạch ảnh tạm & tối ưu hiệu năng thiết bị",
                 null,
