@@ -86,8 +86,9 @@ public class PlayerScreenController {
     private final UiHelper.SpinnerView detachedBufferingSpinner;
     private boolean isLoadingOrBuffering = false;
 
-    // Skip Intro & Auto-Next Cards
+    // Skip Intro, Resume Recovery & Auto-Next Cards
     private final TextView skipIntroBtn;
+    private final TextView resumeRecoveryBtn;
     private final LinearLayout nextEpCard;
     private final TextView nextEpTitleTv;
     private final TextView nextEpCountdownTv;
@@ -133,6 +134,7 @@ public class PlayerScreenController {
     private final ImageView memberAvatarIv;
     private final FrameLayout btnWishlistBar;
     private final ImageView wishlistIconBar;
+    private final FrameLayout btnEpisodesBar;
     private final FrameLayout btnLikeBar;
     private final ImageView likeIconBar;
     private final FrameLayout btnDislikeBar;
@@ -179,6 +181,11 @@ public class PlayerScreenController {
     private boolean initialResumeApplied = false;
     private boolean safeResumeChecked = false;
     private boolean episodeEndedNotified = false;
+    private double savedResumeGuardSec = 0.0;
+    private boolean pendingInitialSeekActive = false;
+    private double pendingInitialSeekTargetSec = 0.0;
+    private boolean resumePositionVerified = true;
+    private boolean resumeRecoveryToastShown = false;
     private boolean wishlistLocalState = false;
 
     // Seamless Preload & Next Episode Countdown
@@ -424,6 +431,41 @@ public class PlayerScreenController {
                 Gravity.BOTTOM | Gravity.END);
         siLp.setMargins(0, 0, UiHelper.dp(context, 36), UiHelper.dp(context, 116));
         rootFrame.addView(skipIntroBtn, siLp);
+
+        // 6B. Saved Watch Position Recovery Pill (protects & restores previous watch position)
+        resumeRecoveryBtn = new TextView(context);
+        resumeRecoveryBtn.setId(View.generateViewId());
+        resumeRecoveryBtn.setText("↺ Tua tới vị trí cũ");
+        resumeRecoveryBtn.setTextColor(Color.WHITE);
+        resumeRecoveryBtn.setTextSize(13.5f);
+        resumeRecoveryBtn.setTypeface(null, Typeface.BOLD);
+        resumeRecoveryBtn.setPadding(UiHelper.dp(context, 18), UiHelper.dp(context, 10),
+                UiHelper.dp(context, 18), UiHelper.dp(context, 10));
+        applyPlayerFocusButton(resumeRecoveryBtn, context, 24, true, 1.07f);
+        resumeRecoveryBtn.setVisibility(View.GONE);
+        resumeRecoveryBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (savedResumeGuardSec > 5.0) {
+                    double target = savedResumeGuardSec;
+                    if (lastDurSec > 20.0 && target >= lastDurSec - 5.0) {
+                        target = Math.max(0.0, lastDurSec - 15.0);
+                    }
+                    pendingInitialSeekActive = false;
+                    resumePositionVerified = true;
+                    resumeRecoveryBtn.setVisibility(View.GONE);
+                    nativePlayer.seekTo(target);
+                    toast("Đã tua tới vị trí cũ (" + formatTime(target) + ")", UiHelper.COLOR_CYAN);
+                    if (hudVisible) focusCenterPlayButton();
+                    resetHudAutoHide();
+                }
+            }
+        });
+        FrameLayout.LayoutParams rrLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.START);
+        rrLp.setMargins(UiHelper.dp(context, 24), 0, 0, UiHelper.dp(context, 116));
+        rootFrame.addView(resumeRecoveryBtn, rrLp);
 
         // 7. Auto-Next Episode Countdown Card
         nextEpCard = new LinearLayout(context);
@@ -1004,7 +1046,7 @@ public class PlayerScreenController {
         });
         bottomRow.addView(btnWishlistBar, fixedSquareMarginLp(36, 8));
 
-        FrameLayout btnEpisodesBar = makeHudCircleIcon(context, R.drawable.ic_episodes, 36);
+        btnEpisodesBar = makeHudCircleIcon(context, R.drawable.ic_episodes, 36);
         btnEpisodesBar.setId(View.generateViewId());
         btnEpisodesBar.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1378,6 +1420,8 @@ public class PlayerScreenController {
             }
             if ((nextEpCard.getVisibility() == View.VISIBLE && nextEpCard.hasFocus())
                     || (skipIntroBtn.getVisibility() == View.VISIBLE && skipIntroBtn.hasFocus()
+                    && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER))
+                    || (resumeRecoveryBtn.getVisibility() == View.VISIBLE && resumeRecoveryBtn.hasFocus()
                     && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER))) {
                 return false;
             }
@@ -1427,6 +1471,11 @@ public class PlayerScreenController {
         this.initialResumeApplied = false;
         this.safeResumeChecked = false;
         this.episodeEndedNotified = false;
+        this.savedResumeGuardSec = req.initialResumeSec > 10 ? req.initialResumeSec : 0.0;
+        this.pendingInitialSeekActive = this.savedResumeGuardSec > 10.0;
+        this.pendingInitialSeekTargetSec = this.savedResumeGuardSec;
+        this.resumePositionVerified = this.savedResumeGuardSec <= 10.0;
+        this.resumeRecoveryToastShown = false;
         this.preloadAttemptedThisEp = false;
         this.preloadedNextUrl = "";
         this.nextCountdownDismissed = false;
@@ -1447,7 +1496,9 @@ public class PlayerScreenController {
         }
 
         skipIntroBtn.setVisibility(View.GONE);
+        resumeRecoveryBtn.setVisibility(View.GONE);
         nextEpCard.setVisibility(View.GONE);
+        updateEpisodesButtonVisibility();
         updateBufferingIndicator(true);
         applySubtitleBgSetting();
         subtitleOverlay.setCues(new ArrayList<SubtitleEngine.Cue>(), new ArrayList<SubtitleEngine.Cue>(), "");
@@ -1482,6 +1533,15 @@ public class PlayerScreenController {
             wishlistLocalState = data.movie.inWishlist;
         }
         nextEpisodeTarget = computeNextEpisode(data, req);
+        updateEpisodesButtonVisibility();
+
+        double bestSaved = Math.max(savedResumeGuardSec, data.resumeSeconds);
+        if (bestSaved > 10.0) {
+            savedResumeGuardSec = bestSaved;
+            resumePositionVerified = false;
+            pendingInitialSeekTargetSec = bestSaved;
+            pendingInitialSeekActive = true;
+        }
 
         String title = !data.title.isEmpty() ? data.title : req.title;
         String epTitle = !data.episodeTitle.isEmpty() ? data.episodeTitle : req.episodeTitle;
@@ -1595,10 +1655,18 @@ public class PlayerScreenController {
         double resume = 0.0;
         if (!initialResumeApplied) {
             initialResumeApplied = true;
-            if (launchReq != null && launchReq.initialResumeSec > 5) {
+            if (savedResumeGuardSec > 5.0) {
+                resume = savedResumeGuardSec;
+            } else if (launchReq != null && launchReq.initialResumeSec > 5) {
                 resume = launchReq.initialResumeSec;
             } else if (resolvedData != null && resolvedData.resumeSeconds > 5) {
                 resume = resolvedData.resumeSeconds;
+            }
+            if (resume > 10.0) {
+                savedResumeGuardSec = Math.max(savedResumeGuardSec, resume);
+                resumePositionVerified = false;
+                pendingInitialSeekTargetSec = savedResumeGuardSec;
+                pendingInitialSeekActive = true;
             }
             // Match iOS PlayerModal: auto-skip intro cleanly on fresh start
             if (resume <= 2.0 && Prefs.isAutoSkipIntro(context)
@@ -1641,17 +1709,29 @@ public class PlayerScreenController {
             if (d > 0) {
                 lastDurSec = d;
                 updateHudMetaText();
-                // Match iOS computeSafeResumeSec: if resumed inside/near outro zone, rewind 2 minutes before outro
-                if (isReady && !safeResumeChecked && d > 60.0) {
+                // Match iOS computeSafeResumeSec + apply pendingInitialSeek once player is truly READY with valid duration
+                if (isReady && !safeResumeChecked && d > 20.0) {
                     safeResumeChecked = true;
-                    double pos = nativePlayer.getCurrentPositionSec();
-                    int endCredits = resolvedData != null ? resolvedData.endCreditsSec : 0;
-                    double triggerSec = (endCredits > 15 && d > endCredits) ? (d - endCredits) : (d - 15.0);
-                    if (pos > 15.0 && pos >= Math.max(10.0, triggerSec - 15.0)) {
-                        double rewoundSec = Math.max(0.0, triggerSec - 120.0);
-                        if (rewoundSec < pos - 10.0) {
-                            nativePlayer.seekTo(rewoundSec);
-                            toast("Đã tự động lùi lại 2 phút trước đoạn chuyển tập", UiHelper.COLOR_CYAN);
+                    double targetResume = pendingInitialSeekActive ? pendingInitialSeekTargetSec : nativePlayer.getCurrentPositionSec();
+                    if (d > 60.0 && targetResume > 15.0) {
+                        int endCredits = resolvedData != null ? resolvedData.endCreditsSec : 0;
+                        double triggerSec = (endCredits > 15 && d > endCredits) ? (d - endCredits) : (d - 15.0);
+                        if (targetResume >= Math.max(10.0, triggerSec - 15.0)) {
+                            double rewoundSec = Math.max(0.0, triggerSec - 120.0);
+                            if (rewoundSec < targetResume - 10.0) {
+                                targetResume = rewoundSec;
+                                savedResumeGuardSec = rewoundSec;
+                                pendingInitialSeekTargetSec = rewoundSec;
+                                toast("Đã tự động lùi lại 2 phút trước đoạn chuyển tập", UiHelper.COLOR_CYAN);
+                            }
+                        }
+                    }
+                    if (pendingInitialSeekActive && pendingInitialSeekTargetSec > 5.0) {
+                        double curPos = nativePlayer.getCurrentPositionSec();
+                        double clampedTarget = Math.min(Math.max(0.0, d - 5.0), pendingInitialSeekTargetSec);
+                        pendingInitialSeekActive = false;
+                        if (curPos + 5.0 < clampedTarget) {
+                            nativePlayer.seekTo(clampedTarget);
                         }
                     }
                 }
@@ -1716,6 +1796,31 @@ public class PlayerScreenController {
                     break;
                 }
             }
+        }
+
+        // Saved Resume Position Guard & Quick Recovery Pill
+        if (savedResumeGuardSec > 10.0 && !resumePositionVerified) {
+            if (posSec >= (savedResumeGuardSec - 15.0)) {
+                resumePositionVerified = true;
+                resumeRecoveryBtn.setVisibility(View.GONE);
+            } else if (durSec > 20.0 && posSec >= 2.0 && (posSec + 15.0) < savedResumeGuardSec) {
+                boolean wasHidden = resumeRecoveryBtn.getVisibility() != View.VISIBLE;
+                resumeRecoveryBtn.setText("↺ Tua tới vị trí cũ (" + formatTime(savedResumeGuardSec) + ")");
+                resumeRecoveryBtn.setVisibility(View.VISIBLE);
+                if (wasHidden) {
+                    if (!resumeRecoveryToastShown) {
+                        resumeRecoveryToastShown = true;
+                        toast("Đang ở " + formatTime(posSec) + " • Nhấn để tua tới vị trí cũ (" + formatTime(savedResumeGuardSec) + ")", UiHelper.COLOR_GOLD);
+                    }
+                    if (!hudVisible && activeModal == MODAL_NONE
+                            && nextEpCard.getVisibility() != View.VISIBLE
+                            && skipIntroBtn.getVisibility() != View.VISIBLE) {
+                        resumeRecoveryBtn.requestFocus();
+                    }
+                }
+            }
+        } else if (resumeRecoveryBtn.getVisibility() == View.VISIBLE) {
+            resumeRecoveryBtn.setVisibility(View.GONE);
         }
 
         // Save watch progress every 10s
@@ -1916,6 +2021,10 @@ public class PlayerScreenController {
 
     private void persistProgressNow() {
         if (launchReq == null || launchReq.videosId <= 0 || lastPosSec < 2.0) return;
+        // Protect saved watch progress: NEVER overwrite server progress if player hasn't reached saved position yet
+        if (!resumePositionVerified && savedResumeGuardSec > 10.0 && (lastPosSec + 15.0) < savedResumeGuardSec) {
+            return;
+        }
         String code = resolvedData != null && !resolvedData.streamCode.isEmpty() ? resolvedData.streamCode : launchReq.streamCode;
         apiClient.saveWatchProgress(
                 launchReq.videosId,
@@ -1925,6 +2034,34 @@ public class PlayerScreenController {
                 launchReq.episodeNumber,
                 launchReq.seasonId,
                 getCurrentTitle());
+    }
+
+    private boolean isSeriesMovie() {
+        if (resolvedData != null) {
+            if (resolvedData.movie != null && resolvedData.movie.isTvSeries == 1) return true;
+            if (resolvedData.episodes.size() > 1 || resolvedData.seasons.size() > 1) return true;
+            if (resolvedData.movie != null && resolvedData.movie.isTvSeries == 0 && resolvedData.episodes.size() <= 1) {
+                return false;
+            }
+        }
+        if (launchReq != null) {
+            return launchReq.episodes.size() > 1 || launchReq.seasons.size() > 1;
+        }
+        return false;
+    }
+
+    private void updateEpisodesButtonVisibility() {
+        boolean showEpisodes = isSeriesMovie();
+        btnEpisodesBar.setVisibility(showEpisodes ? View.VISIBLE : View.GONE);
+        if (showEpisodes) {
+            btnWishlistBar.setNextFocusRightId(btnEpisodesBar.getId());
+            btnEpisodesBar.setNextFocusLeftId(btnWishlistBar.getId());
+            btnEpisodesBar.setNextFocusRightId(btnLikeBar.getId());
+            btnLikeBar.setNextFocusLeftId(btnEpisodesBar.getId());
+        } else {
+            btnWishlistBar.setNextFocusRightId(btnLikeBar.getId());
+            btnLikeBar.setNextFocusLeftId(btnWishlistBar.getId());
+        }
     }
 
     // ---- HUD Helpers ----
@@ -3557,13 +3694,34 @@ public class PlayerScreenController {
             card.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 16), UiHelper.dp(context, 16), UiHelper.dp(context, 16));
             UiHelper.applyGlassCardStyle(card, context, 28, UiHelper.COLOR_SURFACE_CARD, 14);
 
+            FrameLayout posterWrap = new FrameLayout(context);
+            posterWrap.setBackground(UiHelper.createPillDrawable(
+                    context, 16, Color.parseColor("#141824"), Color.argb(38, 255, 255, 255), 1f));
+            posterWrap.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View v, Outline outline) {
+                    outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), 16));
+                }
+            });
+            posterWrap.setClipToOutline(true);
+
             ImageView poster = new ImageView(context);
-            String pUrl = resolvedData != null && resolvedData.movie != null && !resolvedData.movie.posterUrl.isEmpty()
-                    ? resolvedData.movie.posterUrl : (launchReq != null ? launchReq.posterUrl : "");
-            UiHelper.safeLoadImage(poster, pUrl, R.drawable.default_poster, 18);
-            LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 130), UiHelper.dp(context, 190));
+            poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            Models.StreamMovieContext mc = resolvedData != null ? resolvedData.movie : null;
+            String pUrl = mc != null ? mc.getPortraitUrl() : "";
+            String fallbackUrl = mc != null ? mc.getLandscapeUrl() : "";
+            if ((pUrl == null || pUrl.isEmpty()) && launchReq != null) {
+                pUrl = launchReq.getPortraitUrl();
+            }
+            if ((fallbackUrl == null || fallbackUrl.isEmpty()) && launchReq != null) {
+                fallbackUrl = launchReq.getLandscapeUrl();
+            }
+            UiHelper.safeLoadImageWithFallback(poster, pUrl, fallbackUrl, R.drawable.default_poster, 0);
+            posterWrap.addView(poster, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+            LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 130), UiHelper.dp(context, 195));
             pLp.rightMargin = UiHelper.dp(context, 18);
-            card.addView(poster, pLp);
+            card.addView(posterWrap, pLp);
 
             LinearLayout col = new LinearLayout(context);
             col.setOrientation(LinearLayout.VERTICAL);
@@ -3574,7 +3732,6 @@ public class PlayerScreenController {
             title.setTypeface(null, Typeface.BOLD);
             col.addView(title);
 
-            Models.StreamMovieContext mc = resolvedData != null ? resolvedData.movie : null;
             if (mc != null) {
                 TextView meta = new TextView(context);
                 meta.setText(mc.videoQuality + (mc.year.isEmpty() ? "" : " • " + mc.year)

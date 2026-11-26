@@ -1,5 +1,7 @@
 package com.dangvietanh.cast.ui;
 
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
@@ -84,7 +86,9 @@ public class HomeScreenView extends FrameLayout {
     private final FrameLayout btnTopAccount;
     private final ImageView topAvatarIv;
     private final TextView clockTv;
-    private final LinearLayout loadingBox;
+    private final FrameLayout loadingBox;
+    private final LinearLayout skeletonPulseLayer;
+    private ObjectAnimator skeletonPulseAnim;
     private final LinearLayout errorBox;
     private final TextView errorTv;
     private final TextView retryBtn;
@@ -375,22 +379,18 @@ public class HomeScreenView extends FrameLayout {
         tubLp.setMargins(0, UiHelper.dp(context, 12), UiHelper.dp(context, 20), 0);
         addView(topUtilBar, tubLp);
 
-        // 4. Loading overlay
-        loadingBox = new LinearLayout(context);
-        loadingBox.setOrientation(LinearLayout.VERTICAL);
-        loadingBox.setGravity(Gravity.CENTER);
-        UiHelper.SpinnerView spin = new UiHelper.SpinnerView(context);
-        loadingBox.addView(spin, new LinearLayout.LayoutParams(UiHelper.dp(context, 36), UiHelper.dp(context, 36)));
-        TextView loadTv = new TextView(context);
-        loadTv.setText("Đang tải kho phim...");
-        loadTv.setTextColor(UiHelper.COLOR_TEXT_SECONDARY);
-        loadTv.setTextSize(13f);
-        LinearLayout.LayoutParams ltLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        ltLp.topMargin = UiHelper.dp(context, 10);
-        loadingBox.addView(loadTv, ltLp);
+        // 4. Full-screen Animated Skeleton Loading Overlay (cleanly covers previous content)
+        loadingBox = new FrameLayout(context);
+        loadingBox.setBackgroundColor(UiHelper.COLOR_BG_BASE);
+        loadingBox.setClickable(true);
+        loadingBox.setElevation(UiHelper.dp(context, 12));
+
+        skeletonPulseLayer = buildHomeSkeletonLayout(context);
+        loadingBox.addView(skeletonPulseLayer, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         addView(loadingBox, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        startSkeletonPulse();
 
         // 5. Error overlay
         errorBox = new LinearLayout(context);
@@ -438,7 +438,7 @@ public class HomeScreenView extends FrameLayout {
         final int seq = ++requestSeq;
 
         if (!silent) {
-            loadingBox.setVisibility(VISIBLE);
+            showLoadingSkeleton();
             errorBox.setVisibility(GONE);
         }
 
@@ -446,7 +446,7 @@ public class HomeScreenView extends FrameLayout {
             @Override
             public void onSuccess(Models.HomeHubResponse data) {
                 if (seq != requestSeq) return;
-                loadingBox.setVisibility(GONE);
+                hideLoadingSkeleton();
                 errorBox.setVisibility(GONE);
                 rebuildRows(data);
             }
@@ -454,7 +454,7 @@ public class HomeScreenView extends FrameLayout {
             @Override
             public void onError(String message, int httpCode) {
                 if (seq != requestSeq) return;
-                loadingBox.setVisibility(GONE);
+                hideLoadingSkeleton();
                 if (!silent || rows.isEmpty()) {
                     errorBox.setVisibility(VISIBLE);
                     errorTv.setText(message != null ? message : "Không thể tải danh sách phim");
@@ -462,6 +462,141 @@ public class HomeScreenView extends FrameLayout {
                 }
             }
         });
+    }
+
+    private void showLoadingSkeleton() {
+        if (loadingBox != null) {
+            loadingBox.setVisibility(VISIBLE);
+            startSkeletonPulse();
+        }
+    }
+
+    private void hideLoadingSkeleton() {
+        stopSkeletonPulse();
+        if (loadingBox != null) {
+            loadingBox.setVisibility(GONE);
+        }
+    }
+
+    private void startSkeletonPulse() {
+        if (skeletonPulseLayer == null) return;
+        if (skeletonPulseAnim == null) {
+            skeletonPulseAnim = ObjectAnimator.ofFloat(skeletonPulseLayer, "alpha", 0.42f, 0.90f);
+            skeletonPulseAnim.setDuration(820L);
+            skeletonPulseAnim.setRepeatCount(ValueAnimator.INFINITE);
+            skeletonPulseAnim.setRepeatMode(ValueAnimator.REVERSE);
+        }
+        if (!skeletonPulseAnim.isStarted()) {
+            skeletonPulseAnim.start();
+        }
+    }
+
+    private void stopSkeletonPulse() {
+        if (skeletonPulseAnim != null) {
+            skeletonPulseAnim.cancel();
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        stopSkeletonPulse();
+        super.onDetachedFromWindow();
+    }
+
+    private LinearLayout buildHomeSkeletonLayout(Context ctx) {
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(UiHelper.dp(ctx, 22), UiHelper.dp(ctx, 48), UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 20));
+
+        int blockFill = Color.argb(46, 255, 255, 255);
+        int softFill = Color.argb(30, 255, 255, 255);
+
+        // Hero Skeleton Block
+        LinearLayout heroSkel = new LinearLayout(ctx);
+        heroSkel.setOrientation(LinearLayout.VERTICAL);
+        heroSkel.setGravity(Gravity.BOTTOM | Gravity.START);
+        LinearLayout.LayoutParams hsLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, UiHelper.dp(ctx, 218));
+        hsLp.bottomMargin = UiHelper.dp(ctx, 16);
+
+        heroSkel.addView(makeSkeletonBox(ctx, 88, 12, 6, blockFill, 0, 10));
+        heroSkel.addView(makeSkeletonBox(ctx, 340, 28, 8, blockFill, 0, 8));
+        heroSkel.addView(makeSkeletonBox(ctx, 210, 22, 7, softFill, 0, 12));
+
+        LinearLayout badgeRow = new LinearLayout(ctx);
+        badgeRow.setOrientation(LinearLayout.HORIZONTAL);
+        badgeRow.addView(makeSkeletonBox(ctx, 52, 18, 9, softFill, 8, 0));
+        badgeRow.addView(makeSkeletonBox(ctx, 74, 18, 9, softFill, 8, 0));
+        badgeRow.addView(makeSkeletonBox(ctx, 48, 18, 9, softFill, 0, 0));
+        LinearLayout.LayoutParams brLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        brLp.bottomMargin = UiHelper.dp(ctx, 12);
+        heroSkel.addView(badgeRow, brLp);
+
+        heroSkel.addView(makeSkeletonBox(ctx, 380, 11, 5, softFill, 0, 6));
+        heroSkel.addView(makeSkeletonBox(ctx, 270, 11, 5, softFill, 0, 16));
+
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.CENTER_VERTICAL);
+        btnRow.addView(makeSkeletonBox(ctx, 116, 34, 17, blockFill, 10, 0));
+        btnRow.addView(makeSkeletonBox(ctx, 110, 34, 17, softFill, 10, 0));
+        btnRow.addView(makeSkeletonBox(ctx, 104, 34, 17, softFill, 14, 0));
+        btnRow.addView(makeSkeletonBox(ctx, 30, 30, 15, softFill, 6, 0));
+        btnRow.addView(makeSkeletonBox(ctx, 30, 30, 15, softFill, 0, 0));
+        heroSkel.addView(btnRow);
+        root.addView(heroSkel, hsLp);
+
+        // Row 1 Skeleton: Landscape cards (Continue Watching / Featured)
+        root.addView(makeSkeletonRow(ctx, 170, 198, 112, 5, false, blockFill, softFill));
+        // Row 2 Skeleton: Portrait cards
+        root.addView(makeSkeletonRow(ctx, 195, 124, 178, 7, true, blockFill, softFill));
+        // Row 3 Skeleton: Portrait cards
+        root.addView(makeSkeletonRow(ctx, 165, 124, 178, 7, true, blockFill, softFill));
+
+        return root;
+    }
+
+    private LinearLayout makeSkeletonRow(
+            Context ctx, int titleW, int cardW, int cardH, int count, boolean withSubLines,
+            int blockFill, int softFill) {
+        LinearLayout sec = new LinearLayout(ctx);
+        sec.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        secLp.bottomMargin = UiHelper.dp(ctx, 18);
+        sec.setLayoutParams(secLp);
+
+        sec.addView(makeSkeletonBox(ctx, titleW, 15, 6, blockFill, 0, 10));
+
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < count; i++) {
+            LinearLayout card = new LinearLayout(ctx);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.addView(makeSkeletonBox(ctx, cardW, cardH, 12, blockFill, 0, withSubLines ? 6 : 0));
+            if (withSubLines) {
+                card.addView(makeSkeletonBox(ctx, Math.max(60, cardW - 26), 10, 4, softFill, 0, 4));
+                card.addView(makeSkeletonBox(ctx, Math.max(40, cardW - 56), 8, 4, softFill, 0, 0));
+            }
+            LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            cLp.rightMargin = UiHelper.dp(ctx, 12);
+            row.addView(card, cLp);
+        }
+        sec.addView(row);
+        return sec;
+    }
+
+    private View makeSkeletonBox(
+            Context ctx, int wDp, int hDp, int radiusDp, int fillColor, int rightMarginDp, int bottomMarginDp) {
+        View v = new View(ctx);
+        v.setBackground(UiHelper.createGlassRect(ctx, radiusDp, fillColor, Color.TRANSPARENT, 0));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, wDp), UiHelper.dp(ctx, hDp));
+        if (rightMarginDp > 0) lp.rightMargin = UiHelper.dp(ctx, rightMarginDp);
+        if (bottomMarginDp > 0) lp.bottomMargin = UiHelper.dp(ctx, bottomMarginDp);
+        v.setLayoutParams(lp);
+        return v;
     }
 
     public void silentRefresh() {

@@ -75,28 +75,16 @@ public class SearchScreenView extends FrameLayout {
         addView(root, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-        // Search Bar Frosted Container with crisp white focus border when input is focused
-        FrameLayout searchBarWrap = new FrameLayout(context);
-        searchBarWrap.setClipChildren(false);
-        searchBarWrap.setClipToPadding(false);
-
-        LinearLayout searchBar = new LinearLayout(context);
+        // Search Bar Frosted Container (compact WRAP_CONTENT height; white border toggles directly on searchBar)
+        final LinearLayout searchBar = new LinearLayout(context);
         searchBar.setOrientation(LinearLayout.HORIZONTAL);
         searchBar.setGravity(Gravity.CENTER_VERTICAL);
         searchBar.setClipChildren(false);
         searchBar.setClipToPadding(false);
         searchBar.setPadding(UiHelper.dp(context, 16), UiHelper.dp(context, 7),
                 UiHelper.dp(context, 10), UiHelper.dp(context, 7));
-        UiHelper.applyGlassCardStyle(searchBar, context, 14, UiHelper.COLOR_SURFACE_GLASS, 14);
-        searchBar.setClipToOutline(false);
-        searchBarWrap.addView(searchBar, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
-
-        final View searchFocusBorder = new View(context);
-        searchFocusBorder.setBackground(UiHelper.createWhiteFocusBorderDrawable(context, UiHelper.GLASS_RADIUS_DP, UiHelper.FOCUS_BORDER_DP));
-        searchFocusBorder.setAlpha(0f);
-        searchBarWrap.addView(searchFocusBorder, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        searchBar.setBackground(createSearchBarDrawable(context, false));
+        searchBar.setElevation(UiHelper.dp(context, 12));
 
         LinearLayout.LayoutParams sbLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -114,7 +102,7 @@ public class SearchScreenView extends FrameLayout {
         searchInput.setOnFocusChangeListener(new OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
-                searchFocusBorder.animate().alpha(hasFocus ? 1f : 0f).setDuration(130).start();
+                searchBar.setBackground(createSearchBarDrawable(getContext(), hasFocus));
             }
         });
         searchBar.addView(searchInput, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -130,6 +118,7 @@ public class SearchScreenView extends FrameLayout {
         clearBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
+                if (suggestRunnable != null) handler.removeCallbacks(suggestRunnable);
                 searchInput.setText("");
                 performSearch("");
             }
@@ -145,11 +134,12 @@ public class SearchScreenView extends FrameLayout {
             @Override
             public void onClick(View v) {
                 hideKeyboard();
-                performSearch(searchInput.getText().toString().trim());
+                Editable ed = searchInput.getText();
+                performSearch(ed != null ? ed.toString().trim() : "");
             }
         });
         searchBar.addView(searchBtn);
-        root.addView(searchBarWrap, sbLp);
+        root.addView(searchBar, sbLp);
 
         searchInput.setNextFocusRightId(clearBtn.getId());
         clearBtn.setNextFocusLeftId(searchInput.getId());
@@ -210,6 +200,8 @@ public class SearchScreenView extends FrameLayout {
         gridRv = new RecyclerView(context);
         gridRv.setLayoutManager(new GridLayoutManager(context, 5));
         gridRv.setItemAnimator(null);
+        gridRv.setVerticalScrollBarEnabled(false);
+        gridRv.setHorizontalScrollBarEnabled(false);
         gridRv.setClipChildren(false);
         gridRv.setClipToPadding(false);
         gridRv.setPadding(0, UiHelper.dp(context, 6), 0, UiHelper.dp(context, 24));
@@ -220,9 +212,13 @@ public class SearchScreenView extends FrameLayout {
         searchInput.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
+                boolean isEnterKey = event != null
+                        && (event.getKeyCode() == KeyEvent.KEYCODE_ENTER || event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER)
+                        && event.getAction() == KeyEvent.ACTION_DOWN;
+                if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE || isEnterKey) {
                     hideKeyboard();
-                    performSearch(searchInput.getText().toString().trim());
+                    Editable ed = searchInput.getText();
+                    performSearch(ed != null ? ed.toString().trim() : "");
                     return true;
                 }
                 return false;
@@ -253,6 +249,12 @@ public class SearchScreenView extends FrameLayout {
         });
     }
 
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        handler.removeCallbacksAndMessages(null);
+    }
+
     public void onOpened() {
         if (items.isEmpty()) {
             performSearch("");
@@ -273,7 +275,12 @@ public class SearchScreenView extends FrameLayout {
         return super.requestFocus(direction, previouslyFocusedRect);
     }
 
-    private void performSearch(final String query) {
+    private void performSearch(final String rawQuery) {
+        if (suggestRunnable != null) {
+            handler.removeCallbacks(suggestRunnable);
+            suggestRunnable = null;
+        }
+        final String query = rawQuery != null ? rawQuery.trim() : "";
         final int seq = ++searchSeq;
         spinner.setVisibility(VISIBLE);
         spinner.setSpinning(true);
@@ -287,8 +294,9 @@ public class SearchScreenView extends FrameLayout {
                     spinner.setVisibility(GONE);
                     spinner.setSpinning(false);
                     items.clear();
-                    if (data != null) items.addAll(data.data);
+                    if (data != null && data.data != null) items.addAll(data.data);
                     adapter.notifyDataSetChanged();
+                    gridRv.scrollToPosition(0);
                 }
 
                 @Override
@@ -309,11 +317,12 @@ public class SearchScreenView extends FrameLayout {
                 spinner.setVisibility(GONE);
                 spinner.setSpinning(false);
                 items.clear();
-                if (data != null) items.addAll(data.data);
+                if (data != null && data.data != null) items.addAll(data.data);
                 if (items.isEmpty()) {
                     resultHeadingTv.setText("Không tìm thấy phim phù hợp cho \"" + query + "\"");
                 }
                 adapter.notifyDataSetChanged();
+                gridRv.scrollToPosition(0);
             }
 
             @Override
@@ -321,6 +330,7 @@ public class SearchScreenView extends FrameLayout {
                 if (seq != searchSeq) return;
                 spinner.setVisibility(GONE);
                 spinner.setSpinning(false);
+                resultHeadingTv.setText("Không thể tải kết quả tìm kiếm. Vui lòng thử lại.");
             }
         });
     }
@@ -328,11 +338,18 @@ public class SearchScreenView extends FrameLayout {
     private void hideKeyboard() {
         try {
             InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-            if (imm != null) {
+            if (imm != null && searchInput != null && searchInput.getWindowToken() != null) {
                 imm.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
+    }
+
+    private static android.graphics.drawable.Drawable createSearchBarDrawable(Context ctx, boolean focused) {
+        int fill = focused ? UiHelper.getGlassFocusedBackgroundColor() : UiHelper.getGlassBackgroundColor();
+        int stroke = focused ? UiHelper.COLOR_FOCUS_BORDER : Color.argb(36, 255, 255, 255);
+        float strokeDp = focused ? UiHelper.FOCUS_BORDER_DP : 1f;
+        return UiHelper.createPillDrawable(ctx, 24, fill, stroke, strokeDp);
     }
 
     private TextView makeBtn(Context ctx, String text, boolean accent) {

@@ -350,8 +350,9 @@ public final class MovieCardView {
 
         Context ctx = h.itemView.getContext();
         boolean isLandscape = (cardType == TYPE_LANDSCAPE || cardType == TYPE_ANIME_HERO);
-        String imgUrl = isLandscape ? item.getLandscapeUrl() : item.getPortraitUrl();
-        UiHelper.safeLoadImage(h.posterIv, imgUrl, R.drawable.default_poster, 0);
+        String primaryUrl = isLandscape ? item.getLandscapeUrl() : item.getPortraitUrl();
+        String fallbackUrl = isLandscape ? item.getPortraitUrl() : item.getLandscapeUrl();
+        UiHelper.safeLoadImageWithFallback(h.posterIv, primaryUrl, fallbackUrl, R.drawable.default_poster, 0);
 
         String leftBadge = item.episodeBadge != null && !item.episodeBadge.isEmpty()
                 ? item.episodeBadge

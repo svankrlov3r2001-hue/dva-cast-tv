@@ -125,6 +125,14 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v18 = new ArrayList<>();
+        v18.add("Nâng cấp màn hình chờ tải Trang chủ bằng hiệu ứng khung tải mượt mà và chỉnh nền khung khởi động tối trong suốt hài hòa hơn");
+        v18.add("Chuẩn hóa hiển thị ảnh áp phích dọc và hình nền ngang sắc nét, đầy khung trên Trang chủ, Thông tin phim và bảng Thông tin bộ phim trong trình phát");
+        v18.add("Tự động ẩn nút Danh sách tập khi đang xem Phim lẻ giúp điều hướng remote gọn gàng hơn");
+        v18.add("Bảo vệ và tự động khôi phục chính xác vị trí đang xem trước đó, bổ sung nút tua nhanh về mốc cũ nếu luồng phát khởi động lại từ đầu");
+        v18.add("Khắc phục sự cố thoát ứng dụng khi nhấn Tìm kiếm và sửa lỗi khung viền trắng bị phóng to tràn màn hình ở trang Tìm kiếm");
+        list.add(new HistoryEntry(18L, "4.6.3", "26/11/2026", "Khung Tải Trang Chủ Mới, Bảo Vệ Vị Trí Đang Xem & Sửa Lỗi Tìm Kiếm", v18));
+
         List<String> v17 = new ArrayList<>();
         v17.add("Khắc phục lỗi hiện bảng đếm ngược Tập tiếp theo quá sớm khi chưa tới đoạn kết thúc phim");
         v17.add("Hoàn thiện nút Bỏ qua giới thiệu, dấu mốc mở đầu/kết thúc trên thanh tua, ghi chú trạng thái và thông báo khi xem hết tập cuối");

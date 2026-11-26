@@ -10,8 +10,8 @@ android {
         applicationId "com.dangvietanh.cast"
         minSdk 21
         targetSdk 34
-        versionCode 17
-        versionName "4.6.2"
+        versionCode 18
+        versionName "4.6.3"
     }
 
     signingConfigs {

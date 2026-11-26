@@ -594,12 +594,23 @@ public final class UiHelper {
     }
 
     public static void safeLoadImage(ImageView target, String url, int placeholderRes, int cornerRadiusDp) {
+        safeLoadImageWithFallback(target, url, "", placeholderRes, cornerRadiusDp);
+    }
+
+    public static void safeLoadImageWithFallback(
+            ImageView target, String primaryUrl, String fallbackUrl, int placeholderRes, int cornerRadiusDp) {
         if (target == null) return;
         Context ctx = target.getContext();
         if (!isContextValidForGlide(ctx)) return;
-        if (url == null || url.trim().isEmpty()) {
+        String p = primaryUrl != null ? primaryUrl.trim() : "";
+        String fb = fallbackUrl != null ? fallbackUrl.trim() : "";
+        if (p.isEmpty()) {
+            p = fb;
+            fb = "";
+        }
+        if (p.isEmpty()) {
             Glide.with(ctx).clear(target);
-            target.setImageResource(placeholderRes);
+            if (placeholderRes != 0) target.setImageResource(placeholderRes);
             return;
         }
         RequestOptions opts = new RequestOptions();
@@ -611,11 +622,20 @@ public final class UiHelper {
         if (placeholderRes != 0) {
             opts = opts.placeholder(placeholderRes).error(placeholderRes);
         }
-        Glide.with(ctx)
-                .load(url.trim())
-                .apply(opts)
-                .transition(DrawableTransitionOptions.withCrossFade(220))
-                .into(target);
+        if (!fb.isEmpty() && !fb.equals(p)) {
+            Glide.with(ctx)
+                    .load(p)
+                    .apply(opts)
+                    .error(Glide.with(ctx).load(fb).apply(opts))
+                    .transition(DrawableTransitionOptions.withCrossFade(220))
+                    .into(target);
+        } else {
+            Glide.with(ctx)
+                    .load(p)
+                    .apply(opts)
+                    .transition(DrawableTransitionOptions.withCrossFade(220))
+                    .into(target);
+        }
     }
 
     public static void safeLoadBackdrop(ImageView target, String url) {

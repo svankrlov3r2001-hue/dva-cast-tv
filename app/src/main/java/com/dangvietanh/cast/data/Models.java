@@ -12,29 +12,56 @@ public final class Models {
     }
 
     /**
+     * Read first non-empty, non-"null" string value from candidate JSON keys.
+     */
+    private static String optNonEmpty(JSONObject obj, String... keys) {
+        if (obj == null || keys == null) return "";
+        for (String k : keys) {
+            if (k == null || !obj.has(k) || obj.isNull(k)) continue;
+            String v = obj.optString(k, "").trim();
+            if (!v.isEmpty() && !"null".equalsIgnoreCase(v)) {
+                return v;
+            }
+        }
+        return "";
+    }
+
+    /**
      * Resolve portrait (vertical poster) image URL:
-     * prioritizes `.../uploads/video_thumb/...`, falling back safely if empty.
+     * prioritizes `.../uploads/video_thumb/...`, deriving from `poster_image` if needed.
      */
     public static String pickPortraitUrl(String primaryThumb, String fallbackPoster) {
         String t = primaryThumb != null ? primaryThumb.trim() : "";
         String p = fallbackPoster != null ? fallbackPoster.trim() : "";
         if (t.contains("/video_thumb/")) return t;
         if (p.contains("/video_thumb/")) return p;
-        if (!t.isEmpty()) return t;
-        return p;
+        if (!t.isEmpty() && !t.contains("/poster_image/")) return t;
+        if (p.contains("/uploads/poster_image/")) {
+            return p.replace("/uploads/poster_image/", "/uploads/video_thumb/");
+        }
+        if (t.contains("/uploads/poster_image/")) {
+            return t.replace("/uploads/poster_image/", "/uploads/video_thumb/");
+        }
+        return !t.isEmpty() ? t : p;
     }
 
     /**
      * Resolve landscape (horizontal backdrop / hero / continue-watching) image URL:
-     * prioritizes `.../uploads/poster_image/...`, falling back safely if empty.
+     * prioritizes `.../uploads/poster_image/...`, deriving from `video_thumb` if needed.
      */
     public static String pickLandscapeUrl(String primaryPoster, String fallbackThumb) {
         String p = primaryPoster != null ? primaryPoster.trim() : "";
         String t = fallbackThumb != null ? fallbackThumb.trim() : "";
         if (p.contains("/poster_image/")) return p;
         if (t.contains("/poster_image/")) return t;
-        if (!p.isEmpty()) return p;
-        return t;
+        if (!p.isEmpty() && !p.contains("/video_thumb/")) return p;
+        if (t.contains("/uploads/video_thumb/")) {
+            return t.replace("/uploads/video_thumb/", "/uploads/poster_image/");
+        }
+        if (p.contains("/uploads/video_thumb/")) {
+            return p.replace("/uploads/video_thumb/", "/uploads/poster_image/");
+        }
+        return !p.isEmpty() ? p : t;
     }
 
     public static final class User {
@@ -167,10 +194,8 @@ public final class Models {
             m.isTvSeries = obj.optInt("is_tvseries", 0);
             m.episodeBadge = obj.optString("episode_badge", "");
             m.seasonLabel = obj.optString("season_label", "");
-            String rawPoster = obj.optString("backdrop_url",
-                    obj.optString("poster_url", obj.optString("poster", "")));
-            String rawThumb = obj.optString("portrait_url",
-                    obj.optString("thumbnail_url", obj.optString("thumb_url", "")));
+            String rawPoster = optNonEmpty(obj, "backdrop_url", "poster_image", "poster_url", "poster");
+            String rawThumb = optNonEmpty(obj, "portrait_url", "video_thumb", "thumbnail_url", "thumb_url", "thumb");
             m.posterUrl = pickLandscapeUrl(rawPoster, rawThumb);
             m.thumbnailUrl = pickPortraitUrl(rawThumb, rawPoster);
             m.inWishlist = obj.optBoolean("in_wishlist", false);
@@ -452,9 +477,8 @@ public final class Models {
             md.isTvSeries = obj.optInt("is_tvseries", 0);
             md.totalRating = obj.optInt("total_rating", 0);
             md.totalView = obj.optInt("total_view", 0);
-            String rawPoster = obj.optString("backdrop_url", obj.optString("poster_url", ""));
-            String rawThumb = obj.optString("portrait_url",
-                    obj.optString("thumbnail_url", obj.optString("thumb_url", "")));
+            String rawPoster = optNonEmpty(obj, "backdrop_url", "poster_image", "poster_url", "poster");
+            String rawThumb = optNonEmpty(obj, "portrait_url", "video_thumb", "thumbnail_url", "thumb_url", "thumb");
             md.posterUrl = pickLandscapeUrl(rawPoster, rawThumb);
             md.thumbnailUrl = pickPortraitUrl(rawThumb, rawPoster);
             md.inWishlist = obj.optBoolean("in_wishlist", false);
@@ -570,9 +594,8 @@ public final class Models {
             c.videoQuality = obj.optString("video_quality", "Full HD");
             c.imdbRating = obj.optString("imdb_rating", "");
             c.isTvSeries = obj.optInt("is_tvseries", 0);
-            String rawPoster = obj.optString("backdrop_url", obj.optString("poster_url", ""));
-            String rawThumb = obj.optString("portrait_url",
-                    obj.optString("thumbnail_url", obj.optString("thumb_url", "")));
+            String rawPoster = optNonEmpty(obj, "backdrop_url", "poster_image", "poster_url", "poster");
+            String rawThumb = optNonEmpty(obj, "portrait_url", "video_thumb", "thumbnail_url", "thumb_url", "thumb");
             c.posterUrl = pickLandscapeUrl(rawPoster, rawThumb);
             c.thumbnailUrl = pickPortraitUrl(rawThumb, rawPoster);
             c.inWishlist = obj.optBoolean("in_wishlist", false);
@@ -782,5 +805,13 @@ public final class Models {
         public int initialResumeSec = -1;
         public final List<EpisodeItem> episodes = new ArrayList<>();
         public final List<SeasonItem> seasons = new ArrayList<>();
+
+        public String getPortraitUrl() {
+            return pickPortraitUrl(thumbnailUrl, posterUrl);
+        }
+
+        public String getLandscapeUrl() {
+            return pickLandscapeUrl(posterUrl, thumbnailUrl);
+        }
     }
 }

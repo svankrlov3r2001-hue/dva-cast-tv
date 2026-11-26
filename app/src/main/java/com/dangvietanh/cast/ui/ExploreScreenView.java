@@ -112,6 +112,8 @@ public class ExploreScreenView extends FrameLayout {
         gridRv.setId(View.generateViewId());
         gridRv.setLayoutManager(new GridLayoutManager(context, 5));
         gridRv.setItemAnimator(null);
+        gridRv.setVerticalScrollBarEnabled(false);
+        gridRv.setHorizontalScrollBarEnabled(false);
         gridRv.setClipChildren(false);
         gridRv.setClipToPadding(false);
         gridRv.setPadding(0, UiHelper.dp(context, 6), 0, UiHelper.dp(context, 14));

@@ -688,7 +688,7 @@ public class MainActivity extends Activity {
         splashContent.setMinimumWidth(UiHelper.dp(this, 360));
         splashContent.setPadding(UiHelper.dp(this, 32), UiHelper.dp(this, 30),
                 UiHelper.dp(this, 32), UiHelper.dp(this, 30));
-        UiHelper.applyGlassCardStyle(splashContent, this, 40, UiHelper.COLOR_SURFACE_GLASS, 24);
+        UiHelper.applyGlassCardStyle(splashContent, this, 40, Color.argb(102, 0, 0, 0), 24);
         splashContent.setAlpha(0f);
         splashContent.setScaleX(0.95f);
         splashContent.setScaleY(0.95f);
