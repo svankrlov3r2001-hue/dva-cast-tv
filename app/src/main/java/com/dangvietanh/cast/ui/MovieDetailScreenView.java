@@ -26,9 +26,6 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
-import com.bumptech.glide.request.RequestOptions;
 import com.dangvietanh.cast.Prefs;
 import com.dangvietanh.cast.R;
 import com.dangvietanh.cast.UiHelper;
@@ -1227,35 +1224,11 @@ public class MovieDetailScreenView extends FrameLayout {
 
     private void loadPosterWithFallback(Context ctx, ImageView target, String portraitUrl, String landscapeFallbackUrl) {
         if (target == null || ctx == null) return;
-        if (ctx instanceof Activity) {
-            Activity act = (Activity) ctx;
-            if (act.isFinishing() || act.isDestroyed()) return;
-        }
-        String primary = portraitUrl != null ? portraitUrl.trim() : "";
-        String fallback = landscapeFallbackUrl != null ? landscapeFallbackUrl.trim() : "";
-        if (primary.isEmpty()) {
-            UiHelper.safeLoadImage(target, fallback, R.drawable.default_poster, 0);
-            return;
-        }
-        if (fallback.isEmpty() || fallback.equals(primary)) {
-            UiHelper.safeLoadImage(target, primary, R.drawable.default_poster, 0);
-            return;
-        }
-        Glide.with(ctx)
-                .load(primary)
-                .apply(new RequestOptions().centerCrop().placeholder(R.drawable.default_poster))
-                .error(Glide.with(ctx)
-                        .load(fallback)
-                        .apply(new RequestOptions().centerCrop().error(R.drawable.default_poster)))
-                .transition(DrawableTransitionOptions.withCrossFade(220))
-                .into(target);
+        UiHelper.safeLoadImageWithFallback(target, portraitUrl, landscapeFallbackUrl, R.drawable.default_poster, 0);
     }
 
     private void loadEpisodeThumbWithFallback(Context ctx, ImageView target, String streamCode, String fallbackUrl) {
-        if (ctx instanceof Activity) {
-            Activity act = (Activity) ctx;
-            if (act.isFinishing() || act.isDestroyed()) return;
-        }
+        if (target == null || ctx == null) return;
         String codeThumb = "";
         if (streamCode != null && !streamCode.trim().isEmpty()) {
             try {
@@ -1264,23 +1237,7 @@ public class MovieDetailScreenView extends FrameLayout {
             } catch (Exception ignored) {
             }
         }
-        String fb = (fallbackUrl != null && !fallbackUrl.trim().isEmpty()) ? fallbackUrl.trim() : "";
-        if (codeThumb.isEmpty()) {
-            UiHelper.safeLoadImage(target, fb, R.drawable.default_poster, 0);
-            return;
-        }
-        if (fb.isEmpty()) {
-            UiHelper.safeLoadImage(target, codeThumb, R.drawable.default_poster, 0);
-            return;
-        }
-        Glide.with(ctx)
-                .load(codeThumb)
-                .apply(new RequestOptions().centerCrop().placeholder(R.drawable.default_poster))
-                .error(Glide.with(ctx)
-                        .load(fb)
-                        .apply(new RequestOptions().centerCrop().error(R.drawable.default_poster)))
-                .transition(DrawableTransitionOptions.withCrossFade(180))
-                .into(target);
+        UiHelper.safeLoadImageWithFallback(target, codeThumb, fallbackUrl, R.drawable.default_poster, 0);
     }
 
     private void bindActionListeners() {

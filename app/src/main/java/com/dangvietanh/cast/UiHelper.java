@@ -17,6 +17,7 @@ import android.graphics.RectF;
 import android.graphics.RenderEffect;
 import android.graphics.Shader;
 import android.graphics.SweepGradient;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
@@ -36,7 +37,6 @@ import android.widget.TextView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.bitmap.CenterCrop;
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
-import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.RequestOptions;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.EncodeHintType;
@@ -619,21 +619,20 @@ public final class UiHelper {
         } else {
             opts = opts.centerCrop();
         }
+        opts = opts.placeholder(new ColorDrawable(Color.parseColor("#141824")));
         if (placeholderRes != 0) {
-            opts = opts.placeholder(placeholderRes).error(placeholderRes);
+            opts = opts.error(placeholderRes);
         }
         if (!fb.isEmpty() && !fb.equals(p)) {
             Glide.with(ctx)
                     .load(p)
                     .apply(opts)
                     .error(Glide.with(ctx).load(fb).apply(opts))
-                    .transition(DrawableTransitionOptions.withCrossFade(220))
                     .into(target);
         } else {
             Glide.with(ctx)
                     .load(p)
                     .apply(opts)
-                    .transition(DrawableTransitionOptions.withCrossFade(220))
                     .into(target);
         }
     }
@@ -643,16 +642,15 @@ public final class UiHelper {
         Context ctx = target.getContext();
         if (!isContextValidForGlide(ctx)) return;
         if (url == null || url.trim().isEmpty()) {
-            target.setImageResource(R.drawable.default_poster);
+            target.setImageDrawable(new ColorDrawable(Color.parseColor("#090B12")));
             return;
         }
         Glide.with(ctx)
                 .load(url.trim())
                 .apply(new RequestOptions()
                         .centerCrop()
-                        .placeholder(R.drawable.default_poster)
+                        .placeholder(new ColorDrawable(Color.parseColor("#090B12")))
                         .error(R.drawable.default_poster))
-                .transition(DrawableTransitionOptions.withCrossFade(320))
                 .into(target);
     }
 

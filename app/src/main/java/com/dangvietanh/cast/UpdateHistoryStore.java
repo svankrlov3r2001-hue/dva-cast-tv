@@ -125,6 +125,11 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v19 = new ArrayList<>();
+        v19.add("Khắc phục triệt để lỗi ảnh áp phích dọc bị kéo giãn ngang và cắt mất hai bên khi mới tải trên Trang chủ, Thông tin phim và Trình phát");
+        v19.add("Chuẩn hóa tỉ lệ khung thẻ phim dọc đúng chuẩn 2:3 sắc nét và mượt mà trên mọi dòng Android TV và máy chiếu");
+        list.add(new HistoryEntry(19L, "4.6.4", "26/11/2026", "Sửa Triệt Để Lỗi Méo Ảnh Áp Phích Dọc & Chuẩn Hóa Khung Thẻ 2:3", v19));
+
         List<String> v18 = new ArrayList<>();
         v18.add("Nâng cấp màn hình chờ tải Trang chủ bằng hiệu ứng khung tải mượt mà và chỉnh nền khung khởi động tối trong suốt hài hòa hơn");
         v18.add("Chuẩn hóa hiển thị ảnh áp phích dọc và hình nền ngang sắc nét, đầy khung trên Trang chủ, Thông tin phim và bảng Thông tin bộ phim trong trình phát");

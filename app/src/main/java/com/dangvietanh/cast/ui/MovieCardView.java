@@ -120,13 +120,13 @@ public final class MovieCardView {
             posterH = UiHelper.dp(ctx, 112);
         } else if (cardType == TYPE_TOP10) {
             posterW = UiHelper.dp(ctx, 116);
-            posterH = UiHelper.dp(ctx, 168);
+            posterH = UiHelper.dp(ctx, 174);
         } else if (inGrid) {
             posterW = UiHelper.dp(ctx, 132);
-            posterH = UiHelper.dp(ctx, 190);
+            posterH = UiHelper.dp(ctx, 198);
         } else {
             posterW = UiHelper.dp(ctx, 124);
-            posterH = UiHelper.dp(ctx, 178);
+            posterH = UiHelper.dp(ctx, 186);
         }
 
         LinearLayout outer = new LinearLayout(ctx);
@@ -169,6 +169,7 @@ public final class MovieCardView {
         outer.addView(cardBody, new LinearLayout.LayoutParams(posterW, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         final FrameLayout posterContainer = new FrameLayout(ctx);
+        posterContainer.setBackgroundColor(Color.parseColor("#141824"));
         final int radiusDp = 12;
         posterContainer.setOutlineProvider(new ViewOutlineProvider() {
             @Override
