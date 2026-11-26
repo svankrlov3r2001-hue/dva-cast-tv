@@ -125,6 +125,11 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v20 = new ArrayList<>();
+        v20.add("Hiển thị chính xác tên máy chủ đang phát trên góc trên trái trình phát và nổi bật nhãn Đang phát trong bảng Chọn máy chủ");
+        v20.add("Tự động trỏ sẵn điều khiển vào đúng máy chủ đang phát khi mở bảng Chọn máy chủ phát");
+        list.add(new HistoryEntry(20L, "4.6.5", "26/11/2026", "Hiển Thị Rõ Máy Chủ Đang Phát Trong Trình Phát Phim", v20));
+
         List<String> v19 = new ArrayList<>();
         v19.add("Khắc phục triệt để lỗi ảnh áp phích dọc bị kéo giãn ngang và cắt mất hai bên khi mới tải trên Trang chủ, Thông tin phim và Trình phát");
         v19.add("Chuẩn hóa tỉ lệ khung thẻ phim dọc đúng chuẩn 2:3 sắc nét và mượt mà trên mọi dòng Android TV và máy chiếu");

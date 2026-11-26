@@ -1560,7 +1560,8 @@ public class PlayerScreenController {
 
         // Fallback quick start if primaryUrl is valid & Phiên 11/36 haven't checked yet
         if (!data.primaryUrl.isEmpty() && !data.primaryUrl.contains("check_file")) {
-            startMediaStream(data.primaryUrl, data.streamType, "");
+            String initialSrvId = resolveServerIdForUrl(data.primaryUrl, "");
+            startMediaStream(data.primaryUrl, data.streamType, initialSrvId);
         }
 
         // Load Dual Subtitles & AI Voice signature
@@ -1629,26 +1630,46 @@ public class PlayerScreenController {
         }
     }
 
+    private String resolveServerIdForUrl(String url, String preferredId) {
+        if (preferredId != null && !preferredId.trim().isEmpty()) {
+            return preferredId.trim();
+        }
+        String cleanUrl = url != null ? url.trim() : "";
+        if (cleanUrl.isEmpty()) return "";
+        for (ServerOrchestrator.ServerState s : serverStates) {
+            if (s.streamUrl != null && !s.streamUrl.isEmpty() && cleanUrl.equals(s.streamUrl.trim())) {
+                return s.id;
+            }
+        }
+        String lower = cleanUrl.toLowerCase(Locale.ROOT);
+        if (lower.contains("dangvietanh.io.vn/?code=")) return "40";
+        if (lower.contains("handle.dangvietanh.com")) return "36";
+        if (lower.contains("dangvietanh.io.vn")) return "11";
+        if (lower.contains("workers.dev")) return "3";
+        return "fallback";
+    }
+
     private void tryStartBestPlayableServer(boolean preserveCurrentPos) {
         ServerOrchestrator.ServerState best = serverOrchestrator.selectOptimalServer(serverStates, lastPosSec);
         if (best != null && !best.streamUrl.isEmpty()) {
             switchToServer(best, preserveCurrentPos);
         } else if (resolvedData != null && !resolvedData.primaryUrl.isEmpty() && activeStreamUrl.isEmpty()) {
-            startMediaStream(resolvedData.primaryUrl, resolvedData.streamType, "fallback");
+            String fallbackId = resolveServerIdForUrl(resolvedData.primaryUrl, "");
+            startMediaStream(resolvedData.primaryUrl, resolvedData.streamType, fallbackId);
         }
     }
 
     private void switchToServer(ServerOrchestrator.ServerState server, boolean preservePos) {
         if (server == null || server.streamUrl.isEmpty()) return;
-        this.activeServerId = server.id;
+        this.activeServerId = resolveServerIdForUrl(server.streamUrl, server.id);
         if (preservePos && lastPosSec > 2.0) {
             initialResumeApplied = true;
-            startMediaStreamAt(server.streamUrl, server.format, server.id, lastPosSec);
+            startMediaStreamAt(server.streamUrl, server.format, this.activeServerId, lastPosSec);
         } else {
-            startMediaStream(server.streamUrl, server.format, server.id);
+            startMediaStream(server.streamUrl, server.format, this.activeServerId);
         }
         toast("Đang phát qua " + server.label, UiHelper.COLOR_CYAN);
-        if (activeModal == MODAL_SERVERS) renderSubModalContent();
+        if (activeModal == MODAL_SERVERS) refreshServersModalPreservingFocus();
     }
 
     private void startMediaStream(String url, String type, String serverId) {
@@ -1680,11 +1701,11 @@ public class PlayerScreenController {
     }
 
     private void startMediaStreamAt(String url, String type, String serverId, double startPosSec) {
-        this.activeStreamUrl = url;
-        this.activeServerId = serverId;
+        this.activeStreamUrl = url != null ? url : "";
+        this.activeServerId = resolveServerIdForUrl(this.activeStreamUrl, serverId);
         applyResizeSetting();
         float rate = Prefs.getPlaybackRate(context);
-        nativePlayer.loadMedia(url, type, startPosSec, false, false, rate);
+        nativePlayer.loadMedia(this.activeStreamUrl, type, startPosSec, false, false, rate);
         updateHudMetaText();
     }
 
@@ -2150,7 +2171,10 @@ public class PlayerScreenController {
     private void updateHudMetaText() {
         String durLabel = formatHumanDuration(lastDurSec);
         String ep = getCurrentSubtitle();
-        String srvName = activeServerId.isEmpty() ? "Tự động" : findServerLabel(activeServerId);
+        if (activeServerId.isEmpty() && !activeStreamUrl.isEmpty()) {
+            activeServerId = resolveServerIdForUrl(activeStreamUrl, "");
+        }
+        String srvName = !activeServerId.isEmpty() ? findServerLabel(activeServerId) : "Đang chọn máy chủ";
         StringBuilder sb = new StringBuilder();
         if (!durLabel.isEmpty()) sb.append(durLabel);
         else if (!ep.isEmpty()) sb.append(ep);
@@ -2415,7 +2439,13 @@ public class PlayerScreenController {
         subModalCloseBtn.post(new Runnable() {
             @Override
             public void run() {
-                View focusTarget = findFirstFocusableChild(subModalBody);
+                View focusTarget = null;
+                if (activeModal == MODAL_SERVERS && !activeServerId.isEmpty()) {
+                    focusTarget = subModalBody.findViewWithTag("srv_card_" + activeServerId);
+                }
+                if (focusTarget == null) {
+                    focusTarget = findFirstFocusableChild(subModalBody);
+                }
                 if (focusTarget != null) {
                     if (focusTarget.getId() == View.NO_ID) focusTarget.setId(View.generateViewId());
                     subModalCloseBtn.setNextFocusDownId(focusTarget.getId());
@@ -2685,6 +2715,36 @@ public class PlayerScreenController {
     }
 
     private void renderServersModal() {
+        if (activeServerId.isEmpty() && !activeStreamUrl.isEmpty()) {
+            activeServerId = resolveServerIdForUrl(activeStreamUrl, "");
+        }
+
+        // Active server summary banner
+        LinearLayout summaryRow = new LinearLayout(context);
+        summaryRow.setOrientation(LinearLayout.HORIZONTAL);
+        summaryRow.setGravity(Gravity.CENTER_VERTICAL);
+        summaryRow.setPadding(UiHelper.dp(context, 14), UiHelper.dp(context, 10),
+                UiHelper.dp(context, 14), UiHelper.dp(context, 10));
+        summaryRow.setBackground(UiHelper.createPillDrawable(
+                context, 14, Color.argb(145, 22, 27, 42), Color.argb(46, 255, 255, 255), 1f));
+
+        View liveDot = new View(context);
+        liveDot.setBackground(UiHelper.createPillDrawable(
+                context, 6, !activeServerId.isEmpty() ? UiHelper.COLOR_GREEN : UiHelper.COLOR_GOLD, Color.TRANSPARENT, 0f));
+        LinearLayout.LayoutParams ldLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 9), UiHelper.dp(context, 9));
+        ldLp.rightMargin = UiHelper.dp(context, 10);
+        summaryRow.addView(liveDot, ldLp);
+
+        TextView summaryTv = new TextView(context);
+        summaryTv.setText(!activeServerId.isEmpty()
+                ? ("Đang phát: " + findServerLabel(activeServerId))
+                : "Đang kết nối máy chủ phát...");
+        summaryTv.setTextColor(Color.WHITE);
+        summaryTv.setTextSize(13.5f);
+        summaryTv.setTypeface(null, Typeface.BOLD);
+        summaryRow.addView(summaryTv);
+        addSpacedView(summaryRow, 12);
+
         LinearLayout topTools = new LinearLayout(context);
         topTools.setOrientation(LinearLayout.HORIZONTAL);
         topTools.setClipChildren(false);
@@ -2712,19 +2772,9 @@ public class PlayerScreenController {
                 serverOrchestrator.measurePings(new ServerOrchestrator.Callback<ServerOrchestrator.PingSnapshot>() {
                     @Override
                     public void onResult(ServerOrchestrator.PingSnapshot snap) {
-                        for (ServerOrchestrator.ServerState s : serverStates) {
-                            if ("11".equals(s.id)) {
-                                s.pingMs = snap.ping11;
-                                s.pingFailed = snap.ping11 < 0;
-                            } else if ("36".equals(s.id)) {
-                                s.pingMs = snap.ping36;
-                                s.pingFailed = snap.ping36 < 0;
-                            } else if ("40".equals(s.id)) {
-                                s.pingMs = snap.ping40;
-                            } else if ("3".equals(s.id)) {
-                                s.pingMs = snap.ping3;
-                            }
-                        }
+                        List<ServerOrchestrator.ServerState> updated = serverOrchestrator.applyPings(serverStates, snap);
+                        serverStates.clear();
+                        serverStates.addAll(updated);
                         if (activeModal == MODAL_SERVERS) refreshServersModalPreservingFocus();
                     }
                 });
@@ -2737,7 +2787,7 @@ public class PlayerScreenController {
         subModalBody.addView(topTools, ttLp);
 
         for (final ServerOrchestrator.ServerState srv : serverStates) {
-            boolean active = srv.id.equals(activeServerId);
+            boolean active = !activeServerId.isEmpty() && srv.id.equals(activeServerId);
             LinearLayout card = new LinearLayout(context);
             card.setTag("srv_card_" + srv.id);
             card.setOrientation(LinearLayout.HORIZONTAL);
@@ -2748,12 +2798,34 @@ public class PlayerScreenController {
 
             LinearLayout left = new LinearLayout(context);
             left.setOrientation(LinearLayout.VERTICAL);
+
+            LinearLayout titleRow = new LinearLayout(context);
+            titleRow.setOrientation(LinearLayout.HORIZONTAL);
+            titleRow.setGravity(Gravity.CENTER_VERTICAL);
+
             TextView title = new TextView(context);
-            title.setText(srv.label + (active ? "  •  ĐANG PHÁT" : ""));
+            title.setText(srv.label);
             title.setTextColor(Color.WHITE);
             title.setTextSize(15.5f);
             title.setTypeface(null, Typeface.BOLD);
-            left.addView(title);
+            titleRow.addView(title);
+
+            if (active) {
+                TextView playingBadge = new TextView(context);
+                playingBadge.setText("● Đang phát");
+                playingBadge.setTextColor(Color.WHITE);
+                playingBadge.setTextSize(11f);
+                playingBadge.setTypeface(null, Typeface.BOLD);
+                playingBadge.setPadding(UiHelper.dp(context, 9), UiHelper.dp(context, 2),
+                        UiHelper.dp(context, 9), UiHelper.dp(context, 2));
+                playingBadge.setBackground(UiHelper.createPillDrawable(
+                        context, 10, Color.argb(235, 22, 163, 74), Color.TRANSPARENT, 0f));
+                LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                pbLp.leftMargin = UiHelper.dp(context, 10);
+                titleRow.addView(playingBadge, pbLp);
+            }
+            left.addView(titleRow);
 
             String eta = ServerOrchestrator.formatVietnameseEta(srv.etaText);
             TextView sub = new TextView(context);
