@@ -125,6 +125,11 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v16 = new ArrayList<>();
+        v16.add("Khắc phục sự cố thoát ứng dụng khi mở trang Thông tin phim trên một số dòng Android TV và máy chiếu");
+        v16.add("Tối ưu độ ổn định khi hiển thị và cuộn danh sách tập phim cùng thao tác điều khiển từ xa trên màn hình Chi tiết phim");
+        list.add(new HistoryEntry(16L, "4.6.1", "26/11/2026", "Bản Vá Ổn Định Màn Hình Thông Tin Phim & Danh Sách Tập", v16));
+
         List<String> v15 = new ArrayList<>();
         v15.add("Nâng cấp thanh menu bên trái thiết kế vuông góc gọn gàng, tự động thu gọn chỉ hiện biểu tượng khi xem danh sách phim và mở rộng đầy đủ khi di chuyển sang thanh menu ở cả Trang chủ lẫn Thông tin phim");
         v15.add("Thay hiệu ứng chọn bằng viền trắng sắc nét kết hợp phóng to nhẹ nhàng, chuẩn hóa hiển thị áp phích dọc và hình nền ngang rõ nét trên toàn bộ ứng dụng");

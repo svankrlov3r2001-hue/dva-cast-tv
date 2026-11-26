@@ -387,8 +387,7 @@ public class MovieDetailScreenView extends FrameLayout {
         episodeRv.setId(View.generateViewId());
         episodeRv.setLayoutManager(new GridLayoutManager(context, EPISODE_COLS));
         episodeRv.setItemAnimator(null);
-        episodeRv.setVerticalScrollBarEnabled(true);
-        episodeRv.setScrollbarFadingEnabled(false);
+        episodeRv.setVerticalScrollBarEnabled(false);
         episodeRv.setNestedScrollingEnabled(true);
         episodeRv.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
         episodeRv.setClipChildren(false);
@@ -497,7 +496,9 @@ public class MovieDetailScreenView extends FrameLayout {
 
     @Override
     public boolean requestFocus(int direction, Rect previouslyFocusedRect) {
-        if (btnPlay != null && loadingBox.getVisibility() != VISIBLE && errorBox.getVisibility() != VISIBLE) {
+        if (btnPlay != null && scrollView != null
+                && loadingBox != null && loadingBox.getVisibility() != VISIBLE
+                && errorBox != null && errorBox.getVisibility() != VISIBLE) {
             scrollView.smoothScrollTo(0, 0);
             return btnPlay.requestFocus();
         }
@@ -896,10 +897,12 @@ public class MovieDetailScreenView extends FrameLayout {
         activeEpisodeIndex = 0;
         boolean matchedHistory = false;
         if (m.watchHistory != null) {
+            String lastCode = m.watchHistory.lastStreamCode != null ? m.watchHistory.lastStreamCode : "";
             for (int i = 0; i < displayedEpisodes.size(); i++) {
                 Models.EpisodeItem ep = displayedEpisodes.get(i);
-                if ((ep.episodesId > 0 && ep.episodesId == m.watchHistory.lastEpisodeId)
-                        || (!ep.streamCode.isEmpty() && ep.streamCode.equals(m.watchHistory.lastStreamCode))) {
+                String epCode = ep != null && ep.streamCode != null ? ep.streamCode : "";
+                if (ep != null && ((ep.episodesId > 0 && ep.episodesId == m.watchHistory.lastEpisodeId)
+                        || (!epCode.isEmpty() && epCode.equals(lastCode)))) {
                     activeEpisodeIndex = i;
                     matchedHistory = true;
                     break;
@@ -1037,7 +1040,7 @@ public class MovieDetailScreenView extends FrameLayout {
             wrapper.setClipToPadding(false);
             wrapper.setPadding(UiHelper.dp(ctx, 5), UiHelper.dp(ctx, 5),
                     UiHelper.dp(ctx, 5), UiHelper.dp(ctx, 5));
-            RecyclerView.LayoutParams wLp = new RecyclerView.LayoutParams(
+            GridLayoutManager.LayoutParams wLp = new GridLayoutManager.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, UiHelper.dp(ctx, 94));
             wrapper.setLayoutParams(wLp);
 
