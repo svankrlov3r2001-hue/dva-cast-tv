@@ -1,5 +1,7 @@
 package com.dangvietanh.cast.ui;
 
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
@@ -63,7 +65,9 @@ public class MovieDetailScreenView extends FrameLayout {
     private final ImageView backdropIv;
     private final ScrollView scrollView;
     private final LinearLayout contentCol;
-    private final LinearLayout loadingBox;
+    private final FrameLayout loadingBox;
+    private final LinearLayout skeletonPulseLayer;
+    private ObjectAnimator skeletonPulseAnim;
     private final LinearLayout errorBox;
     private final TextView errorTv;
 
@@ -443,14 +447,14 @@ public class MovieDetailScreenView extends FrameLayout {
         relatedSection.addView(relatedRv);
         contentCol.addView(relatedSection);
 
-        // 9. Loading overlay
-        loadingBox = new LinearLayout(context);
-        loadingBox.setOrientation(LinearLayout.VERTICAL);
-        loadingBox.setGravity(Gravity.CENTER);
-        loadingBox.setBackgroundColor(Color.argb(195, 9, 11, 18));
+        // 9. Full-screen Animated Skeleton Loading Overlay (opaque #090B12, covers previous movie cleanly)
+        loadingBox = new FrameLayout(context);
+        loadingBox.setBackgroundColor(UiHelper.COLOR_BG_BASE);
+        loadingBox.setClickable(true);
         loadingBox.setVisibility(GONE);
-        loadingBox.addView(new UiHelper.SpinnerView(context),
-                new LinearLayout.LayoutParams(UiHelper.dp(context, 38), UiHelper.dp(context, 38)));
+        skeletonPulseLayer = buildDetailSkeletonLayout(context);
+        loadingBox.addView(skeletonPulseLayer, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         addView(loadingBox, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -557,6 +561,159 @@ public class MovieDetailScreenView extends FrameLayout {
     public void clearHistory() {
         historyStack.clear();
         currentDetail = null;
+        hideLoadingSkeleton();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        stopSkeletonPulse();
+        super.onDetachedFromWindow();
+    }
+
+    private void showLoadingSkeleton() {
+        if (loadingBox != null) {
+            loadingBox.setVisibility(VISIBLE);
+            startSkeletonPulse();
+        }
+    }
+
+    private void hideLoadingSkeleton() {
+        stopSkeletonPulse();
+        if (loadingBox != null) {
+            loadingBox.setVisibility(GONE);
+        }
+    }
+
+    private void startSkeletonPulse() {
+        if (skeletonPulseLayer == null) return;
+        if (skeletonPulseAnim == null) {
+            skeletonPulseAnim = ObjectAnimator.ofFloat(skeletonPulseLayer, "alpha", 0.42f, 0.90f);
+            skeletonPulseAnim.setDuration(820L);
+            skeletonPulseAnim.setRepeatCount(ValueAnimator.INFINITE);
+            skeletonPulseAnim.setRepeatMode(ValueAnimator.REVERSE);
+        }
+        if (!skeletonPulseAnim.isStarted()) {
+            skeletonPulseAnim.start();
+        }
+    }
+
+    private void stopSkeletonPulse() {
+        if (skeletonPulseAnim != null) {
+            skeletonPulseAnim.cancel();
+        }
+    }
+
+    private LinearLayout buildDetailSkeletonLayout(Context ctx) {
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 22),
+                UiHelper.dp(ctx, 24), UiHelper.dp(ctx, 24));
+
+        int blockFill = Color.argb(46, 255, 255, 255);
+        int softFill = Color.argb(30, 255, 255, 255);
+
+        // 1. Top Block: Portrait Poster (158x234dp) + Right Info Column
+        LinearLayout heroRow = new LinearLayout(ctx);
+        heroRow.setOrientation(LinearLayout.HORIZONTAL);
+        heroRow.setGravity(Gravity.TOP);
+        LinearLayout.LayoutParams hrLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        hrLp.bottomMargin = UiHelper.dp(ctx, 22);
+
+        heroRow.addView(makeSkeletonBox(ctx, 158, 234, 14, blockFill, 24, 0));
+
+        LinearLayout infoCol = new LinearLayout(ctx);
+        infoCol.setOrientation(LinearLayout.VERTICAL);
+        heroRow.addView(infoCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        // 2 title / original subtitle lines
+        infoCol.addView(makeSkeletonBox(ctx, 360, 26, 8, blockFill, 0, 8));
+        infoCol.addView(makeSkeletonBox(ctx, 215, 14, 6, softFill, 0, 12));
+
+        // Metadata badges row
+        LinearLayout badgeRow = new LinearLayout(ctx);
+        badgeRow.setOrientation(LinearLayout.HORIZONTAL);
+        badgeRow.addView(makeSkeletonBox(ctx, 64, 18, 9, softFill, 10, 0));
+        badgeRow.addView(makeSkeletonBox(ctx, 56, 18, 9, softFill, 10, 0));
+        badgeRow.addView(makeSkeletonBox(ctx, 48, 18, 9, softFill, 10, 0));
+        badgeRow.addView(makeSkeletonBox(ctx, 46, 18, 6, blockFill, 0, 0));
+        LinearLayout.LayoutParams brLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        brLp.bottomMargin = UiHelper.dp(ctx, 11);
+        infoCol.addView(badgeRow, brLp);
+
+        // Genre & country chips row
+        LinearLayout chipRow = new LinearLayout(ctx);
+        chipRow.setOrientation(LinearLayout.HORIZONTAL);
+        chipRow.addView(makeSkeletonBox(ctx, 74, 21, 11, softFill, 8, 0));
+        chipRow.addView(makeSkeletonBox(ctx, 68, 21, 11, softFill, 8, 0));
+        chipRow.addView(makeSkeletonBox(ctx, 82, 21, 11, softFill, 8, 0));
+        chipRow.addView(makeSkeletonBox(ctx, 64, 21, 11, softFill, 0, 0));
+        LinearLayout.LayoutParams crLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        crLp.bottomMargin = UiHelper.dp(ctx, 12);
+        infoCol.addView(chipRow, crLp);
+
+        // 3 synopsis lines
+        infoCol.addView(makeSkeletonBox(ctx, 460, 11, 5, softFill, 0, 6));
+        infoCol.addView(makeSkeletonBox(ctx, 430, 11, 5, softFill, 0, 6));
+        infoCol.addView(makeSkeletonBox(ctx, 305, 11, 5, softFill, 0, 16));
+
+        // 5 CTA pill buttons row
+        LinearLayout ctaRow = new LinearLayout(ctx);
+        ctaRow.setOrientation(LinearLayout.HORIZONTAL);
+        ctaRow.setGravity(Gravity.CENTER_VERTICAL);
+        ctaRow.addView(makeSkeletonBox(ctx, 112, 35, 18, blockFill, 9, 0));
+        ctaRow.addView(makeSkeletonBox(ctx, 152, 35, 18, softFill, 9, 0));
+        ctaRow.addView(makeSkeletonBox(ctx, 84, 35, 18, softFill, 9, 0));
+        ctaRow.addView(makeSkeletonBox(ctx, 112, 35, 18, softFill, 9, 0));
+        ctaRow.addView(makeSkeletonBox(ctx, 94, 35, 18, softFill, 0, 0));
+        infoCol.addView(ctaRow);
+
+        root.addView(heroRow, hrLp);
+
+        // 2. Middle Block: Section title + 1 horizontal row of 5 episode cards (176x102dp)
+        root.addView(makeSkeletonBox(ctx, 168, 16, 6, blockFill, 0, 12));
+        LinearLayout epRow = new LinearLayout(ctx);
+        epRow.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < 5; i++) {
+            epRow.addView(makeSkeletonBox(ctx, 176, 102, 10, blockFill, i < 4 ? 10 : 0, 0));
+        }
+        LinearLayout.LayoutParams epLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        epLp.bottomMargin = UiHelper.dp(ctx, 20);
+        root.addView(epRow, epLp);
+
+        // 3. Bottom Block: Section title + 1 horizontal row of circular cast avatars + name bars
+        root.addView(makeSkeletonBox(ctx, 188, 16, 6, blockFill, 0, 12));
+        LinearLayout castSkelRow = new LinearLayout(ctx);
+        castSkelRow.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < 7; i++) {
+            LinearLayout person = new LinearLayout(ctx);
+            person.setOrientation(LinearLayout.VERTICAL);
+            person.setGravity(Gravity.CENTER_HORIZONTAL);
+            person.addView(makeSkeletonBox(ctx, 54, 54, 27, blockFill, 0, 7));
+            person.addView(makeSkeletonBox(ctx, 72, 10, 4, softFill, 0, 4));
+            person.addView(makeSkeletonBox(ctx, 48, 8, 4, softFill, 0, 0));
+            LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(
+                    UiHelper.dp(ctx, 98), LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (i < 6) pLp.rightMargin = UiHelper.dp(ctx, 10);
+            castSkelRow.addView(person, pLp);
+        }
+        root.addView(castSkelRow);
+
+        return root;
+    }
+
+    private View makeSkeletonBox(
+            Context ctx, int wDp, int hDp, int radiusDp, int fillColor, int rightMarginDp, int bottomMarginDp) {
+        View v = new View(ctx);
+        v.setBackground(UiHelper.createGlassRect(ctx, radiusDp, fillColor, Color.TRANSPARENT, 0));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UiHelper.dp(ctx, wDp), UiHelper.dp(ctx, hDp));
+        lp.rightMargin = UiHelper.dp(ctx, rightMarginDp);
+        lp.bottomMargin = UiHelper.dp(ctx, bottomMarginDp);
+        v.setLayoutParams(lp);
+        return v;
     }
 
     public boolean handleBack() {
@@ -570,7 +727,7 @@ public class MovieDetailScreenView extends FrameLayout {
 
     private void loadDetail(int videosId) {
         final int seq = ++requestSeq;
-        loadingBox.setVisibility(VISIBLE);
+        showLoadingSkeleton();
         errorBox.setVisibility(GONE);
         scrollView.scrollTo(0, 0);
 
@@ -578,7 +735,7 @@ public class MovieDetailScreenView extends FrameLayout {
             @Override
             public void onSuccess(Models.MovieDetailResponse data) {
                 if (seq != requestSeq) return;
-                loadingBox.setVisibility(GONE);
+                hideLoadingSkeleton();
                 if (data == null || data.movie == null) {
                     errorBox.setVisibility(VISIBLE);
                     errorTv.setText("Không tìm thấy thông tin phim");
@@ -590,7 +747,7 @@ public class MovieDetailScreenView extends FrameLayout {
             @Override
             public void onError(String message, int httpCode) {
                 if (seq != requestSeq) return;
-                loadingBox.setVisibility(GONE);
+                hideLoadingSkeleton();
                 errorBox.setVisibility(VISIBLE);
                 errorTv.setText(message != null ? message : "Lỗi tải thông tin phim");
             }

@@ -125,6 +125,10 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v22 = new ArrayList<>();
+        v22.add("Nâng cấp hiệu ứng khung tải toàn màn hình mượt mà cho trang Thông tin phim đồng bộ phong cách với Trang chủ");
+        list.add(new HistoryEntry(22L, "4.6.7", "26/11/2026", "Khung Tải Mượt Mà Toàn Màn Hình Cho Trang Thông Tin Phim", v22));
+
         List<String> v21 = new ArrayList<>();
         v21.add("Nâng cấp chế độ Độ sáng & Chi tiết (Máy chiếu) với 4 mức Mặc định, Sáng nhẹ, Sáng rõ và Siêu sáng giúp hình ảnh rõ nét vùng tối và nổi bật chi tiết nhân vật khi chiếu trên máy chiếu");
         v21.add("Chuẩn hóa bộ cài đặt mặc định tối ưu cho TV: tự động chọn máy chủ tối ưu, cỡ phụ đề 18, vị trí 8%, giọng thuyết minh Hoài My, tự chuyển tập, tải trước tập kế, hiệu ứng chuyển cảnh, tự bỏ qua giới thiệu và giữ thuyết minh khi chuyển tập");
