@@ -148,6 +148,7 @@ public class SearchScreenView extends FrameLayout {
 
         // Quick Keyword Chips
         HorizontalScrollView chipScroll = new HorizontalScrollView(context);
+        UiHelper.makeNonFocusable(chipScroll);
         chipScroll.setHorizontalScrollBarEnabled(false);
         chipScroll.setClipChildren(false);
         chipScroll.setClipToPadding(false);
@@ -198,6 +199,7 @@ public class SearchScreenView extends FrameLayout {
         root.addView(resultHeadingTv, rhLp);
 
         gridRv = new RecyclerView(context);
+        UiHelper.makeNonFocusable(gridRv);
         gridRv.setLayoutManager(new GridLayoutManager(context, 5));
         gridRv.setItemAnimator(null);
         gridRv.setVerticalScrollBarEnabled(false);
@@ -259,18 +261,22 @@ public class SearchScreenView extends FrameLayout {
         if (items.isEmpty()) {
             performSearch("");
         }
-        searchInput.post(new Runnable() {
-            @Override
-            public void run() {
-                searchInput.requestFocus();
-            }
-        });
+        UiHelper.postTvFocus(searchInput);
+    }
+
+    public boolean hasValidFocus() {
+        return UiHelper.isValidInteractiveFocus(findFocus(), this);
+    }
+
+    public boolean ensureValidFocus() {
+        if (getVisibility() != VISIBLE) return false;
+        return UiHelper.requestTvFocus(searchInput);
     }
 
     @Override
     public boolean requestFocus(int direction, Rect previouslyFocusedRect) {
         if (searchInput != null) {
-            return searchInput.requestFocus();
+            return UiHelper.requestTvFocus(searchInput);
         }
         return super.requestFocus(direction, previouslyFocusedRect);
     }
@@ -293,10 +299,25 @@ public class SearchScreenView extends FrameLayout {
                     if (seq != searchSeq) return;
                     spinner.setVisibility(GONE);
                     spinner.setSpinning(false);
+                    final boolean gridHadFocus = gridRv.hasFocus();
                     items.clear();
                     if (data != null && data.data != null) items.addAll(data.data);
                     adapter.notifyDataSetChanged();
                     gridRv.scrollToPosition(0);
+                    if (gridHadFocus) {
+                        gridRv.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (!UiHelper.isValidInteractiveFocus(findFocus(), SearchScreenView.this)) {
+                                    if (gridRv.getChildCount() > 0) {
+                                        UiHelper.requestTvFocus(gridRv.getChildAt(0));
+                                    } else {
+                                        UiHelper.requestTvFocus(searchInput);
+                                    }
+                                }
+                            }
+                        });
+                    }
                 }
 
                 @Override
@@ -316,6 +337,7 @@ public class SearchScreenView extends FrameLayout {
                 if (seq != searchSeq) return;
                 spinner.setVisibility(GONE);
                 spinner.setSpinning(false);
+                final boolean gridHadFocus = gridRv.hasFocus();
                 items.clear();
                 if (data != null && data.data != null) items.addAll(data.data);
                 if (items.isEmpty()) {
@@ -323,6 +345,20 @@ public class SearchScreenView extends FrameLayout {
                 }
                 adapter.notifyDataSetChanged();
                 gridRv.scrollToPosition(0);
+                if (gridHadFocus) {
+                    gridRv.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (!UiHelper.isValidInteractiveFocus(findFocus(), SearchScreenView.this)) {
+                                if (gridRv.getChildCount() > 0) {
+                                    UiHelper.requestTvFocus(gridRv.getChildAt(0));
+                                } else {
+                                    UiHelper.requestTvFocus(searchInput);
+                                }
+                            }
+                        }
+                    });
+                }
             }
 
             @Override

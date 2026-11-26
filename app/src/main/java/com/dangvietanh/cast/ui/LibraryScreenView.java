@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -91,7 +92,7 @@ public class LibraryScreenView extends FrameLayout {
             public void onClick(View v) {
                 showingWatched = false;
                 updateTabVisuals();
-                tabWishlistBtn.requestFocus();
+                UiHelper.requestTvFocus(tabWishlistBtn);
             }
         });
         LinearLayout.LayoutParams t1Lp = new LinearLayout.LayoutParams(
@@ -106,7 +107,7 @@ public class LibraryScreenView extends FrameLayout {
             public void onClick(View v) {
                 showingWatched = true;
                 updateTabVisuals();
-                tabWatchedBtn.requestFocus();
+                UiHelper.requestTvFocus(tabWatchedBtn);
             }
         });
         LinearLayout.LayoutParams t2Lp = new LinearLayout.LayoutParams(
@@ -136,6 +137,7 @@ public class LibraryScreenView extends FrameLayout {
 
         gridRv = new RecyclerView(context);
         gridRv.setId(View.generateViewId());
+        UiHelper.makeNonFocusable(gridRv);
         gridRv.setLayoutManager(new GridLayoutManager(context, 5));
         gridRv.setItemAnimator(null);
         gridRv.setVerticalScrollBarEnabled(false);
@@ -147,20 +149,47 @@ public class LibraryScreenView extends FrameLayout {
         root.addView(gridRv, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        OnKeyListener tabDownToGrid = new OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (gridRv.getVisibility() == VISIBLE && gridRv.getChildCount() > 0) {
+                        UiHelper.requestTvFocus(gridRv.getChildAt(0));
+                        return true;
+                    }
+                }
+                return false;
+            }
+        };
+
         tabWishlistBtn.setNextFocusRightId(tabWatchedBtn.getId());
-        tabWishlistBtn.setNextFocusDownId(gridRv.getId());
+        tabWishlistBtn.setOnKeyListener(tabDownToGrid);
         tabWatchedBtn.setNextFocusLeftId(tabWishlistBtn.getId());
         tabWatchedBtn.setNextFocusRightId(refreshBtn.getId());
-        tabWatchedBtn.setNextFocusDownId(gridRv.getId());
+        tabWatchedBtn.setOnKeyListener(tabDownToGrid);
         refreshBtn.setNextFocusLeftId(tabWatchedBtn.getId());
-        refreshBtn.setNextFocusDownId(gridRv.getId());
+        refreshBtn.setOnKeyListener(tabDownToGrid);
+    }
+
+    public void requestInitialFocus() {
+        UiHelper.postTvFocus(showingWatched ? tabWatchedBtn : tabWishlistBtn);
+    }
+
+    public boolean hasValidFocus() {
+        return UiHelper.isValidInteractiveFocus(findFocus(), this);
+    }
+
+    public boolean ensureValidFocus() {
+        if (getVisibility() != VISIBLE) return false;
+        TextView target = showingWatched ? tabWatchedBtn : tabWishlistBtn;
+        return UiHelper.requestTvFocus(target);
     }
 
     @Override
     public boolean requestFocus(int direction, Rect previouslyFocusedRect) {
         TextView target = showingWatched ? tabWatchedBtn : tabWishlistBtn;
         if (target != null) {
-            return target.requestFocus();
+            return UiHelper.requestTvFocus(target);
         }
         return super.requestFocus(direction, previouslyFocusedRect);
     }
@@ -192,6 +221,7 @@ public class LibraryScreenView extends FrameLayout {
     }
 
     private void updateTabVisuals() {
+        final boolean hadFocusInside = hasFocus();
         UiHelper.setButtonSelectedVisual(tabWishlistBtn, getContext(), 22, !showingWatched);
         UiHelper.setButtonSelectedVisual(tabWatchedBtn, getContext(), 22, showingWatched);
         boolean empty = (showingWatched ? watchedItems : wishlistItems).isEmpty();
@@ -199,6 +229,16 @@ public class LibraryScreenView extends FrameLayout {
         emptyTv.setText(showingWatched ? "Chưa có phim đang xem gần đây." : "Bạn chưa lưu bộ phim nào vào danh sách.");
         gridRv.setVisibility(empty ? GONE : VISIBLE);
         adapter.notifyDataSetChanged();
+        if (hadFocusInside) {
+            post(new Runnable() {
+                @Override
+                public void run() {
+                    if (!UiHelper.isValidInteractiveFocus(findFocus(), LibraryScreenView.this)) {
+                        UiHelper.requestTvFocus(showingWatched ? tabWatchedBtn : tabWishlistBtn);
+                    }
+                }
+            });
+        }
     }
 
     private TextView makeTabBtn(Context ctx, String text, boolean active) {

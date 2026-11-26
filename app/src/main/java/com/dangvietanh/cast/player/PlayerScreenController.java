@@ -366,6 +366,7 @@ public class PlayerScreenController {
         rootFrame.setBackgroundColor(Color.BLACK);
         rootFrame.setVisibility(View.GONE);
         rootFrame.setClickable(true);
+        UiHelper.makeNonFocusable(rootFrame);
 
         // 1. Video Surface
         rootFrame.addView(nativePlayer.getView(), new FrameLayout.LayoutParams(
@@ -429,6 +430,7 @@ public class PlayerScreenController {
                 if (resolvedData != null && resolvedData.skipIntroSec > 0) {
                     nativePlayer.seekTo(resolvedData.skipIntroSec);
                     skipIntroBtn.setVisibility(View.GONE);
+                    syncPlayerFocusLayers();
                     toast("Đã bỏ qua giới thiệu", UiHelper.COLOR_CYAN);
                     if (hudVisible) focusCenterPlayButton();
                     resetHudAutoHide();
@@ -463,6 +465,7 @@ public class PlayerScreenController {
                     pendingInitialSeekActive = false;
                     resumePositionVerified = true;
                     resumeRecoveryBtn.setVisibility(View.GONE);
+                    syncPlayerFocusLayers();
                     nativePlayer.seekTo(target);
                     toast("Đã tua tới vị trí cũ (" + formatTime(target) + ")", UiHelper.COLOR_CYAN);
                     if (hudVisible) focusCenterPlayButton();
@@ -532,8 +535,10 @@ public class PlayerScreenController {
 
         btnNextCancel = makeTextPill(context, "Huỷ", false);
         btnNextCancel.setId(View.generateViewId());
+        btnNextPlayNow.setNextFocusLeftId(btnNextPlayNow.getId());
         btnNextPlayNow.setNextFocusRightId(btnNextCancel.getId());
         btnNextCancel.setNextFocusLeftId(btnNextPlayNow.getId());
+        btnNextCancel.setNextFocusRightId(btnNextCancel.getId());
         btnNextCancel.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -903,6 +908,7 @@ public class PlayerScreenController {
         seekBarFocusBox = new FrameLayout(context);
         seekBarFocusBox.setId(View.generateViewId());
         seekBarFocusBox.setFocusable(true);
+        seekBarFocusBox.setFocusableInTouchMode(false);
         seekBarFocusBox.setClickable(true);
         seekBarFocusBox.setClipChildren(false);
         seekBarFocusBox.setClipToPadding(false);
@@ -1203,6 +1209,7 @@ public class PlayerScreenController {
         subModalHost.setBackgroundColor(Color.argb(180, 9, 11, 18));
         subModalHost.setVisibility(View.GONE);
         subModalHost.setClickable(true);
+        UiHelper.makeNonFocusable(subModalHost);
 
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         this.screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(context, 960);
@@ -1245,6 +1252,7 @@ public class PlayerScreenController {
         subModalCard.addView(smHeader, smhLp);
 
         subModalScroll = new ScrollView(context);
+        UiHelper.makeNonFocusable(subModalScroll);
         subModalScroll.setVerticalScrollBarEnabled(false);
         subModalScroll.setClipChildren(false);
         subModalScroll.setClipToPadding(false);
@@ -1264,6 +1272,7 @@ public class PlayerScreenController {
         subModalHost.addView(subModalCard, smcLp);
         rootFrame.addView(subModalHost, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        syncPlayerFocusLayers();
     }
 
     public View getView() {
@@ -1303,8 +1312,12 @@ public class PlayerScreenController {
         this.selectedSeasonFilter = request.seasonId != null ? request.seasonId : "";
         this.showing = true;
         this.activeModal = MODAL_NONE;
+        this.hudVisible = false;
+        subModalHost.animate().cancel();
         subModalHost.setVisibility(View.GONE);
         rootFrame.setVisibility(View.VISIBLE);
+        UiHelper.setFocusBlocked(rootFrame, false);
+        syncPlayerFocusLayers();
         applyContrastSetting();
         if (listener != null) listener.onAudioFocusRequested(true);
         startEpisodeSession(request, false);
@@ -1315,6 +1328,7 @@ public class PlayerScreenController {
         persistProgressNow();
         restoreWindowBrightness();
         showing = false;
+        activeModal = MODAL_NONE;
         updateBufferingIndicator(false);
         checkFilePolling = false;
         nextCountdownRunning = false;
@@ -1322,8 +1336,11 @@ public class PlayerScreenController {
         handler.removeCallbacksAndMessages(null);
         dubbingEngine.release();
         nativePlayer.stopMedia();
+        hudLayer.animate().cancel();
+        subModalHost.animate().cancel();
         subModalHost.setVisibility(View.GONE);
         rootFrame.setVisibility(View.GONE);
+        syncPlayerFocusLayers();
         if (listener != null) {
             listener.onAudioFocusRequested(false);
             listener.onPlayerClosed(true);
@@ -1396,6 +1413,10 @@ public class PlayerScreenController {
                 closeSubModal();
                 return true;
             }
+            if (isDpadNavOrSelectKey(keyCode) && !hasValidModalFocus()) {
+                focusCurrentSubModalDefault();
+                return true;
+            }
             return false;
         }
 
@@ -1463,6 +1484,10 @@ public class PlayerScreenController {
             return true;
         }
         resetHudAutoHide();
+        if (isDpadNavOrSelectKey(keyCode) && !hasValidHudFocus()) {
+            focusCenterPlayButton();
+            return true;
+        }
         return false;
     }
 
@@ -1509,6 +1534,7 @@ public class PlayerScreenController {
         skipIntroBtn.setVisibility(View.GONE);
         resumeRecoveryBtn.setVisibility(View.GONE);
         nextEpCard.setVisibility(View.GONE);
+        syncPlayerFocusLayers();
         updateEpisodesButtonVisibility();
         updateBufferingIndicator(true);
         applySubtitleBgSetting();
@@ -1834,11 +1860,17 @@ public class PlayerScreenController {
         if (savedResumeGuardSec > 10.0 && !resumePositionVerified) {
             if (posSec >= (savedResumeGuardSec - 15.0)) {
                 resumePositionVerified = true;
+                boolean hadFocus = resumeRecoveryBtn.hasFocus();
                 resumeRecoveryBtn.setVisibility(View.GONE);
+                syncPlayerFocusLayers();
+                if (hadFocus && hudVisible && activeModal == MODAL_NONE) {
+                    focusCenterPlayButton();
+                }
             } else if (durSec > 20.0 && posSec >= 2.0 && (posSec + 15.0) < savedResumeGuardSec) {
                 boolean wasHidden = resumeRecoveryBtn.getVisibility() != View.VISIBLE;
                 resumeRecoveryBtn.setText("↺ Tua tới vị trí cũ (" + formatTime(savedResumeGuardSec) + ")");
                 resumeRecoveryBtn.setVisibility(View.VISIBLE);
+                syncPlayerFocusLayers();
                 if (wasHidden) {
                     if (!resumeRecoveryToastShown) {
                         resumeRecoveryToastShown = true;
@@ -1847,12 +1879,17 @@ public class PlayerScreenController {
                     if (!hudVisible && activeModal == MODAL_NONE
                             && nextEpCard.getVisibility() != View.VISIBLE
                             && skipIntroBtn.getVisibility() != View.VISIBLE) {
-                        resumeRecoveryBtn.requestFocus();
+                        UiHelper.requestTvFocus(resumeRecoveryBtn);
                     }
                 }
             }
         } else if (resumeRecoveryBtn.getVisibility() == View.VISIBLE) {
+            boolean hadFocus = resumeRecoveryBtn.hasFocus();
             resumeRecoveryBtn.setVisibility(View.GONE);
+            syncPlayerFocusLayers();
+            if (hadFocus && hudVisible && activeModal == MODAL_NONE) {
+                focusCenterPlayButton();
+            }
         }
 
         // Save watch progress every 10s
@@ -1867,21 +1904,37 @@ public class PlayerScreenController {
             if (posSec >= 1.0 && posSec < (resolvedData.skipIntroSec - 2.0)) {
                 if (Prefs.isAutoSkipIntro(context) && !autoSkippedIntroThisEp) {
                     autoSkippedIntroThisEp = true;
+                    boolean hadFocus = skipIntroBtn.hasFocus();
                     skipIntroBtn.setVisibility(View.GONE);
+                    syncPlayerFocusLayers();
+                    if (hadFocus && hudVisible && activeModal == MODAL_NONE) {
+                        focusCenterPlayButton();
+                    }
                     nativePlayer.seekTo(resolvedData.skipIntroSec);
                     toast("Đã tự động bỏ qua phần giới thiệu", UiHelper.COLOR_CYAN);
                 } else if (!Prefs.isAutoSkipIntro(context)) {
                     boolean wasHidden = skipIntroBtn.getVisibility() != View.VISIBLE;
                     skipIntroBtn.setVisibility(View.VISIBLE);
+                    syncPlayerFocusLayers();
                     if (wasHidden && !hudVisible && activeModal == MODAL_NONE && nextEpCard.getVisibility() != View.VISIBLE) {
-                        skipIntroBtn.requestFocus();
+                        UiHelper.requestTvFocus(skipIntroBtn);
                     }
                 }
-            } else {
+            } else if (skipIntroBtn.getVisibility() == View.VISIBLE) {
+                boolean hadFocus = skipIntroBtn.hasFocus();
                 skipIntroBtn.setVisibility(View.GONE);
+                syncPlayerFocusLayers();
+                if (hadFocus && hudVisible && activeModal == MODAL_NONE) {
+                    focusCenterPlayButton();
+                }
             }
-        } else {
+        } else if (skipIntroBtn.getVisibility() == View.VISIBLE) {
+            boolean hadFocus = skipIntroBtn.hasFocus();
             skipIntroBtn.setVisibility(View.GONE);
+            syncPlayerFocusLayers();
+            if (hadFocus && hudVisible && activeModal == MODAL_NONE) {
+                focusCenterPlayButton();
+            }
         }
 
         // Seamless Preload + Outro Auto-Next Countdown (100% synced with iOS PlayerModal)
@@ -1984,8 +2037,9 @@ public class PlayerScreenController {
         nextCountdownRemaining = Math.max(1, Prefs.getNextEpisodeDelaySec(context));
         nextEpTitleTv.setText(nextEpisodeTarget.episodesName.isEmpty() ? "Tập tiếp theo" : nextEpisodeTarget.episodesName);
         nextEpCard.setVisibility(View.VISIBLE);
+        syncPlayerFocusLayers();
         if (activeModal == MODAL_NONE && btnNextPlayNow != null) {
-            btnNextPlayNow.requestFocus();
+            UiHelper.requestTvFocus(btnNextPlayNow);
         }
         handler.removeCallbacks(nextCountdownRunnable);
         handler.post(nextCountdownRunnable);
@@ -1995,7 +2049,12 @@ public class PlayerScreenController {
         nextCountdownRunning = false;
         if (dismissedByUser) nextCountdownDismissed = true;
         handler.removeCallbacks(nextCountdownRunnable);
+        boolean hadFocus = nextEpCard.hasFocus();
         nextEpCard.setVisibility(View.GONE);
+        syncPlayerFocusLayers();
+        if (hadFocus && hudVisible && activeModal == MODAL_NONE) {
+            focusCenterPlayButton();
+        }
     }
 
     private void playNextEpisode(boolean fromAutoNext) {
@@ -2099,21 +2158,82 @@ public class PlayerScreenController {
     // ---- HUD Helpers ----
 
     private void setHudVisible(boolean visible) {
+        boolean wasVisible = this.hudVisible;
         this.hudVisible = visible;
         handler.removeCallbacks(hudAutoHideRunnable);
+        hudLayer.animate().cancel();
         if (visible) {
             hudLayer.setVisibility(View.VISIBLE);
-            hudLayer.animate().alpha(1f).setDuration(180).start();
+            syncPlayerFocusLayers();
+            hudLayer.animate().alpha(1f).setDuration(180).setListener(null).start();
+            if (activeModal == MODAL_NONE && (!wasVisible || !hasValidHudFocus())) {
+                focusCenterPlayButton();
+            }
             resetHudAutoHide();
         } else {
+            syncPlayerFocusLayers();
             hudLayer.animate().alpha(0f).setDuration(200).withEndAction(new Runnable() {
                 @Override
                 public void run() {
-                    if (!hudVisible) hudLayer.setVisibility(View.GONE);
+                    if (!hudVisible) {
+                        hudLayer.setVisibility(View.GONE);
+                        syncPlayerFocusLayers();
+                    }
                 }
             }).start();
         }
         syncBufferingIndicatorVisibility();
+    }
+
+    private void syncPlayerFocusLayers() {
+        boolean active = showing && rootFrame.getVisibility() == View.VISIBLE;
+        boolean modalOpen = active && activeModal != MODAL_NONE && subModalHost.getVisibility() == View.VISIBLE;
+        UiHelper.setFocusBlocked(hudLayer, !active || modalOpen || !hudVisible);
+        UiHelper.setFocusBlocked(nextEpCard, !active || modalOpen || nextEpCard.getVisibility() != View.VISIBLE);
+        skipIntroBtn.setFocusable(active && !modalOpen && skipIntroBtn.getVisibility() == View.VISIBLE);
+        resumeRecoveryBtn.setFocusable(active && !modalOpen && resumeRecoveryBtn.getVisibility() == View.VISIBLE);
+        UiHelper.setFocusBlocked(subModalHost, !active || !modalOpen);
+    }
+
+    private boolean hasValidHudFocus() {
+        View f = rootFrame.findFocus();
+        if (f == null || f == rootFrame || f == subModalHost || f == subModalScroll) return false;
+        if (!f.isAttachedToWindow() || !f.isShown() || !f.isFocusable()) return false;
+        return UiHelper.isDescendantOf(f, hudLayer)
+                || f == skipIntroBtn
+                || f == resumeRecoveryBtn
+                || UiHelper.isDescendantOf(f, nextEpCard);
+    }
+
+    private boolean hasValidModalFocus() {
+        return UiHelper.isValidInteractiveFocus(subModalHost.findFocus(), subModalHost);
+    }
+
+    public boolean ensureValidFocus() {
+        if (!showing) return false;
+        if (activeModal != MODAL_NONE) {
+            if (!hasValidModalFocus()) {
+                focusCurrentSubModalDefault();
+            }
+            return true;
+        }
+        if (hudVisible) {
+            if (!hasValidHudFocus()) {
+                focusCenterPlayButton();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isDpadNavOrSelectKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                || keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER;
     }
 
     private void updateBufferingIndicator(boolean loading) {
@@ -2167,16 +2287,20 @@ public class PlayerScreenController {
     }
 
     private void focusCenterPlayButton() {
-        View v = rootFrame.findViewWithTag("play_center");
-        if (v != null) {
-            v.post(new Runnable() {
-                @Override
-                public void run() {
-                    View t = rootFrame.findViewWithTag("play_center");
-                    if (t != null) t.requestFocus();
-                }
-            });
+        if (centerPlayWrap == null || !showing || !hudVisible || activeModal != MODAL_NONE) return;
+        if (hudLayer.getVisibility() != View.VISIBLE) {
+            hudLayer.setVisibility(View.VISIBLE);
         }
+        syncPlayerFocusLayers();
+        UiHelper.requestTvFocus(centerPlayWrap);
+        centerPlayWrap.post(new Runnable() {
+            @Override
+            public void run() {
+                if (showing && hudVisible && activeModal == MODAL_NONE && !hasValidHudFocus()) {
+                    UiHelper.requestTvFocus(centerPlayWrap);
+                }
+            }
+        });
     }
 
     private void updateHudMetaText() {
@@ -2475,9 +2599,11 @@ public class PlayerScreenController {
         subModalCard.setLayoutParams(cardLp);
         subModalScroll.setLayoutParams(scrollLp);
 
+        subModalHost.animate().cancel();
         subModalHost.setAlpha(0f);
         subModalHost.setVisibility(View.VISIBLE);
-        subModalHost.animate().alpha(1f).setDuration(180).start();
+        syncPlayerFocusLayers();
+        subModalHost.animate().alpha(1f).setDuration(180).setListener(null).start();
         subModalScroll.scrollTo(0, 0);
         renderSubModalContent();
 
@@ -2487,46 +2613,60 @@ public class PlayerScreenController {
         subModalCloseBtn.post(new Runnable() {
             @Override
             public void run() {
-                View focusTarget = null;
-                if (activeModal == MODAL_SERVERS && !activeServerId.isEmpty()) {
-                    focusTarget = subModalBody.findViewWithTag("srv_card_" + activeServerId);
-                } else if (activeModal == MODAL_EPISODES) {
-                    focusTarget = subModalBody.findViewWithTag("ep_current_row");
-                }
-                if (focusTarget == null) {
-                    focusTarget = findFirstFocusableChild(subModalBody);
-                }
-                if (focusTarget != null) {
-                    if (focusTarget.getId() == View.NO_ID) focusTarget.setId(View.generateViewId());
-                    subModalCloseBtn.setNextFocusDownId(focusTarget.getId());
-                    focusTarget.requestFocus();
-                    if (activeModal == MODAL_EPISODES) {
-                        final View scrollTarget = focusTarget;
-                        subModalScroll.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                int top = scrollTarget.getTop();
-                                subModalScroll.smoothScrollTo(0, Math.max(0, top - UiHelper.dp(context, 48)));
-                            }
-                        });
-                    }
-                } else {
-                    subModalCloseBtn.requestFocus();
-                }
+                focusCurrentSubModalDefault();
             }
         });
     }
 
+    private void focusCurrentSubModalDefault() {
+        if (activeModal == MODAL_NONE || subModalHost.getVisibility() != View.VISIBLE) return;
+        View focusTarget = null;
+        if (activeModal == MODAL_SERVERS && !activeServerId.isEmpty()) {
+            focusTarget = subModalBody.findViewWithTag("srv_card_" + activeServerId);
+        } else if (activeModal == MODAL_EPISODES) {
+            focusTarget = subModalBody.findViewWithTag("ep_current_row");
+        }
+        if (focusTarget == null) {
+            focusTarget = findFirstFocusableChild(subModalBody);
+        }
+        if (focusTarget != null) {
+            if (focusTarget.getId() == View.NO_ID) focusTarget.setId(View.generateViewId());
+            subModalCloseBtn.setNextFocusDownId(focusTarget.getId());
+            UiHelper.requestTvFocus(focusTarget);
+            if (activeModal == MODAL_EPISODES) {
+                final View scrollTarget = focusTarget;
+                subModalScroll.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        int top = scrollTarget.getTop();
+                        subModalScroll.smoothScrollTo(0, Math.max(0, top - UiHelper.dp(context, 48)));
+                    }
+                });
+            }
+        } else {
+            UiHelper.requestTvFocus(subModalCloseBtn);
+        }
+    }
+
     private void closeSubModal() {
+        subModalHost.animate().cancel();
         activeModal = MODAL_NONE;
+        syncPlayerFocusLayers();
         subModalHost.animate().alpha(0f).setDuration(150).withEndAction(new Runnable() {
             @Override
             public void run() {
-                subModalHost.setVisibility(View.GONE);
-                syncBufferingIndicatorVisibility();
+                if (activeModal == MODAL_NONE) {
+                    subModalHost.setVisibility(View.GONE);
+                    syncBufferingIndicatorVisibility();
+                    syncPlayerFocusLayers();
+                }
             }
         }).start();
-        focusCenterPlayButton();
+        if (!hudVisible) {
+            setHudVisible(true);
+        } else {
+            focusCenterPlayButton();
+        }
         resetHudAutoHide();
     }
 
@@ -2573,8 +2713,10 @@ public class PlayerScreenController {
                                 @Override
                                 public void run() {
                                     View cur = subModalBody.findViewWithTag("ep_current_row");
-                                    if (cur != null) {
-                                        cur.requestFocus();
+                                    if (cur == null) cur = findFirstFocusableChild(subModalBody);
+                                    if (cur == null) cur = subModalCloseBtn;
+                                    UiHelper.requestTvFocus(cur);
+                                    if (cur != subModalCloseBtn) {
                                         subModalScroll.smoothScrollTo(0, Math.max(0, cur.getTop() - UiHelper.dp(context, 48)));
                                     }
                                 }
@@ -2596,6 +2738,7 @@ public class PlayerScreenController {
 
         if (!apiSeasons.isEmpty() || !fallbackSeasons.isEmpty()) {
             HorizontalScrollView hsv = new HorizontalScrollView(context);
+            UiHelper.makeNonFocusable(hsv);
             hsv.setHorizontalScrollBarEnabled(false);
             LinearLayout sRow = new LinearLayout(context);
             sRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -2604,6 +2747,7 @@ public class PlayerScreenController {
                 for (final Models.ApiSeasonItem as : apiSeasons) {
                     boolean active = as.seasonsId.equals(selectedSeasonFilter);
                     TextView chip = makeTextPill(context, as.seasonsName, active);
+                    chip.setTag("ep_season_" + as.seasonsId);
                     chip.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
@@ -2611,6 +2755,15 @@ public class PlayerScreenController {
                             cachedRichEpisodes = null;
                             renderSubModalContent();
                             loadRichEpisodesForModal();
+                            subModalBody.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    View t = subModalBody.findViewWithTag("ep_season_" + selectedSeasonFilter);
+                                    if (t == null) t = findFirstFocusableChild(subModalBody);
+                                    if (t == null) t = subModalCloseBtn;
+                                    UiHelper.requestTvFocus(t);
+                                }
+                            });
                         }
                     });
                     sRow.addView(chip, rightMarginLp(10));
@@ -2620,11 +2773,21 @@ public class PlayerScreenController {
                     final String idStr = String.valueOf(fs.seasonsId);
                     boolean active = idStr.equals(selectedSeasonFilter) || (selectedSeasonFilter.isEmpty() && fs == fallbackSeasons.get(0));
                     TextView chip = makeTextPill(context, fs.seasonsName, active);
+                    chip.setTag("ep_season_" + idStr);
                     chip.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
                             selectedSeasonFilter = idStr;
                             renderSubModalContent();
+                            subModalBody.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    View t = subModalBody.findViewWithTag("ep_season_" + selectedSeasonFilter);
+                                    if (t == null) t = findFirstFocusableChild(subModalBody);
+                                    if (t == null) t = subModalCloseBtn;
+                                    UiHelper.requestTvFocus(t);
+                                }
+                            });
                         }
                     });
                     sRow.addView(chip, rightMarginLp(10));
@@ -2856,8 +3019,12 @@ public class PlayerScreenController {
         if (focusTag != null) {
             View target = subModalBody.findViewWithTag(focusTag);
             if (target != null) {
-                target.requestFocus();
+                UiHelper.requestTvFocus(target);
+                return;
             }
+        }
+        if (!hasValidModalFocus()) {
+            focusCurrentSubModalDefault();
         }
     }
 
@@ -3891,19 +4058,35 @@ public class PlayerScreenController {
     private void renderInfoAndMemberModal() {
         LinearLayout tabs = new LinearLayout(context);
         TextView tInfo = makeTextPill(context, "Thông tin phim", activeModal == MODAL_INFO);
+        tInfo.setTag("modal_tab_info");
         tInfo.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 activeModal = MODAL_INFO;
                 renderSubModalContent();
+                subModalBody.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        View t = subModalBody.findViewWithTag("modal_tab_info");
+                        if (t != null) UiHelper.requestTvFocus(t);
+                    }
+                });
             }
         });
         TextView tMem = makeTextPill(context, "Hồ sơ thành viên", activeModal == MODAL_MEMBER);
+        tMem.setTag("modal_tab_member");
         tMem.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 activeModal = MODAL_MEMBER;
                 renderSubModalContent();
+                subModalBody.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        View t = subModalBody.findViewWithTag("modal_tab_member");
+                        if (t != null) UiHelper.requestTvFocus(t);
+                    }
+                });
             }
         });
         tabs.addView(tInfo, rightMarginLp(10));
@@ -4389,6 +4572,7 @@ public class PlayerScreenController {
             final View view, final Context ctx, final float scaleOnFocus, final int baseShadowDp) {
         if (view == null || ctx == null) return;
         view.setFocusable(true);
+        view.setFocusableInTouchMode(false);
         view.setClickable(true);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             view.setDefaultFocusHighlightEnabled(false);

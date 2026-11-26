@@ -80,6 +80,7 @@ public class HomeScreenView extends FrameLayout {
 
     private final ImageView ambientBackdropIv;
     private final RecyclerView verticalRv;
+    private final LinearLayout topUtilBar;
     private final FrameLayout btnTopSearch;
     private final FrameLayout btnTopLibrary;
     private final FrameLayout btnTopSettings;
@@ -209,6 +210,7 @@ public class HomeScreenView extends FrameLayout {
 
         // 2. Main Vertical RecyclerView (Hero + Carousels)
         verticalRv = new RecyclerView(context);
+        UiHelper.makeNonFocusable(verticalRv);
         verticalRv.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
         verticalRv.setItemViewCacheSize(4);
         verticalRv.setClipToPadding(false);
@@ -220,7 +222,7 @@ public class HomeScreenView extends FrameLayout {
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
         // 3. Top-Right Utility Bar (Search, Library, Settings, User Avatar, Clock, Wi-Fi)
-        LinearLayout topUtilBar = new LinearLayout(context);
+        topUtilBar = new LinearLayout(context);
         topUtilBar.setOrientation(LinearLayout.HORIZONTAL);
         topUtilBar.setGravity(Gravity.CENTER_VERTICAL);
         topUtilBar.setClipChildren(false);
@@ -299,7 +301,7 @@ public class HomeScreenView extends FrameLayout {
                     return true;
                 }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    btnTopLibrary.requestFocus();
+                    UiHelper.requestTvFocus(btnTopLibrary);
                     return true;
                 }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
@@ -318,11 +320,11 @@ public class HomeScreenView extends FrameLayout {
             public boolean onKey(View v, int keyCode, KeyEvent event) {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    btnTopSearch.requestFocus();
+                    UiHelper.requestTvFocus(btnTopSearch);
                     return true;
                 }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    btnTopSettings.requestFocus();
+                    UiHelper.requestTvFocus(btnTopSettings);
                     return true;
                 }
                 return topUtilDownListener.onKey(v, keyCode, event);
@@ -333,11 +335,11 @@ public class HomeScreenView extends FrameLayout {
             public boolean onKey(View v, int keyCode, KeyEvent event) {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    btnTopLibrary.requestFocus();
+                    UiHelper.requestTvFocus(btnTopLibrary);
                     return true;
                 }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    btnTopAccount.requestFocus();
+                    UiHelper.requestTvFocus(btnTopAccount);
                     return true;
                 }
                 return topUtilDownListener.onKey(v, keyCode, event);
@@ -348,7 +350,7 @@ public class HomeScreenView extends FrameLayout {
             public boolean onKey(View v, int keyCode, KeyEvent event) {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    btnTopSettings.requestFocus();
+                    UiHelper.requestTvFocus(btnTopSettings);
                     return true;
                 }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
@@ -383,6 +385,7 @@ public class HomeScreenView extends FrameLayout {
         loadingBox = new FrameLayout(context);
         loadingBox.setBackgroundColor(UiHelper.COLOR_BG_BASE);
         loadingBox.setClickable(true);
+        UiHelper.makeNonFocusable(loadingBox);
         loadingBox.setElevation(UiHelper.dp(context, 12));
 
         skeletonPulseLayer = buildHomeSkeletonLayout(context);
@@ -448,7 +451,13 @@ public class HomeScreenView extends FrameLayout {
                 if (seq != requestSeq) return;
                 hideLoadingSkeleton();
                 errorBox.setVisibility(GONE);
+                View curFocus = getRootView() != null ? getRootView().findFocus() : null;
+                boolean shouldRestoreFocus = (!silent && (curFocus == null || UiHelper.isDescendantOf(curFocus, HomeScreenView.this)))
+                        || (silent && hasFocus());
                 rebuildRows(data);
+                if (shouldRestoreFocus) {
+                    requestInitialFocus();
+                }
             }
 
             @Override
@@ -458,13 +467,15 @@ public class HomeScreenView extends FrameLayout {
                 if (!silent || rows.isEmpty()) {
                     errorBox.setVisibility(VISIBLE);
                     errorTv.setText(message != null ? message : "Không thể tải danh sách phim");
-                    retryBtn.requestFocus();
+                    UiHelper.postTvFocus(retryBtn);
                 }
             }
         });
     }
 
     private void showLoadingSkeleton() {
+        UiHelper.setFocusBlocked(verticalRv, true);
+        UiHelper.setFocusBlocked(topUtilBar, true);
         if (loadingBox != null) {
             loadingBox.setVisibility(VISIBLE);
             startSkeletonPulse();
@@ -476,6 +487,8 @@ public class HomeScreenView extends FrameLayout {
         if (loadingBox != null) {
             loadingBox.setVisibility(GONE);
         }
+        UiHelper.setFocusBlocked(verticalRv, false);
+        UiHelper.setFocusBlocked(topUtilBar, false);
     }
 
     private void startSkeletonPulse() {
@@ -649,22 +662,22 @@ public class HomeScreenView extends FrameLayout {
         if (hasHeroRow()) {
             if (activeHeroHolder != null && activeHeroHolder.btnPlay != null
                     && activeHeroHolder.itemView.getParent() != null) {
-                activeHeroHolder.btnPlay.requestFocus();
+                UiHelper.requestTvFocus(activeHeroHolder.btnPlay);
             } else {
                 verticalRv.post(new Runnable() {
                     @Override
                     public void run() {
                         RecyclerView.ViewHolder vh = verticalRv.findViewHolderForAdapterPosition(0);
                         if (vh instanceof HeroHolder) {
-                            ((HeroHolder) vh).btnPlay.requestFocus();
+                            UiHelper.requestTvFocus(((HeroHolder) vh).btnPlay);
                         } else if (activeHeroHolder != null && activeHeroHolder.btnPlay != null) {
-                            activeHeroHolder.btnPlay.requestFocus();
+                            UiHelper.requestTvFocus(activeHeroHolder.btnPlay);
                         }
                     }
                 });
             }
         } else if (btnTopSearch != null) {
-            btnTopSearch.requestFocus();
+            UiHelper.requestTvFocus(btnTopSearch);
         }
     }
 
@@ -676,32 +689,38 @@ public class HomeScreenView extends FrameLayout {
                 CarouselHolder ch = (CarouselHolder) vh;
                 View firstCard = ch.rv.getChildAt(0);
                 if (firstCard != null) {
-                    firstCard.requestFocus();
+                    UiHelper.requestTvFocus(firstCard);
                     return;
                 }
             } else if (vh instanceof GenreStripHolder) {
                 GenreStripHolder gh = (GenreStripHolder) vh;
                 if (gh.row.getChildCount() > 0) {
-                    gh.row.getChildAt(0).requestFocus();
+                    UiHelper.requestTvFocus(gh.row.getChildAt(0));
                     return;
                 }
             } else if (vh instanceof TopicsHolder) {
                 TopicsHolder th = (TopicsHolder) vh;
                 View firstTopic = th.rv.getChildAt(0);
                 if (firstTopic != null) {
-                    firstTopic.requestFocus();
+                    UiHelper.requestTvFocus(firstTopic);
                     return;
                 }
             }
-            vh.itemView.requestFocus();
+            UiHelper.requestTvFocus(vh.itemView);
         } else {
             verticalRv.scrollToPosition(1);
             verticalRv.post(new Runnable() {
                 @Override
                 public void run() {
                     RecyclerView.ViewHolder loaded = verticalRv.findViewHolderForAdapterPosition(1);
-                    if (loaded != null) {
-                        loaded.itemView.requestFocus();
+                    if (loaded instanceof CarouselHolder && ((CarouselHolder) loaded).rv.getChildCount() > 0) {
+                        UiHelper.requestTvFocus(((CarouselHolder) loaded).rv.getChildAt(0));
+                    } else if (loaded instanceof GenreStripHolder && ((GenreStripHolder) loaded).row.getChildCount() > 0) {
+                        UiHelper.requestTvFocus(((GenreStripHolder) loaded).row.getChildAt(0));
+                    } else if (loaded instanceof TopicsHolder && ((TopicsHolder) loaded).rv.getChildCount() > 0) {
+                        UiHelper.requestTvFocus(((TopicsHolder) loaded).rv.getChildAt(0));
+                    } else if (loaded != null) {
+                        UiHelper.requestTvFocus(loaded.itemView);
                     }
                 }
             });
@@ -712,20 +731,42 @@ public class HomeScreenView extends FrameLayout {
         scrollHomeToTop();
         if (activeHeroHolder != null && activeHeroHolder.btnPlay != null
                 && activeHeroHolder.itemView.getParent() != null) {
-            activeHeroHolder.btnPlay.requestFocus();
+            UiHelper.requestTvFocus(activeHeroHolder.btnPlay);
         } else {
             verticalRv.post(new Runnable() {
                 @Override
                 public void run() {
                     RecyclerView.ViewHolder vh = verticalRv.findViewHolderForAdapterPosition(0);
                     if (vh instanceof HeroHolder) {
-                        ((HeroHolder) vh).btnPlay.requestFocus();
+                        UiHelper.requestTvFocus(((HeroHolder) vh).btnPlay);
+                    } else if (vh instanceof CarouselHolder && ((CarouselHolder) vh).rv.getChildCount() > 0) {
+                        UiHelper.requestTvFocus(((CarouselHolder) vh).rv.getChildAt(0));
+                    } else if (vh instanceof GenreStripHolder && ((GenreStripHolder) vh).row.getChildCount() > 0) {
+                        UiHelper.requestTvFocus(((GenreStripHolder) vh).row.getChildAt(0));
+                    } else if (vh instanceof TopicsHolder && ((TopicsHolder) vh).rv.getChildCount() > 0) {
+                        UiHelper.requestTvFocus(((TopicsHolder) vh).rv.getChildAt(0));
                     } else {
-                        verticalRv.requestFocus();
+                        UiHelper.requestTvFocus(btnTopSearch);
                     }
                 }
             });
         }
+    }
+
+    public boolean hasValidFocus() {
+        return UiHelper.isValidInteractiveFocus(findFocus(), this);
+    }
+
+    public boolean ensureValidFocus() {
+        if (getVisibility() != VISIBLE) return false;
+        if (errorBox != null && errorBox.getVisibility() == VISIBLE) {
+            return UiHelper.requestTvFocus(retryBtn);
+        }
+        if (loadingBox != null && loadingBox.getVisibility() == VISIBLE) {
+            return false;
+        }
+        focusFirstMainContent();
+        return true;
     }
 
     private void rebuildRows(Models.HomeHubResponse data) {
@@ -1137,7 +1178,7 @@ public class HomeScreenView extends FrameLayout {
                 dotsRow.addView(dot, dlp);
             }
             if (focusPlayIfNeeded && !itemView.hasFocus()) {
-                btnPlay.requestFocus();
+                UiHelper.requestTvFocus(btnPlay);
             }
         }
 
@@ -1200,7 +1241,7 @@ public class HomeScreenView extends FrameLayout {
                         return true;
                     } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP && upTarget != null) {
                         scrollHomeToTop();
-                        upTarget.requestFocus();
+                        UiHelper.requestTvFocus(upTarget);
                         return true;
                     } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && rows.size() > 1) {
                         focusFirstContentRowBelowHero();
@@ -1237,6 +1278,7 @@ public class HomeScreenView extends FrameLayout {
         GenreStripHolder(Context ctx) {
             super(new HorizontalScrollView(ctx));
             HorizontalScrollView hsv = (HorizontalScrollView) itemView;
+            UiHelper.makeNonFocusable(hsv);
             hsv.setHorizontalScrollBarEnabled(false);
             hsv.setClipChildren(false);
             hsv.setClipToPadding(false);
@@ -1344,6 +1386,7 @@ public class HomeScreenView extends FrameLayout {
             root.addView(hdr);
 
             rv = new RecyclerView(ctx);
+            UiHelper.makeNonFocusable(rv);
             rv.setLayoutManager(new LinearLayoutManager(ctx, LinearLayoutManager.HORIZONTAL, false));
             rv.setClipToPadding(false);
             rv.setClipChildren(false);
@@ -1472,18 +1515,22 @@ public class HomeScreenView extends FrameLayout {
 
             rv = new RecyclerView(ctx);
             rv.setId(View.generateViewId());
+            UiHelper.makeNonFocusable(rv);
             rv.setLayoutManager(new LinearLayoutManager(ctx, LinearLayoutManager.HORIZONTAL, false));
             rv.setClipToPadding(false);
             rv.setClipChildren(false);
             rv.setPadding(UiHelper.dp(ctx, 14), UiHelper.dp(ctx, 2), UiHelper.dp(ctx, 20), UiHelper.dp(ctx, 10));
             rv.setAdapter(adapter);
-            seeAllTv.setNextFocusDownId(rv.getId());
             seeAllTv.setOnKeyListener(new OnKeyListener() {
                 @Override
                 public boolean onKey(View v, int keyCode, KeyEvent event) {
                     if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                     if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && listener != null) {
                         listener.onMoveFocusToRail();
+                        return true;
+                    }
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && rv.getChildCount() > 0) {
+                        UiHelper.requestTvFocus(rv.getChildAt(0));
                         return true;
                     }
                     int rowPos = CarouselHolder.this.getBindingAdapterPosition();

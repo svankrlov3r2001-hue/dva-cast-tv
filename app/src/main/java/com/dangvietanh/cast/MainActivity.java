@@ -233,6 +233,24 @@ public class MainActivity extends Activity {
         rootLayout.addView(splashOverlay, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        Runnable onOverlayVisibilityChanged = new Runnable() {
+            @Override
+            public void run() {
+                syncFocusLayers();
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!hasValidTopFocus()) {
+                            ensureActiveScreenFocus();
+                        }
+                    }
+                });
+            }
+        };
+        accountModal.setOnVisibilityChangedListener(onOverlayVisibilityChanged);
+        overlayMenu.setOnVisibilityChangedListener(onOverlayVisibilityChanged);
+        updateManager.setOnVisibilityChangedListener(onOverlayVisibilityChanged);
+
         applyImmersiveFullscreen();
         initMediaOptimization();
         registerNetworkMonitor();
@@ -241,6 +259,7 @@ public class MainActivity extends Activity {
         handler.postDelayed(splashMinTimerRunnable, SPLASH_MIN_DURATION_MS);
 
         startBootFlow();
+        syncFocusLayers();
     }
 
     private void buildAppScreens() {
@@ -362,12 +381,14 @@ public class MainActivity extends Activity {
             public void onCloseDetail() {
                 detailScreen.clearHistory();
                 detailScreen.setVisibility(View.GONE);
+                syncFocusLayers();
                 focusCurrentMainTab();
             }
 
             @Override
             public void onLaunchPlayer(Models.PlayerLaunchRequest request) {
                 playerScreen.open(request);
+                syncFocusLayers();
             }
 
             @Override
@@ -426,6 +447,7 @@ public class MainActivity extends Activity {
         playerScreen = new PlayerScreenController(this, apiClient, new PlayerScreenController.Listener() {
             @Override
             public void onPlayerClosed(boolean shouldRefreshHome) {
+                syncFocusLayers();
                 if (homeScreen != null && shouldRefreshHome) {
                     homeScreen.silentRefresh();
                 }
@@ -433,7 +455,7 @@ public class MainActivity extends Activity {
                     libraryScreen.refresh();
                 }
                 if (detailScreen != null && detailScreen.getVisibility() == View.VISIBLE) {
-                    detailScreen.requestFocus();
+                    UiHelper.requestTvFocus(detailScreen);
                 } else {
                     focusCurrentMainTab();
                 }
@@ -537,7 +559,7 @@ public class MainActivity extends Activity {
         }
         if (splashRetryBtn != null) {
             splashRetryBtn.setVisibility(View.VISIBLE);
-            splashRetryBtn.requestFocus();
+            UiHelper.postTvFocus(splashRetryBtn);
         }
     }
 
@@ -546,6 +568,7 @@ public class MainActivity extends Activity {
         detailScreen.setVisibility(View.GONE);
         mainShell.setVisibility(View.GONE);
         loginScreen.setVisibility(View.VISIBLE);
+        syncFocusLayers();
         loginScreen.start();
     }
 
@@ -587,15 +610,20 @@ public class MainActivity extends Activity {
 
         if ("search".equals(tabId)) {
             searchScreen.setVisibility(View.VISIBLE);
+            syncFocusLayers();
             searchScreen.onOpened();
         } else if ("explore".equals(tabId)) {
             exploreScreen.setVisibility(View.VISIBLE);
+            syncFocusLayers();
             exploreScreen.onOpened();
         } else if ("library".equals(tabId)) {
             libraryScreen.setVisibility(View.VISIBLE);
+            syncFocusLayers();
             libraryScreen.refresh();
+            libraryScreen.requestInitialFocus();
         } else {
             homeScreen.setVisibility(View.VISIBLE);
+            syncFocusLayers();
             homeScreen.loadHome(tabId, "", false);
             homeScreen.requestInitialFocus();
         }
@@ -615,13 +643,13 @@ public class MainActivity extends Activity {
 
     private void focusCurrentMainTab() {
         if (detailScreen != null && detailScreen.getVisibility() == View.VISIBLE) {
-            detailScreen.requestFocus();
+            UiHelper.requestTvFocus(detailScreen);
         } else if (searchScreen.getVisibility() == View.VISIBLE) {
-            searchScreen.requestFocus();
+            UiHelper.requestTvFocus(searchScreen);
         } else if (exploreScreen.getVisibility() == View.VISIBLE) {
-            exploreScreen.requestFocus();
+            UiHelper.requestTvFocus(exploreScreen);
         } else if (libraryScreen.getVisibility() == View.VISIBLE) {
-            libraryScreen.requestFocus();
+            UiHelper.requestTvFocus(libraryScreen);
         } else if (homeScreen.getVisibility() == View.VISIBLE) {
             homeScreen.requestInitialFocus();
         }
@@ -631,6 +659,7 @@ public class MainActivity extends Activity {
         if (item == null || item.videosId <= 0) return;
         homeScreen.stopAutoSlide();
         detailScreen.setVisibility(View.VISIBLE);
+        syncFocusLayers();
         detailScreen.openMovie(item.videosId, false);
     }
 
@@ -644,6 +673,7 @@ public class MainActivity extends Activity {
         req.thumbnailUrl = item.getPortraitUrl();
         req.initialResumeSec = item.resumeSeconds > 5 ? item.resumeSeconds : -1;
         playerScreen.open(req);
+        syncFocusLayers();
     }
 
     private void clearAppCaches() {
@@ -680,7 +710,7 @@ public class MainActivity extends Activity {
         splashOverlay = new FrameLayout(this);
         splashOverlay.setBackground(UiHelper.createCastBackgroundDrawable());
         splashOverlay.setClickable(true);
-        splashOverlay.setFocusable(true);
+        UiHelper.makeNonFocusable(splashOverlay);
 
         splashContent = new LinearLayout(this);
         splashContent.setOrientation(LinearLayout.VERTICAL);
@@ -787,6 +817,7 @@ public class MainActivity extends Activity {
                     public void run() {
                         splashSpinner.setSpinning(false);
                         splashOverlay.setVisibility(View.GONE);
+                        syncFocusLayers();
                         if (loginScreen.getVisibility() == View.VISIBLE) {
                             loginScreen.requestInitialFocus();
                         } else if (mainShell.getVisibility() == View.VISIBLE) {
@@ -955,7 +986,156 @@ public class MainActivity extends Activity {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             applyImmersiveFullscreen();
+            if (splashDismissed) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!hasValidTopFocus()) {
+                            ensureActiveScreenFocus();
+                        }
+                    }
+                });
+            }
         }
+    }
+
+    private void syncFocusLayers() {
+        boolean splashActive = !splashDismissed && splashOverlay != null && splashOverlay.getVisibility() == View.VISIBLE;
+        boolean updateActive = updateManager != null && updateManager.isShowing();
+        boolean menuActive = overlayMenu != null && overlayMenu.isShowing();
+        boolean accountActive = accountModal != null && accountModal.isShowing();
+        boolean playerActive = playerScreen != null && playerScreen.isShowing();
+        boolean detailActive = detailScreen != null && detailScreen.getVisibility() == View.VISIBLE;
+
+        boolean anyTopOverlay = splashActive || updateActive || menuActive || accountActive;
+
+        UiHelper.setFocusBlocked(appContainer, anyTopOverlay);
+        if (accountModal != null && accountModal.getView() instanceof ViewGroup) {
+            UiHelper.setFocusBlocked((ViewGroup) accountModal.getView(),
+                    splashActive || updateActive || menuActive || !accountActive);
+        }
+        if (overlayMenu != null && overlayMenu.getView() instanceof ViewGroup) {
+            UiHelper.setFocusBlocked((ViewGroup) overlayMenu.getView(),
+                    splashActive || updateActive || !menuActive);
+        }
+        if (updateManager != null && updateManager.getView() instanceof ViewGroup) {
+            UiHelper.setFocusBlocked((ViewGroup) updateManager.getView(),
+                    splashActive || !updateActive);
+        }
+        if (loginScreen != null) {
+            UiHelper.setFocusBlocked(loginScreen, anyTopOverlay || loginScreen.getVisibility() != View.VISIBLE);
+        }
+        if (mainShell != null) {
+            UiHelper.setFocusBlocked(mainShell, anyTopOverlay || playerActive || mainShell.getVisibility() != View.VISIBLE);
+        }
+        if (contentHost != null) {
+            UiHelper.setFocusBlocked(contentHost,
+                    anyTopOverlay || playerActive || detailActive || mainShell.getVisibility() != View.VISIBLE);
+        }
+        if (detailScreen != null) {
+            UiHelper.setFocusBlocked(detailScreen, anyTopOverlay || playerActive || !detailActive);
+        }
+        if (navRail != null) {
+            UiHelper.setFocusBlocked(navRail, anyTopOverlay || playerActive || mainShell.getVisibility() != View.VISIBLE);
+        }
+        if (playerScreen != null && playerScreen.getView() instanceof ViewGroup) {
+            UiHelper.setFocusBlocked((ViewGroup) playerScreen.getView(), anyTopOverlay || !playerActive);
+        }
+    }
+
+    private boolean hasValidTopFocus() {
+        View cur = getCurrentFocus();
+        if (!splashDismissed && splashOverlay != null && splashOverlay.getVisibility() == View.VISIBLE) {
+            return UiHelper.isValidInteractiveFocus(cur, splashOverlay);
+        }
+        if (updateManager != null && updateManager.isShowing()) {
+            return updateManager.hasValidFocus();
+        }
+        if (overlayMenu != null && overlayMenu.isShowing()) {
+            return overlayMenu.hasValidFocus();
+        }
+        if (accountModal != null && accountModal.isShowing()) {
+            return accountModal.hasValidFocus();
+        }
+        if (playerScreen != null && playerScreen.isShowing()) {
+            return UiHelper.isValidInteractiveFocus(cur, playerScreen.getView());
+        }
+        if (loginScreen != null && loginScreen.getVisibility() == View.VISIBLE) {
+            return loginScreen.hasValidFocus();
+        }
+        if (mainShell != null && mainShell.getVisibility() == View.VISIBLE) {
+            if (navRail != null && UiHelper.isValidInteractiveFocus(cur, navRail)) {
+                return true;
+            }
+            if (detailScreen != null && detailScreen.getVisibility() == View.VISIBLE) {
+                return detailScreen.hasValidFocus();
+            }
+            if (searchScreen != null && searchScreen.getVisibility() == View.VISIBLE) {
+                return searchScreen.hasValidFocus();
+            }
+            if (exploreScreen != null && exploreScreen.getVisibility() == View.VISIBLE) {
+                return exploreScreen.hasValidFocus();
+            }
+            if (libraryScreen != null && libraryScreen.getVisibility() == View.VISIBLE) {
+                return libraryScreen.hasValidFocus();
+            }
+            if (homeScreen != null && homeScreen.getVisibility() == View.VISIBLE) {
+                return homeScreen.hasValidFocus();
+            }
+        }
+        return false;
+    }
+
+    private boolean ensureActiveScreenFocus() {
+        if (!splashDismissed && splashOverlay != null && splashOverlay.getVisibility() == View.VISIBLE) {
+            if (splashRetryBtn != null && splashRetryBtn.getVisibility() == View.VISIBLE) {
+                return UiHelper.requestTvFocus(splashRetryBtn);
+            }
+            return false;
+        }
+        if (updateManager != null && updateManager.isShowing()) {
+            return updateManager.ensureValidFocus();
+        }
+        if (overlayMenu != null && overlayMenu.isShowing()) {
+            return overlayMenu.ensureValidFocus();
+        }
+        if (accountModal != null && accountModal.isShowing()) {
+            return accountModal.ensureValidFocus();
+        }
+        if (playerScreen != null && playerScreen.isShowing()) {
+            return playerScreen.ensureValidFocus();
+        }
+        if (loginScreen != null && loginScreen.getVisibility() == View.VISIBLE) {
+            return loginScreen.ensureValidFocus();
+        }
+        if (mainShell != null && mainShell.getVisibility() == View.VISIBLE) {
+            if (detailScreen != null && detailScreen.getVisibility() == View.VISIBLE) {
+                return detailScreen.ensureValidFocus();
+            }
+            if (searchScreen != null && searchScreen.getVisibility() == View.VISIBLE) {
+                return searchScreen.ensureValidFocus();
+            }
+            if (exploreScreen != null && exploreScreen.getVisibility() == View.VISIBLE) {
+                return exploreScreen.ensureValidFocus();
+            }
+            if (libraryScreen != null && libraryScreen.getVisibility() == View.VISIBLE) {
+                return libraryScreen.ensureValidFocus();
+            }
+            if (homeScreen != null && homeScreen.getVisibility() == View.VISIBLE) {
+                return homeScreen.ensureValidFocus();
+            }
+        }
+        return false;
+    }
+
+    private static boolean isDpadNavOrSelectKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                || keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER;
     }
 
     // ---- Global TV Remote Key Handling ----
@@ -966,24 +1146,41 @@ public class MainActivity extends Activity {
         int action = event.getAction();
 
         if (updateManager != null && updateManager.isShowing()) {
-            if (action == KeyEvent.ACTION_DOWN && updateManager.handleKeyDown(keyCode, event)) {
-                return true;
+            if (action == KeyEvent.ACTION_DOWN) {
+                if (updateManager.handleKeyDown(keyCode, event)) {
+                    return true;
+                }
+                if (isDpadNavOrSelectKey(keyCode) && !updateManager.hasValidFocus()) {
+                    updateManager.ensureValidFocus();
+                    return true;
+                }
             }
             return super.dispatchKeyEvent(event);
         }
 
         if (overlayMenu != null && overlayMenu.isShowing()) {
-            if (action == KeyEvent.ACTION_DOWN && overlayMenu.handleKeyDown(keyCode, event)) {
-                return true;
+            if (action == KeyEvent.ACTION_DOWN) {
+                if (overlayMenu.handleKeyDown(keyCode, event)) {
+                    return true;
+                }
+                if (isDpadNavOrSelectKey(keyCode) && !overlayMenu.hasValidFocus()) {
+                    overlayMenu.ensureValidFocus();
+                    return true;
+                }
             }
             return super.dispatchKeyEvent(event);
         }
 
         if (accountModal != null && accountModal.isShowing()) {
-            if (action == KeyEvent.ACTION_DOWN && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)) {
-                accountModal.hide();
-                navRail.focusActiveTab();
-                return true;
+            if (action == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
+                    accountModal.hide();
+                    return true;
+                }
+                if (isDpadNavOrSelectKey(keyCode) && !accountModal.hasValidFocus()) {
+                    accountModal.ensureValidFocus();
+                    return true;
+                }
             }
             return super.dispatchKeyEvent(event);
         }
@@ -1017,6 +1214,12 @@ public class MainActivity extends Activity {
             }
         }
 
+        if (action == KeyEvent.ACTION_DOWN && isDpadNavOrSelectKey(keyCode) && !hasValidTopFocus()) {
+            if (ensureActiveScreenFocus()) {
+                return true;
+            }
+        }
+
         return super.dispatchKeyEvent(event);
     }
 
@@ -1025,6 +1228,7 @@ public class MainActivity extends Activity {
             if (!detailScreen.handleBack()) {
                 detailScreen.clearHistory();
                 detailScreen.setVisibility(View.GONE);
+                syncFocusLayers();
                 focusCurrentMainTab();
             }
             return;

@@ -138,6 +138,7 @@ public class TvNavigationRail extends FrameLayout {
 
         // 2. Scrollable Clean Nav Items
         ScrollView navScroll = new ScrollView(context);
+        UiHelper.makeNonFocusable(navScroll);
         navScroll.setVerticalScrollBarEnabled(false);
         navScroll.setClipChildren(false);
         navScroll.setClipToPadding(false);
@@ -500,12 +501,12 @@ public class TvNavigationRail extends FrameLayout {
         setExpanded(true, true);
         for (NavItem item : navItems) {
             if (item.id.equals(activeTabId) && item.rowView != null) {
-                item.rowView.requestFocus();
+                UiHelper.requestTvFocus(item.rowView);
                 return;
             }
         }
         if (!navItems.isEmpty() && navItems.get(0).rowView != null) {
-            navItems.get(0).rowView.requestFocus();
+            UiHelper.requestTvFocus(navItems.get(0).rowView);
         }
     }
 

@@ -110,6 +110,7 @@ public class ExploreScreenView extends FrameLayout {
 
         gridRv = new RecyclerView(context);
         gridRv.setId(View.generateViewId());
+        UiHelper.makeNonFocusable(gridRv);
         gridRv.setLayoutManager(new GridLayoutManager(context, 5));
         gridRv.setItemAnimator(null);
         gridRv.setVerticalScrollBarEnabled(false);
@@ -132,7 +133,23 @@ public class ExploreScreenView extends FrameLayout {
                 UiHelper.dp(context, 24), UiHelper.dp(context, 10));
         UiHelper.applyFocusableGlassButton(btnLoadMore, context, 24, false);
         btnLoadMore.setVisibility(GONE);
-        btnLoadMore.setNextFocusUpId(gridRv.getId());
+        btnLoadMore.setOnKeyListener(new OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    int cc = gridRv.getChildCount();
+                    if (cc > 0) {
+                        UiHelper.requestTvFocus(gridRv.getChildAt(cc - 1));
+                        return true;
+                    }
+                    if (typeRow.getChildCount() > 0) {
+                        UiHelper.requestTvFocus(typeRow.getChildAt(0));
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
         btnLoadMore.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -152,6 +169,7 @@ public class ExploreScreenView extends FrameLayout {
 
     private LinearLayout createFilterStrip(Context ctx, LinearLayout parent) {
         HorizontalScrollView hsv = new HorizontalScrollView(ctx);
+        UiHelper.makeNonFocusable(hsv);
         hsv.setHorizontalScrollBarEnabled(false);
         hsv.setClipChildren(false);
         hsv.setClipToPadding(false);
@@ -180,9 +198,9 @@ public class ExploreScreenView extends FrameLayout {
             @Override
             public void run() {
                 if (typeRow.getChildCount() > 0) {
-                    typeRow.getChildAt(0).requestFocus();
-                } else {
-                    gridRv.requestFocus();
+                    UiHelper.requestTvFocus(typeRow.getChildAt(0));
+                } else if (gridRv.getChildCount() > 0) {
+                    UiHelper.requestTvFocus(gridRv.getChildAt(0));
                 }
             }
         });
@@ -191,9 +209,27 @@ public class ExploreScreenView extends FrameLayout {
     @Override
     public boolean requestFocus(int direction, Rect previouslyFocusedRect) {
         if (typeRow.getChildCount() > 0) {
-            return typeRow.getChildAt(0).requestFocus();
+            return UiHelper.requestTvFocus(typeRow.getChildAt(0));
+        }
+        if (gridRv.getChildCount() > 0) {
+            return UiHelper.requestTvFocus(gridRv.getChildAt(0));
         }
         return super.requestFocus(direction, previouslyFocusedRect);
+    }
+
+    public boolean hasValidFocus() {
+        return UiHelper.isValidInteractiveFocus(findFocus(), this);
+    }
+
+    public boolean ensureValidFocus() {
+        if (getVisibility() != VISIBLE) return false;
+        if (typeRow.getChildCount() > 0) {
+            return UiHelper.requestTvFocus(typeRow.getChildAt(0));
+        }
+        if (gridRv.getChildCount() > 0) {
+            return UiHelper.requestTvFocus(gridRv.getChildAt(0));
+        }
+        return false;
     }
 
     private void renderStaticFilters() {
@@ -290,7 +326,7 @@ public class ExploreScreenView extends FrameLayout {
             UiHelper.setButtonSelectedVisual(child, ctx, 20, sel);
             if (hadFocus) {
                 UiHelper.applyTvFocusEffect(child, ctx, true, 1.06f, 16);
-                child.requestFocus();
+                UiHelper.requestTvFocus(child);
             }
         }
     }
@@ -328,6 +364,9 @@ public class ExploreScreenView extends FrameLayout {
                         spinner.setSpinning(false);
                         if (data == null) return;
 
+                        final boolean hadFocusInside = hasFocus();
+                        final boolean loadMoreHadFocus = btnLoadMore.hasFocus();
+
                         currentPage = data.page;
                         totalPages = Math.max(1, data.totalPages);
                         if (genres.isEmpty() && !data.genres.isEmpty()) {
@@ -347,6 +386,24 @@ public class ExploreScreenView extends FrameLayout {
                             btnLoadMore.setText("Tải thêm phim (" + currentPage + "/" + totalPages + ")");
                         } else {
                             btnLoadMore.setVisibility(GONE);
+                        }
+
+                        if (hadFocusInside || loadMoreHadFocus) {
+                            post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (!UiHelper.isValidInteractiveFocus(findFocus(), ExploreScreenView.this)) {
+                                        int cc = gridRv.getChildCount();
+                                        if (loadMoreHadFocus && cc > 0) {
+                                            UiHelper.requestTvFocus(gridRv.getChildAt(cc - 1));
+                                        } else if (cc > 0) {
+                                            UiHelper.requestTvFocus(gridRv.getChildAt(0));
+                                        } else if (typeRow.getChildCount() > 0) {
+                                            UiHelper.requestTvFocus(typeRow.getChildAt(0));
+                                        }
+                                    }
+                                }
+                            });
                         }
                     }
 
@@ -384,7 +441,7 @@ public class ExploreScreenView extends FrameLayout {
                         int lastRow = (total - 1) / 5;
                         int curRow = pos / 5;
                         if (curRow == lastRow && btnLoadMore.getVisibility() == VISIBLE) {
-                            btnLoadMore.requestFocus();
+                            UiHelper.requestTvFocus(btnLoadMore);
                             return true;
                         }
                     }

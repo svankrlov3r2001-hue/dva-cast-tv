@@ -73,7 +73,7 @@ public class UpdateManager {
     private String pendingApkUrl = DEFAULT_APK_URL;
     private String pendingVersionName = "";
     private String pendingChangelog = "";
-    private View previouslyFocused;
+    private Runnable onVisibilityChanged;
 
     public UpdateManager(Activity activity) {
         this.activity = activity;
@@ -86,6 +86,21 @@ public class UpdateManager {
 
     public boolean isShowing() {
         return isShowing;
+    }
+
+    public void setOnVisibilityChangedListener(Runnable listener) {
+        this.onVisibilityChanged = listener;
+    }
+
+    public boolean hasValidFocus() {
+        return UiHelper.isValidInteractiveFocus(updateOverlay.findFocus(), updateOverlay);
+    }
+
+    public boolean ensureValidFocus() {
+        if (!isShowing) return false;
+        View target = (progressSection != null && progressSection.getVisibility() == View.VISIBLE)
+                ? btnCancelDownload : btnUpdateNow;
+        return UiHelper.requestTvFocus(target);
     }
 
     public long getLocalVersionCode() {
@@ -114,6 +129,8 @@ public class UpdateManager {
         updateOverlay.setVisibility(View.GONE);
         updateOverlay.setBackground(UiHelper.createCastBackgroundDrawable());
         updateOverlay.setClickable(true);
+        UiHelper.makeNonFocusable(updateOverlay);
+        UiHelper.setFocusBlocked(updateOverlay, true);
 
         mainCard = new LinearLayout(activity);
         mainCard.setOrientation(LinearLayout.VERTICAL);
@@ -335,6 +352,10 @@ public class UpdateManager {
                 UiHelper.dp(activity, 24), UiHelper.dp(activity, 12));
         UiHelper.applyFocusableTileStyle(btnCancelDownload, activity, 24,
                 UiHelper.COLOR_SURFACE_GLASS, UiHelper.COLOR_BTN_FOCUSED);
+        btnCancelDownload.setNextFocusLeftId(btnCancelDownload.getId());
+        btnCancelDownload.setNextFocusRightId(btnCancelDownload.getId());
+        btnCancelDownload.setNextFocusUpId(btnCancelDownload.getId());
+        btnCancelDownload.setNextFocusDownId(btnCancelDownload.getId());
         btnCancelDownload.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -490,23 +511,21 @@ public class UpdateManager {
         promptSection.setVisibility(View.VISIBLE);
         progressSection.setVisibility(View.GONE);
         showOverlay();
-        btnUpdateNow.post(new Runnable() {
-            @Override
-            public void run() {
-                btnUpdateNow.requestFocus();
-            }
-        });
+        UiHelper.postTvFocus(btnUpdateNow);
     }
 
     private void showOverlay() {
         if (isShowing) return;
         isShowing = true;
-        previouslyFocused = updateOverlay.getRootView().findFocus();
+        updateOverlay.animate().cancel();
+        mainCard.animate().cancel();
         updateOverlay.setAlpha(0f);
         updateOverlay.setVisibility(View.VISIBLE);
+        UiHelper.setFocusBlocked(updateOverlay, false);
+        if (onVisibilityChanged != null) onVisibilityChanged.run();
         mainCard.setScaleX(0.95f);
         mainCard.setScaleY(0.95f);
-        updateOverlay.animate().alpha(1f).setDuration(250).start();
+        updateOverlay.animate().alpha(1f).setDuration(250).setListener(null).start();
         mainCard.animate().scaleX(1f).scaleY(1f).setDuration(260)
                 .setInterpolator(new DecelerateInterpolator()).start();
     }
@@ -514,12 +533,14 @@ public class UpdateManager {
     public void hide() {
         if (!isShowing) return;
         isShowing = false;
+        updateOverlay.animate().cancel();
+        UiHelper.setFocusBlocked(updateOverlay, true);
+        if (onVisibilityChanged != null) onVisibilityChanged.run();
         updateOverlay.animate().alpha(0f).setDuration(200).withEndAction(new Runnable() {
             @Override
             public void run() {
-                updateOverlay.setVisibility(View.GONE);
-                if (previouslyFocused != null) {
-                    previouslyFocused.requestFocus();
+                if (!isShowing) {
+                    updateOverlay.setVisibility(View.GONE);
                 }
             }
         }).start();
@@ -533,12 +554,7 @@ public class UpdateManager {
         promptSection.setVisibility(View.GONE);
         progressSection.setVisibility(View.VISIBLE);
         updateProgressUi(0, 0, -1, 0, "Đang thiết lập kết nối an toàn tới máy chủ cập nhật...");
-        btnCancelDownload.post(new Runnable() {
-            @Override
-            public void run() {
-                btnCancelDownload.requestFocus();
-            }
-        });
+        UiHelper.postTvFocus(btnCancelDownload);
 
         new Thread(new Runnable() {
             @Override

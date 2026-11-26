@@ -70,6 +70,7 @@ public class MovieDetailScreenView extends FrameLayout {
     private ObjectAnimator skeletonPulseAnim;
     private final LinearLayout errorBox;
     private final TextView errorTv;
+    private final LinearLayout btnRetry;
 
     private final ImageView posterIv;
     private final TextView primaryTitleTv;
@@ -119,6 +120,7 @@ public class MovieDetailScreenView extends FrameLayout {
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         setBackgroundColor(UiHelper.COLOR_BG_BASE);
         setClickable(true);
+        UiHelper.makeNonFocusable(this);
 
         // 1. Right-weighted full-bleed cinematic backdrop (NO header box)
         backdropIv = new ImageView(context);
@@ -155,6 +157,7 @@ public class MovieDetailScreenView extends FrameLayout {
         setClipChildren(false);
         setClipToPadding(false);
         scrollView = new ScrollView(context);
+        UiHelper.makeNonFocusable(scrollView);
         scrollView.setVerticalScrollBarEnabled(false);
         scrollView.setClipChildren(false);
         scrollView.setClipToPadding(false);
@@ -246,6 +249,7 @@ public class MovieDetailScreenView extends FrameLayout {
 
         // Genre & Country Frosted Pills
         HorizontalScrollView chipsScroll = new HorizontalScrollView(context);
+        UiHelper.makeNonFocusable(chipsScroll);
         chipsScroll.setHorizontalScrollBarEnabled(false);
         chipsRow = new LinearLayout(context);
         chipsRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -357,6 +361,7 @@ public class MovieDetailScreenView extends FrameLayout {
         epHdrRow.addView(epTitle, marginRightLp(context, 14));
 
         HorizontalScrollView seasonScroll = new HorizontalScrollView(context);
+        UiHelper.makeNonFocusable(seasonScroll);
         seasonScroll.setHorizontalScrollBarEnabled(false);
         seasonScroll.setClipChildren(false);
         seasonScroll.setClipToPadding(false);
@@ -379,6 +384,7 @@ public class MovieDetailScreenView extends FrameLayout {
         episodeLayoutManager = new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false);
         episodeRv = new RecyclerView(context);
         episodeRv.setId(View.generateViewId());
+        UiHelper.makeNonFocusable(episodeRv);
         episodeRv.setLayoutManager(episodeLayoutManager);
         episodeRv.setItemAnimator(null);
         episodeRv.setVerticalScrollBarEnabled(false);
@@ -405,6 +411,7 @@ public class MovieDetailScreenView extends FrameLayout {
         sourcesSection.setVisibility(GONE);
         sourcesSection.addView(makeSectionHeader(context, "Nguồn phát khả dụng"));
         HorizontalScrollView srcScroll = new HorizontalScrollView(context);
+        UiHelper.makeNonFocusable(srcScroll);
         srcScroll.setHorizontalScrollBarEnabled(false);
         srcScroll.setClipChildren(false);
         srcScroll.setClipToPadding(false);
@@ -422,6 +429,7 @@ public class MovieDetailScreenView extends FrameLayout {
         castSection.setVisibility(GONE);
         castSection.addView(makeSectionHeader(context, "Đạo diễn & Diễn viên"));
         HorizontalScrollView castScroll = new HorizontalScrollView(context);
+        UiHelper.makeNonFocusable(castScroll);
         castScroll.setHorizontalScrollBarEnabled(false);
         castScroll.setClipChildren(false);
         castScroll.setClipToPadding(false);
@@ -440,6 +448,7 @@ public class MovieDetailScreenView extends FrameLayout {
         relatedSection.setVisibility(GONE);
         relatedSection.addView(makeSectionHeader(context, "Có thể bạn cũng thích"));
         relatedRv = new RecyclerView(context);
+        UiHelper.makeNonFocusable(relatedRv);
         relatedRv.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false));
         relatedRv.setClipChildren(false);
         relatedRv.setClipToPadding(false);
@@ -451,6 +460,7 @@ public class MovieDetailScreenView extends FrameLayout {
         loadingBox = new FrameLayout(context);
         loadingBox.setBackgroundColor(UiHelper.COLOR_BG_BASE);
         loadingBox.setClickable(true);
+        UiHelper.makeNonFocusable(loadingBox);
         loadingBox.setVisibility(GONE);
         skeletonPulseLayer = buildDetailSkeletonLayout(context);
         loadingBox.addView(skeletonPulseLayer, new FrameLayout.LayoutParams(
@@ -468,7 +478,7 @@ public class MovieDetailScreenView extends FrameLayout {
         errorTv.setTextColor(Color.WHITE);
         errorTv.setTextSize(14.5f);
         errorBox.addView(errorTv);
-        LinearLayout btnRetry = makeCapsuleCta(context, R.drawable.ic_back, "Quay lại", true);
+        btnRetry = makeCapsuleCta(context, R.drawable.ic_back, "Quay lại", true);
         btnRetry.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -489,19 +499,38 @@ public class MovieDetailScreenView extends FrameLayout {
 
     @Override
     public boolean requestFocus(int direction, Rect previouslyFocusedRect) {
+        if (errorBox != null && errorBox.getVisibility() == VISIBLE && btnRetry != null) {
+            return UiHelper.requestTvFocus(btnRetry);
+        }
         if (btnPlay != null && scrollView != null
                 && loadingBox != null && loadingBox.getVisibility() != VISIBLE
                 && errorBox != null && errorBox.getVisibility() != VISIBLE) {
             scrollView.smoothScrollTo(0, 0);
-            return btnPlay.requestFocus();
+            return UiHelper.requestTvFocus(btnPlay);
         }
         return super.requestFocus(direction, previouslyFocusedRect);
+    }
+
+    public boolean hasValidFocus() {
+        return UiHelper.isValidInteractiveFocus(findFocus(), this);
+    }
+
+    public boolean ensureValidFocus() {
+        if (getVisibility() != VISIBLE) return false;
+        if (errorBox != null && errorBox.getVisibility() == VISIBLE && btnRetry != null) {
+            return UiHelper.requestTvFocus(btnRetry);
+        }
+        if (loadingBox != null && loadingBox.getVisibility() == VISIBLE) {
+            return false;
+        }
+        scrollView.smoothScrollTo(0, 0);
+        return UiHelper.requestTvFocus(btnPlay);
     }
 
     private boolean focusFirstSectionBelowHero() {
         if (seasonSection.getVisibility() == VISIBLE) {
             if (seasonTabsRow.getChildCount() > 0) {
-                return seasonTabsRow.getChildAt(0).requestFocus();
+                return UiHelper.requestTvFocus(seasonTabsRow.getChildAt(0));
             }
             if (focusEpisodeGrid()) {
                 return true;
@@ -515,10 +544,10 @@ public class MovieDetailScreenView extends FrameLayout {
         int targetPos = Math.max(0, Math.min(activeEpisodeIndex, displayedEpisodes.size() - 1));
         RecyclerView.ViewHolder vh = episodeRv.findViewHolderForAdapterPosition(targetPos);
         if (vh instanceof EpisodeHolder) {
-            return ((EpisodeHolder) vh).card.requestFocus();
+            return UiHelper.requestTvFocus(((EpisodeHolder) vh).card);
         }
         if (episodeRv.getChildCount() > 0) {
-            return episodeRv.getChildAt(0).requestFocus();
+            return UiHelper.requestTvFocus(episodeRv.getChildAt(0));
         }
         episodeRv.scrollToPosition(targetPos);
         episodeRv.post(new Runnable() {
@@ -526,9 +555,9 @@ public class MovieDetailScreenView extends FrameLayout {
             public void run() {
                 RecyclerView.ViewHolder holder = episodeRv.findViewHolderForAdapterPosition(activeEpisodeIndex);
                 if (holder instanceof EpisodeHolder) {
-                    ((EpisodeHolder) holder).card.requestFocus();
+                    UiHelper.requestTvFocus(((EpisodeHolder) holder).card);
                 } else if (episodeRv.getChildCount() > 0) {
-                    episodeRv.getChildAt(0).requestFocus();
+                    UiHelper.requestTvFocus(episodeRv.getChildAt(0));
                 }
             }
         });
@@ -537,16 +566,13 @@ public class MovieDetailScreenView extends FrameLayout {
 
     private boolean focusFirstBelowEpisodes() {
         if (sourcesSection.getVisibility() == VISIBLE && sourcesRow.getChildCount() > 0) {
-            return sourcesRow.getChildAt(0).requestFocus();
+            return UiHelper.requestTvFocus(sourcesRow.getChildAt(0));
         }
         if (castSection.getVisibility() == VISIBLE && castRow.getChildCount() > 0) {
-            return castRow.getChildAt(0).requestFocus();
+            return UiHelper.requestTvFocus(castRow.getChildAt(0));
         }
-        if (relatedSection.getVisibility() == VISIBLE) {
-            if (relatedRv.getChildCount() > 0) {
-                return relatedRv.getChildAt(0).requestFocus();
-            }
-            return relatedRv.requestFocus();
+        if (relatedSection.getVisibility() == VISIBLE && relatedRv.getChildCount() > 0) {
+            return UiHelper.requestTvFocus(relatedRv.getChildAt(0));
         }
         return false;
     }
@@ -571,6 +597,7 @@ public class MovieDetailScreenView extends FrameLayout {
     }
 
     private void showLoadingSkeleton() {
+        UiHelper.setFocusBlocked(scrollView, true);
         if (loadingBox != null) {
             loadingBox.setVisibility(VISIBLE);
             startSkeletonPulse();
@@ -582,6 +609,7 @@ public class MovieDetailScreenView extends FrameLayout {
         if (loadingBox != null) {
             loadingBox.setVisibility(GONE);
         }
+        UiHelper.setFocusBlocked(scrollView, false);
     }
 
     private void startSkeletonPulse() {
@@ -739,6 +767,8 @@ public class MovieDetailScreenView extends FrameLayout {
                 if (data == null || data.movie == null) {
                     errorBox.setVisibility(VISIBLE);
                     errorTv.setText("Không tìm thấy thông tin phim");
+                    UiHelper.setFocusBlocked(scrollView, true);
+                    UiHelper.postTvFocus(btnRetry);
                     return;
                 }
                 bindDetail(data);
@@ -750,6 +780,8 @@ public class MovieDetailScreenView extends FrameLayout {
                 hideLoadingSkeleton();
                 errorBox.setVisibility(VISIBLE);
                 errorTv.setText(message != null ? message : "Lỗi tải thông tin phim");
+                UiHelper.setFocusBlocked(scrollView, true);
+                UiHelper.postTvFocus(btnRetry);
             }
         });
     }
@@ -927,12 +959,8 @@ public class MovieDetailScreenView extends FrameLayout {
         relatedAdapter.notifyDataSetChanged();
         relatedSection.setVisibility(relatedMovies.isEmpty() ? GONE : VISIBLE);
 
-        btnPlay.post(new Runnable() {
-            @Override
-            public void run() {
-                btnPlay.requestFocus();
-            }
-        });
+        UiHelper.setFocusBlocked(scrollView, false);
+        UiHelper.postTvFocus(btnPlay);
     }
 
     private void addStatDivider(Context ctx) {
@@ -997,7 +1025,7 @@ public class MovieDetailScreenView extends FrameLayout {
                             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                                 if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                                     scrollView.smoothScrollTo(0, 0);
-                                    btnPlay.requestFocus();
+                                    UiHelper.requestTvFocus(btnPlay);
                                     return true;
                                 }
                                 if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
@@ -1013,7 +1041,7 @@ public class MovieDetailScreenView extends FrameLayout {
                             selectedSeasonId = s.seasonsId;
                             renderSeasonsAndEpisodes(m, fallbackThumbUrl);
                             if (tabIndex < seasonTabsRow.getChildCount()) {
-                                seasonTabsRow.getChildAt(tabIndex).requestFocus();
+                                UiHelper.requestTvFocus(seasonTabsRow.getChildAt(tabIndex));
                             }
                         }
                     });
@@ -1172,6 +1200,7 @@ public class MovieDetailScreenView extends FrameLayout {
 
             final FrameLayout card = new FrameLayout(ctx);
             card.setFocusable(true);
+            card.setFocusableInTouchMode(false);
             card.setClickable(true);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 card.setDefaultFocusHighlightEnabled(false);
@@ -1358,10 +1387,10 @@ public class MovieDetailScreenView extends FrameLayout {
                     if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                     if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                         if (seasonTabsRow.getChildCount() > 0) {
-                            seasonTabsRow.getChildAt(0).requestFocus();
+                            UiHelper.requestTvFocus(seasonTabsRow.getChildAt(0));
                         } else {
                             scrollView.smoothScrollTo(0, 0);
-                            btnPlay.requestFocus();
+                            UiHelper.requestTvFocus(btnPlay);
                         }
                         return true;
                     }

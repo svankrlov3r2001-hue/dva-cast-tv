@@ -66,7 +66,7 @@ public class OverlayMenuController {
     private ScrollView historyScrollView;
     private LinearLayout historyListContainer;
 
-    private View previouslyFocused;
+    private Runnable onVisibilityChanged;
     private boolean showing = false;
     private boolean showingHistory = false;
 
@@ -85,6 +85,19 @@ public class OverlayMenuController {
         return showing;
     }
 
+    public void setOnVisibilityChangedListener(Runnable listener) {
+        this.onVisibilityChanged = listener;
+    }
+
+    public boolean hasValidFocus() {
+        return UiHelper.isValidInteractiveFocus(overlayRoot.findFocus(), overlayRoot);
+    }
+
+    public boolean ensureValidFocus() {
+        if (!showing) return false;
+        return UiHelper.requestTvFocus(showingHistory ? backBtn : firstTile);
+    }
+
     private void buildUi() {
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         int screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(context, 960);
@@ -96,7 +109,8 @@ public class OverlayMenuController {
         overlayRoot.setVisibility(View.GONE);
         overlayRoot.setBackground(UiHelper.createOverlayBackdropDrawable());
         overlayRoot.setClickable(true);
-        overlayRoot.setFocusable(false);
+        UiHelper.makeNonFocusable(overlayRoot);
+        UiHelper.setFocusBlocked(overlayRoot, true);
         overlayRoot.setClipChildren(false);
         overlayRoot.setClipToPadding(false);
         overlayRoot.setOnClickListener(new View.OnClickListener() {
@@ -107,6 +121,7 @@ public class OverlayMenuController {
         });
 
         ScrollView outerScroll = new ScrollView(context);
+        UiHelper.makeNonFocusable(outerScroll);
         outerScroll.setVerticalScrollBarEnabled(false);
         outerScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         outerScroll.setClipChildren(false);
@@ -129,6 +144,7 @@ public class OverlayMenuController {
         mainCard.setPadding(UiHelper.dp(context, 30), UiHelper.dp(context, 28),
                 UiHelper.dp(context, 30), UiHelper.dp(context, 28));
         mainCard.setClickable(true);
+        UiHelper.makeNonFocusable(mainCard);
         mainCard.setClipChildren(false);
         mainCard.setClipToPadding(false);
         UiHelper.applyGlassCardStyle(mainCard, context, 40, UiHelper.COLOR_SURFACE_GLASS, 24);
@@ -609,12 +625,7 @@ public class OverlayMenuController {
         historySection.setVisibility(View.GONE);
         closeBtn.setNextFocusDownId(tileCache.getId());
         closeBtn.setNextFocusLeftId(tileReload.getId());
-        tileChangelog.post(new Runnable() {
-            @Override
-            public void run() {
-                tileChangelog.requestFocus();
-            }
-        });
+        UiHelper.postTvFocus(tileChangelog);
     }
 
     private void switchToHistoryView() {
@@ -636,15 +647,20 @@ public class OverlayMenuController {
             }
         });
 
-        backBtn.post(new Runnable() {
-            @Override
-            public void run() {
-                backBtn.requestFocus();
-            }
-        });
+        UiHelper.postTvFocus(backBtn);
     }
 
     private void populateHistoryList() {
+        int prevFocusedIdx = -1;
+        if (historyListContainer.hasFocus()) {
+            int prevCount = historyListContainer.getChildCount();
+            for (int i = 0; i < prevCount; i++) {
+                if (historyListContainer.getChildAt(i).hasFocus()) {
+                    prevFocusedIdx = i;
+                    break;
+                }
+            }
+        }
         historyListContainer.removeAllViews();
         List<UpdateHistoryStore.HistoryEntry> entries = UpdateHistoryStore.getHistory(context);
         long localCode = actions.getVersionCode();
@@ -763,7 +779,15 @@ public class OverlayMenuController {
             backBtn.setNextFocusDownId(closeBtn.getId());
             closeBtn.setNextFocusDownId(closeBtn.getId());
         }
-        historyScrollView.scrollTo(0, 0);
+        if (prevFocusedIdx >= 0 && cardCount > 0) {
+            View restoreCard = historyListContainer.getChildAt(Math.min(prevFocusedIdx, cardCount - 1));
+            UiHelper.postTvFocus(restoreCard);
+        } else {
+            historyScrollView.scrollTo(0, 0);
+            if (showing && showingHistory && !hasValidFocus()) {
+                UiHelper.postTvFocus(backBtn);
+            }
+        }
     }
 
     private void refreshNetworkInfo() {
@@ -794,7 +818,8 @@ public class OverlayMenuController {
         if (showing) return;
         showing = true;
         showingHistory = false;
-        previouslyFocused = overlayRoot.getRootView().findFocus();
+        overlayRoot.animate().cancel();
+        mainCard.animate().cancel();
 
         backBtn.setVisibility(View.GONE);
         headerTitleTv.setText("Cài đặt");
@@ -824,38 +849,36 @@ public class OverlayMenuController {
 
         overlayRoot.setAlpha(0f);
         overlayRoot.setVisibility(View.VISIBLE);
+        UiHelper.setFocusBlocked(overlayRoot, false);
+        if (onVisibilityChanged != null) onVisibilityChanged.run();
         mainCard.setScaleX(0.95f);
         mainCard.setScaleY(0.95f);
 
-        overlayRoot.animate().alpha(1f).setDuration(200).start();
+        overlayRoot.animate().alpha(1f).setDuration(200).setListener(null).start();
         mainCard.animate().scaleX(1f).scaleY(1f).setDuration(220)
                 .setInterpolator(new DecelerateInterpolator()).start();
 
-        firstTile.post(new Runnable() {
-            @Override
-            public void run() {
-                firstTile.requestFocus();
-            }
-        });
+        UiHelper.postTvFocus(firstTile);
     }
 
     public void hide() {
         if (!showing) return;
         showing = false;
         showingHistory = false;
+        overlayRoot.animate().cancel();
+        UiHelper.setFocusBlocked(overlayRoot, true);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && backgroundToBlur != null) {
             backgroundToBlur.setRenderEffect(null);
         }
 
+        if (onVisibilityChanged != null) onVisibilityChanged.run();
+
         overlayRoot.animate().alpha(0f).setDuration(170).withEndAction(new Runnable() {
             @Override
             public void run() {
-                overlayRoot.setVisibility(View.GONE);
-                if (previouslyFocused != null) {
-                    previouslyFocused.requestFocus();
-                } else if (backgroundToBlur != null) {
-                    backgroundToBlur.requestFocus();
+                if (!showing) {
+                    overlayRoot.setVisibility(View.GONE);
                 }
             }
         }).start();

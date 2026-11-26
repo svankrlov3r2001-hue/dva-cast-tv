@@ -125,6 +125,12 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v24 = new ArrayList<>();
+        v24.add("Khắc phục triệt để tình trạng thanh điều khiển trình phát và các bảng tùy chọn không hiện viền sáng báo vị trí chọn khi dùng điều khiển từ xa");
+        v24.add("Tự động giữ vững và khôi phục vị trí đang chọn khi ẩn hiện thanh điều khiển phát phim, chuyển phần/tập, làm mới danh sách hoặc đóng mở các bảng cài đặt");
+        v24.add("Cô lập điều hướng chính xác theo từng màn hình và tối ưu khả năng nhận phím điều hướng trên mọi dòng Android TV, TV Box và Máy chiếu");
+        list.add(new HistoryEntry(24L, "4.6.9", "26/11/2026", "Khắc Phục Triệt Để Lỗi Mất Vị Trí Chọn Điều Khiển Từ Xa Toàn Ứng Dụng", v24));
+
         List<String> v23 = new ArrayList<>();
         v23.add("Cải tiến tính năng Thuyết minh đọc trọn vẹn hết câu, không bị ngắt quãng giữa chừng khi qua khoảng lặng giữa hai câu phụ đề");
         v23.add("Tự động căn chỉnh tốc độ đọc khớp nhịp hiển thị phụ đề và tốc độ phát phim, tránh đọc quá gấp ở các câu phụ đề ngắn");

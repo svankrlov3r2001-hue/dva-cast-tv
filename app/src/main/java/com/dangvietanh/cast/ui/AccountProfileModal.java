@@ -42,7 +42,7 @@ public class AccountProfileModal {
     private final LinearLayout btnLogout;
     private final ImageView btnClose;
 
-    private View previouslyFocused;
+    private Runnable onVisibilityChanged;
     private boolean showing = false;
 
     public AccountProfileModal(Context context, View backgroundToBlur, Actions actions) {
@@ -54,7 +54,8 @@ public class AccountProfileModal {
         rootOverlay.setBackground(UiHelper.createOverlayBackdropDrawable());
         rootOverlay.setVisibility(View.GONE);
         rootOverlay.setClickable(true);
-        rootOverlay.setFocusable(false);
+        UiHelper.makeNonFocusable(rootOverlay);
+        UiHelper.setFocusBlocked(rootOverlay, true);
         rootOverlay.setClipChildren(false);
         rootOverlay.setClipToPadding(false);
 
@@ -242,6 +243,19 @@ public class AccountProfileModal {
         return showing;
     }
 
+    public void setOnVisibilityChangedListener(Runnable listener) {
+        this.onVisibilityChanged = listener;
+    }
+
+    public boolean hasValidFocus() {
+        return UiHelper.isValidInteractiveFocus(rootOverlay.findFocus(), rootOverlay);
+    }
+
+    public boolean ensureValidFocus() {
+        if (!showing) return false;
+        return UiHelper.requestTvFocus(btnSettings);
+    }
+
     public void show(Models.User user) {
         if (user != null) {
             nameTv.setText(user.name != null && !user.name.isEmpty() ? user.name : user.username);
@@ -260,42 +274,40 @@ public class AccountProfileModal {
         }
 
         showing = true;
-        previouslyFocused = rootOverlay.getRootView() != null ? rootOverlay.getRootView().findFocus() : null;
+        rootOverlay.animate().cancel();
+        mainCard.animate().cancel();
         UiHelper.setBackdropBlur(backgroundToBlur, true);
         rootOverlay.setAlpha(0f);
         rootOverlay.setVisibility(View.VISIBLE);
+        UiHelper.setFocusBlocked(rootOverlay, false);
+        if (onVisibilityChanged != null) onVisibilityChanged.run();
         mainCard.setScaleX(0.94f);
         mainCard.setScaleY(0.94f);
-        rootOverlay.animate().alpha(1f).setDuration(200).start();
+        rootOverlay.animate().alpha(1f).setDuration(200).setListener(null).start();
         mainCard.animate()
                 .scaleX(1f)
                 .scaleY(1f)
                 .setDuration(220)
                 .setInterpolator(new DecelerateInterpolator())
                 .start();
-        btnSettings.post(new Runnable() {
-            @Override
-            public void run() {
-                btnSettings.requestFocus();
-            }
-        });
+        UiHelper.postTvFocus(btnSettings);
     }
 
     public void hide() {
         if (!showing) return;
         showing = false;
+        rootOverlay.animate().cancel();
+        UiHelper.setFocusBlocked(rootOverlay, true);
         UiHelper.setBackdropBlur(backgroundToBlur, false);
+        if (onVisibilityChanged != null) onVisibilityChanged.run();
         rootOverlay.animate()
                 .alpha(0f)
                 .setDuration(180)
                 .withEndAction(new Runnable() {
                     @Override
                     public void run() {
-                        rootOverlay.setVisibility(View.GONE);
-                        if (previouslyFocused != null) {
-                            previouslyFocused.requestFocus();
-                        } else if (backgroundToBlur != null) {
-                            backgroundToBlur.requestFocus();
+                        if (!showing) {
+                            rootOverlay.setVisibility(View.GONE);
                         }
                     }
                 })

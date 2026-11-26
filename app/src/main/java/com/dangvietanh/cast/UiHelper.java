@@ -28,11 +28,16 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewParent;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.bitmap.CenterCrop;
@@ -495,7 +500,77 @@ public final class UiHelper {
     }
 
     public static void setButtonSelectedVisual(final View view, final Context ctx, final int radiusDp, boolean selected) {
+        boolean wasFocused = view != null && view.hasFocus();
         applyFocusableGlassButton(view, ctx, GLASS_RADIUS_DP, selected);
+        if (wasFocused && view != null) {
+            view.refreshDrawableState();
+            applyTvFocusEffect(view, ctx, true, FOCUS_SCALE_DEFAULT, 16);
+        }
+    }
+
+    public static void makeNonFocusable(View view) {
+        if (view == null) return;
+        view.setFocusable(false);
+        view.setFocusableInTouchMode(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            view.setDefaultFocusHighlightEnabled(false);
+        }
+        if (view instanceof RecyclerView) {
+            ((RecyclerView) view).setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        }
+    }
+
+    public static void setFocusBlocked(ViewGroup group, boolean blocked) {
+        if (group == null) return;
+        int target = blocked ? ViewGroup.FOCUS_BLOCK_DESCENDANTS : ViewGroup.FOCUS_AFTER_DESCENDANTS;
+        if (group.getDescendantFocusability() != target) {
+            group.setDescendantFocusability(target);
+        }
+        if (blocked && group.hasFocus()) {
+            group.clearFocus();
+        }
+    }
+
+    public static boolean requestTvFocus(View view) {
+        if (view == null || view.getVisibility() != View.VISIBLE) return false;
+        if (view.isInTouchMode()) {
+            if (view.requestFocusFromTouch()) return true;
+        }
+        if (view.requestFocus()) return true;
+        return view.requestFocusFromTouch();
+    }
+
+    public static void postTvFocus(final View view) {
+        if (view == null) return;
+        view.post(new Runnable() {
+            @Override
+            public void run() {
+                if (view.getVisibility() == View.VISIBLE) {
+                    requestTvFocus(view);
+                }
+            }
+        });
+    }
+
+    public static boolean isDescendantOf(View child, View ancestor) {
+        if (child == null || ancestor == null) return false;
+        if (child == ancestor) return true;
+        ViewParent p = child.getParent();
+        while (p != null) {
+            if (p == ancestor) return true;
+            p = p.getParent();
+        }
+        return false;
+    }
+
+    public static boolean isValidInteractiveFocus(View focused, View activeContainer) {
+        if (focused == null || activeContainer == null) return false;
+        if (focused == activeContainer) return false;
+        if (!focused.isAttachedToWindow() || !focused.isShown() || !focused.isFocusable()) return false;
+        if (focused instanceof ScrollView || focused instanceof HorizontalScrollView || focused instanceof RecyclerView) {
+            return false;
+        }
+        return isDescendantOf(focused, activeContainer);
     }
 
     private static void applyElevationAndOutline(final View view, final Context ctx, final int radiusDp, int shadowDp) {

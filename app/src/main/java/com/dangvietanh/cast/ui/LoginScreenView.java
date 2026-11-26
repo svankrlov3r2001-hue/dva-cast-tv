@@ -87,6 +87,7 @@ public class LoginScreenView extends FrameLayout {
         int screenW = dm.widthPixels > 0 ? dm.widthPixels : UiHelper.dp(ctx, 960);
 
         ScrollView scroll = new ScrollView(ctx);
+        UiHelper.makeNonFocusable(scroll);
         scroll.setVerticalScrollBarEnabled(false);
         scroll.setFillViewport(true);
         addView(scroll, new FrameLayout.LayoutParams(
@@ -392,14 +393,16 @@ public class LoginScreenView extends FrameLayout {
     }
 
     public void requestInitialFocus() {
-        if (btnRefreshQr != null) {
-            btnRefreshQr.post(new Runnable() {
-                @Override
-                public void run() {
-                    btnRefreshQr.requestFocus();
-                }
-            });
-        }
+        UiHelper.postTvFocus(btnRefreshQr);
+    }
+
+    public boolean hasValidFocus() {
+        return UiHelper.isValidInteractiveFocus(findFocus(), this);
+    }
+
+    public boolean ensureValidFocus() {
+        if (getVisibility() != VISIBLE) return false;
+        return UiHelper.requestTvFocus(btnRefreshQr);
     }
 
     private void regenerateAndStartPolling() {
