@@ -125,6 +125,12 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v21 = new ArrayList<>();
+        v21.add("Nâng cấp chế độ Độ sáng & Chi tiết (Máy chiếu) với 4 mức Mặc định, Sáng nhẹ, Sáng rõ và Siêu sáng giúp hình ảnh rõ nét vùng tối và nổi bật chi tiết nhân vật khi chiếu trên máy chiếu");
+        v21.add("Chuẩn hóa bộ cài đặt mặc định tối ưu cho TV: tự động chọn máy chủ tối ưu, cỡ phụ đề 18, vị trí 8%, giọng thuyết minh Hoài My, tự chuyển tập, tải trước tập kế, hiệu ứng chuyển cảnh, tự bỏ qua giới thiệu và giữ thuyết minh khi chuyển tập");
+        v21.add("Sắp xếp danh sách tập phim trong trình phát tăng dần từ Tập 01 đến tập cuối, hiển thị đầy đủ ảnh thu nhỏ rõ nét và tự động trỏ vào tập đang phát");
+        list.add(new HistoryEntry(21L, "4.6.6", "26/11/2026", "Chế Độ Sáng Rõ Cho Máy Chiếu, Mặc Định Tối Ưu & Danh Sách Tập Từ Tập 01", v21));
+
         List<String> v20 = new ArrayList<>();
         v20.add("Hiển thị chính xác tên máy chủ đang phát trên góc trên trái trình phát và nổi bật nhãn Đang phát trong bảng Chọn máy chủ");
         v20.add("Tự động trỏ sẵn điều khiển vào đúng máy chủ đang phát khi mở bảng Chọn máy chủ phát");

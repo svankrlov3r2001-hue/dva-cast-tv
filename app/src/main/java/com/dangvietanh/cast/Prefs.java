@@ -42,12 +42,39 @@ public final class Prefs {
     private static final String KEY_SUB_AI_VOICE_ENABLED = "sub_ai_voice_enabled";
     private static final String KEY_SUB_AI_VOICE_MODE = "sub_ai_voice_mode";
     private static final String KEY_SUB_AI_VOICE_VOLUME = "sub_ai_voice_volume";
+    private static final String KEY_DEFAULTS_V466_MIGRATED = "defaults_v466_migrated";
+
+    private static volatile boolean defaultsV466Checked = false;
 
     private Prefs() {
     }
 
     private static SharedPreferences getPrefs(Context context) {
-        return context.getApplicationContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        SharedPreferences sp = context.getApplicationContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        if (!defaultsV466Checked) {
+            defaultsV466Checked = true;
+            if (!sp.getBoolean(KEY_DEFAULTS_V466_MIGRATED, false)) {
+                SharedPreferences.Editor ed = sp.edit();
+                ed.putBoolean(KEY_AUTO_OPTIMAL_SERVER, true);
+                ed.putBoolean(KEY_SUB_AUTO_LAYOUT, false);
+                ed.putInt(KEY_SUB_FONT_STEP, 18);
+                ed.putInt(KEY_SUB_POS_PCT, 8);
+                ed.putString(KEY_SUB_AI_VOICE_MODE, "hoaimy");
+                ed.putBoolean(KEY_AUTO_PLAY_NEXT, true);
+                ed.putBoolean(KEY_VIDEO_FILL_COVER, false);
+                ed.putBoolean(KEY_SEAMLESS_PRELOAD, true);
+                ed.putBoolean(KEY_TRANSITION_EFFECT, true);
+                ed.putBoolean(KEY_AUTO_SKIP_INTRO, true);
+                ed.putBoolean(KEY_AUTO_DUB_NEXT, true);
+                String oldContrast = sp.getString(KEY_CONTRAST_LEVEL, "Mặc định");
+                if ("Thấp".equals(oldContrast)) ed.putString(KEY_CONTRAST_LEVEL, "Sáng nhẹ");
+                else if ("Cao".equals(oldContrast)) ed.putString(KEY_CONTRAST_LEVEL, "Sáng rõ");
+                else if ("Rất cao".equals(oldContrast)) ed.putString(KEY_CONTRAST_LEVEL, "Siêu sáng");
+                ed.putBoolean(KEY_DEFAULTS_V466_MIGRATED, true);
+                ed.apply();
+            }
+        }
+        return sp;
     }
 
     // ---- Boot & OTA Update ----
@@ -122,7 +149,7 @@ public final class Prefs {
     }
 
     public static boolean isAutoSkipIntro(Context context) {
-        return getPrefs(context).getBoolean(KEY_AUTO_SKIP_INTRO, false);
+        return getPrefs(context).getBoolean(KEY_AUTO_SKIP_INTRO, true);
     }
 
     public static void setAutoSkipIntro(Context context, boolean v) {
@@ -138,7 +165,7 @@ public final class Prefs {
     }
 
     public static boolean isAutoDubNext(Context context) {
-        return getPrefs(context).getBoolean(KEY_AUTO_DUB_NEXT, false);
+        return getPrefs(context).getBoolean(KEY_AUTO_DUB_NEXT, true);
     }
 
     public static void setAutoDubNext(Context context, boolean v) {
@@ -236,7 +263,7 @@ public final class Prefs {
     }
 
     public static boolean isSubAutoLayout(Context context) {
-        return getPrefs(context).getBoolean(KEY_SUB_AUTO_LAYOUT, true);
+        return getPrefs(context).getBoolean(KEY_SUB_AUTO_LAYOUT, false);
     }
 
     public static void setSubAutoLayout(Context context, boolean v) {
@@ -244,7 +271,7 @@ public final class Prefs {
     }
 
     public static int getSubFontStep(Context context) {
-        return Math.max(1, Math.min(20, getPrefs(context).getInt(KEY_SUB_FONT_STEP, 9)));
+        return Math.max(1, Math.min(20, getPrefs(context).getInt(KEY_SUB_FONT_STEP, 18)));
     }
 
     public static void setSubFontStep(Context context, int step) {
@@ -252,7 +279,7 @@ public final class Prefs {
     }
 
     public static int getSubPositionPct(Context context) {
-        return Math.max(-10, Math.min(40, getPrefs(context).getInt(KEY_SUB_POS_PCT, 10)));
+        return Math.max(-10, Math.min(40, getPrefs(context).getInt(KEY_SUB_POS_PCT, 8)));
     }
 
     public static void setSubPositionPct(Context context, int pct) {
@@ -310,11 +337,11 @@ public final class Prefs {
     }
 
     public static String getSubAiVoiceMode(Context context) {
-        return getPrefs(context).getString(KEY_SUB_AI_VOICE_MODE, "adaptive");
+        return getPrefs(context).getString(KEY_SUB_AI_VOICE_MODE, "hoaimy");
     }
 
     public static void setSubAiVoiceMode(Context context, String mode) {
-        getPrefs(context).edit().putString(KEY_SUB_AI_VOICE_MODE, mode != null ? mode : "adaptive").apply();
+        getPrefs(context).edit().putString(KEY_SUB_AI_VOICE_MODE, mode != null ? mode : "hoaimy").apply();
     }
 
     public static int getSubAiVoiceVolume(Context context) {
@@ -332,16 +359,16 @@ public final class Prefs {
                 .putBoolean(KEY_SUB_REVERSE, false)
                 .putString(KEY_SUB_FONT, "Arial,Helvetica,sans-serif")
                 .putString(KEY_SUB_COLOR, "white")
-                .putBoolean(KEY_SUB_AUTO_LAYOUT, true)
-                .putInt(KEY_SUB_FONT_STEP, 9)
-                .putInt(KEY_SUB_POS_PCT, 10)
+                .putBoolean(KEY_SUB_AUTO_LAYOUT, false)
+                .putInt(KEY_SUB_FONT_STEP, 18)
+                .putInt(KEY_SUB_POS_PCT, 8)
                 .putString(KEY_SUB_OUTLINE, "uniform")
                 .putString(KEY_SUB_BG_STYLE, "none")
                 .putFloat(KEY_SUB_DELAY_SEC, 0.0f)
                 .putFloat(KEY_SUB_EXTEND_SEC, 0.0f)
                 .putString(KEY_SUB_TRANSLATE_LANG, "")
                 .putBoolean(KEY_SUB_AI_VOICE_ENABLED, false)
-                .putString(KEY_SUB_AI_VOICE_MODE, "adaptive")
+                .putString(KEY_SUB_AI_VOICE_MODE, "hoaimy")
                 .putInt(KEY_SUB_AI_VOICE_VOLUME, 100)
                 .apply();
     }

@@ -1,12 +1,15 @@
 package com.dangvietanh.cast;
 
 import android.content.Context;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
+import android.graphics.Paint;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.Gravity;
-import android.view.SurfaceView;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -58,7 +61,7 @@ public class NativePlayerController {
 
     private final FrameLayout container;
     private final AspectRatioFrameLayout aspectFrame;
-    private final SurfaceView surfaceView;
+    private final TextureView textureView;
 
     private DefaultDataSource.Factory dataSourceFactory;
     private ExoPlayer exoPlayer;
@@ -137,11 +140,11 @@ public class NativePlayerController {
         aspectFrame.setFocusable(false);
         aspectFrame.setClickable(false);
 
-        surfaceView = new SurfaceView(this.context);
-        surfaceView.setFocusable(false);
-        surfaceView.setClickable(false);
+        textureView = new TextureView(this.context);
+        textureView.setFocusable(false);
+        textureView.setClickable(false);
 
-        aspectFrame.addView(surfaceView, new FrameLayout.LayoutParams(
+        aspectFrame.addView(textureView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 Gravity.CENTER));
@@ -365,7 +368,7 @@ public class NativePlayerController {
     private void ensureMainPlayer() {
         if (exoPlayer != null) return;
         exoPlayer = createExoInstance(false);
-        exoPlayer.setVideoSurfaceView(surfaceView);
+        exoPlayer.setVideoTextureView(textureView);
         mainPlayerListener = createMainListener();
         exoPlayer.addListener(mainPlayerListener);
     }
@@ -462,7 +465,7 @@ public class NativePlayerController {
             try {
                 if (mainPlayerListener != null) oldMain.removeListener(mainPlayerListener);
                 oldMain.stop();
-                oldMain.clearVideoSurfaceView(surfaceView);
+                oldMain.clearVideoTextureView(textureView);
                 oldMain.release();
             } catch (Exception ignored) {
             }
@@ -491,7 +494,16 @@ public class NativePlayerController {
 
         mainPlayerListener = createMainListener();
         exoPlayer.addListener(mainPlayerListener);
-        exoPlayer.setVideoSurfaceView(surfaceView);
+        exoPlayer.setVideoTextureView(textureView);
+        VideoSize vs = exoPlayer.getVideoSize();
+        if (vs != null && vs.width > 0 && vs.height > 0) {
+            videoWidth = vs.width;
+            videoHeight = vs.height;
+            float ratio = (vs.width * vs.pixelWidthHeightRatio) / (float) vs.height;
+            if (ratio > 0f) {
+                aspectFrame.setAspectRatio(ratio);
+            }
+        }
         if (startPosSec > 0.5) {
             exoPlayer.seekTo(Math.round(startPosSec * 1000.0));
         }
@@ -594,6 +606,48 @@ public class NativePlayerController {
                 : AspectRatioFrameLayout.RESIZE_MODE_FIT);
     }
 
+    /**
+     * Hardware-accelerated GPU ColorMatrix enhancement on TextureView (API 21-34)
+     * to lift dark shadows and sharpen character details for projectors.
+     */
+    public void setVideoEnhancementMode(String mode) {
+        String m = mode != null ? mode.trim() : "";
+        float contrast;
+        float brightnessOffset;
+        float saturation;
+
+        if ("Sáng nhẹ".equals(m) || "Thấp".equals(m) || "low".equalsIgnoreCase(m) || "soft".equalsIgnoreCase(m)) {
+            contrast = 1.08f;
+            brightnessOffset = 16f;
+            saturation = 1.05f;
+        } else if ("Sáng rõ".equals(m) || "Cao".equals(m) || "high".equalsIgnoreCase(m) || "bright".equalsIgnoreCase(m)) {
+            contrast = 1.16f;
+            brightnessOffset = 30f;
+            saturation = 1.10f;
+        } else if ("Siêu sáng".equals(m) || "Rất cao".equals(m) || "ultra".equalsIgnoreCase(m) || "max".equalsIgnoreCase(m)) {
+            contrast = 1.24f;
+            brightnessOffset = 44f;
+            saturation = 1.14f;
+        } else {
+            textureView.setLayerType(View.LAYER_TYPE_NONE, null);
+            return;
+        }
+
+        ColorMatrix cm = new ColorMatrix();
+        cm.setSaturation(saturation);
+        float translate = (1.0f - contrast) * 128.0f + brightnessOffset;
+        ColorMatrix cb = new ColorMatrix(new float[]{
+                contrast, 0f, 0f, 0f, translate,
+                0f, contrast, 0f, 0f, translate,
+                0f, 0f, contrast, 0f, translate,
+                0f, 0f, 0f, 1f, 0f
+        });
+        cm.postConcat(cb);
+        Paint paint = new Paint();
+        paint.setColorFilter(new ColorMatrixColorFilter(cm));
+        textureView.setLayerType(View.LAYER_TYPE_HARDWARE, paint);
+    }
+
     public void onHostPause() {
         if (exoPlayer != null && isActive && exoPlayer.getPlayWhenReady()) {
             exoPlayer.setPlayWhenReady(false);
@@ -608,7 +662,7 @@ public class NativePlayerController {
         currentUrl = "";
         if (exoPlayer != null) {
             try {
-                exoPlayer.clearVideoSurfaceView(surfaceView);
+                exoPlayer.clearVideoTextureView(textureView);
                 exoPlayer.release();
             } catch (Exception ignored) {
             }

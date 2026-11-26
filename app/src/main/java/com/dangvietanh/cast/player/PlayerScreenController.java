@@ -1,5 +1,6 @@
 package com.dangvietanh.cast.player;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Outline;
@@ -16,6 +17,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.Window;
+import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -34,10 +37,14 @@ import com.dangvietanh.cast.data.Models;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Full-screen native Android TV player screen with borderless Liquid Glass HUD,
@@ -65,6 +72,7 @@ public class PlayerScreenController {
     private static final long PROGRESS_SAVE_INTERVAL_MS = 10000L;
 
     private final Context context;
+    private final Activity hostActivity;
     private final ApiClient apiClient;
     private final Listener listener;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -311,6 +319,7 @@ public class PlayerScreenController {
     };
 
     public PlayerScreenController(Context context, ApiClient apiClient, Listener listener) {
+        this.hostActivity = (context instanceof Activity) ? (Activity) context : null;
         this.context = context.getApplicationContext();
         this.apiClient = apiClient;
         this.listener = listener;
@@ -1296,6 +1305,7 @@ public class PlayerScreenController {
         this.activeModal = MODAL_NONE;
         subModalHost.setVisibility(View.GONE);
         rootFrame.setVisibility(View.VISIBLE);
+        applyContrastSetting();
         if (listener != null) listener.onAudioFocusRequested(true);
         startEpisodeSession(request, false);
     }
@@ -1303,6 +1313,7 @@ public class PlayerScreenController {
     public void close() {
         if (!showing) return;
         persistProgressNow();
+        restoreWindowBrightness();
         showing = false;
         updateBufferingIndicator(false);
         checkFilePolling = false;
@@ -2310,9 +2321,16 @@ public class PlayerScreenController {
         speedTextBar.setText(formatRate(r));
     }
 
+    private String normalizeEnhancementLevel(String raw) {
+        if ("Sáng nhẹ".equals(raw) || "Thấp".equals(raw)) return "Sáng nhẹ";
+        if ("Sáng rõ".equals(raw) || "Cao".equals(raw)) return "Sáng rõ";
+        if ("Siêu sáng".equals(raw) || "Rất cao".equals(raw)) return "Siêu sáng";
+        return "Mặc định";
+    }
+
     private void cycleContrastQuick() {
-        String[] levels = {"Thấp", "Mặc định", "Cao", "Rất cao"};
-        String cur = Prefs.getContrastLevel(context);
+        String[] levels = {"Mặc định", "Sáng nhẹ", "Sáng rõ", "Siêu sáng"};
+        String cur = normalizeEnhancementLevel(Prefs.getContrastLevel(context));
         int idx = 1;
         for (int i = 0; i < levels.length; i++) {
             if (levels[i].equals(cur)) {
@@ -2323,7 +2341,7 @@ public class PlayerScreenController {
         Prefs.setContrastLevel(context, levels[idx]);
         applyContrastSetting();
         refreshQuickBadges();
-        toast("Tương phản dịu mắt: " + levels[idx], UiHelper.COLOR_GOLD);
+        toast("Độ sáng & Chi tiết: " + levels[idx], UiHelper.COLOR_GOLD);
         resetHudAutoHide();
     }
 
@@ -2381,11 +2399,41 @@ public class PlayerScreenController {
     }
 
     private void applyContrastSetting() {
-        String level = Prefs.getContrastLevel(context);
-        float alpha = 0f;
-        if ("Cao".equals(level)) alpha = 0.14f;
-        else if ("Rất cao".equals(level)) alpha = 0.28f;
-        contrastOverlay.setAlpha(alpha);
+        String level = normalizeEnhancementLevel(Prefs.getContrastLevel(context));
+        contrastOverlay.setAlpha(0f);
+        nativePlayer.setVideoEnhancementMode(level);
+        if (showing && hostActivity != null && !hostActivity.isFinishing()) {
+            try {
+                Window w = hostActivity.getWindow();
+                if (w != null) {
+                    WindowManager.LayoutParams lp = w.getAttributes();
+                    if ("Sáng rõ".equals(level)) {
+                        lp.screenBrightness = 0.95f;
+                    } else if ("Siêu sáng".equals(level)) {
+                        lp.screenBrightness = 1.0f;
+                    } else {
+                        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+                    }
+                    w.setAttributes(lp);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void restoreWindowBrightness() {
+        if (hostActivity == null || hostActivity.isFinishing()) return;
+        try {
+            Window w = hostActivity.getWindow();
+            if (w != null) {
+                WindowManager.LayoutParams lp = w.getAttributes();
+                if (lp.screenBrightness != WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) {
+                    lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+                    w.setAttributes(lp);
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void fadeTransitionVeilOut() {
@@ -2442,6 +2490,8 @@ public class PlayerScreenController {
                 View focusTarget = null;
                 if (activeModal == MODAL_SERVERS && !activeServerId.isEmpty()) {
                     focusTarget = subModalBody.findViewWithTag("srv_card_" + activeServerId);
+                } else if (activeModal == MODAL_EPISODES) {
+                    focusTarget = subModalBody.findViewWithTag("ep_current_row");
                 }
                 if (focusTarget == null) {
                     focusTarget = findFirstFocusableChild(subModalBody);
@@ -2450,6 +2500,16 @@ public class PlayerScreenController {
                     if (focusTarget.getId() == View.NO_ID) focusTarget.setId(View.generateViewId());
                     subModalCloseBtn.setNextFocusDownId(focusTarget.getId());
                     focusTarget.requestFocus();
+                    if (activeModal == MODAL_EPISODES) {
+                        final View scrollTarget = focusTarget;
+                        subModalScroll.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                int top = scrollTarget.getTop();
+                                subModalScroll.smoothScrollTo(0, Math.max(0, top - UiHelper.dp(context, 48)));
+                            }
+                        });
+                    }
                 } else {
                     subModalCloseBtn.requestFocus();
                 }
@@ -2507,7 +2567,19 @@ public class PlayerScreenController {
                         if (selectedSeasonFilter.isEmpty() && data != null) {
                             selectedSeasonFilter = !data.watchingSeasonId.isEmpty() ? data.watchingSeasonId : data.currentSeasonId;
                         }
-                        if (activeModal == MODAL_EPISODES) renderSubModalContent();
+                        if (activeModal == MODAL_EPISODES) {
+                            renderSubModalContent();
+                            subModalBody.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    View cur = subModalBody.findViewWithTag("ep_current_row");
+                                    if (cur != null) {
+                                        cur.requestFocus();
+                                        subModalScroll.smoothScrollTo(0, Math.max(0, cur.getTop() - UiHelper.dp(context, 48)));
+                                    }
+                                }
+                            });
+                        }
                     }
 
                     @Override
@@ -2564,18 +2636,30 @@ public class PlayerScreenController {
             subModalBody.addView(hsv, hLp);
         }
 
-        // Episodes from Rich API first, fallback to resolved episodes
+        // Episodes from Rich API first, fallback to resolved episodes — ALWAYS sorted ascending (Tập 01 -> Tập cuối)
         if (cachedRichEpisodes != null && !cachedRichEpisodes.data.isEmpty()) {
-            for (int i = 0; i < cachedRichEpisodes.data.size(); i++) {
-                final Models.ApiEpisodeItem ep = cachedRichEpisodes.data.get(i);
-                final int num = i + 1;
+            List<Models.ApiEpisodeItem> sortedRich = new ArrayList<Models.ApiEpisodeItem>(cachedRichEpisodes.data);
+            Collections.sort(sortedRich, new Comparator<Models.ApiEpisodeItem>() {
+                @Override
+                public int compare(Models.ApiEpisodeItem a, Models.ApiEpisodeItem b) {
+                    int na = extractEpisodeNumber(a != null ? a.episodeName : "", Integer.MAX_VALUE);
+                    int nb = extractEpisodeNumber(b != null ? b.episodeName : "", Integer.MAX_VALUE);
+                    if (na != nb) return Integer.compare(na, nb);
+                    return 0;
+                }
+            });
+            for (int i = 0; i < sortedRich.size(); i++) {
+                final Models.ApiEpisodeItem ep = sortedRich.get(i);
+                final int num = extractEpisodeNumber(ep.episodeName, i + 1);
                 boolean current = ep.isWatching || (launchReq != null && ep.streamKey.equals(launchReq.streamCode));
                 LinearLayout row = buildEpisodeRowCard(
                         buildEpisodeThumbUrl(ep.posterUrl, ep.streamKey),
+                        resolveEpisodeFallbackThumbUrl(),
                         ep.episodeName.isEmpty() ? ("Tập " + num) : ep.episodeName,
                         ep.watchedStatus + (ep.remainingTime.isEmpty() ? "" : " • " + ep.remainingTime),
                         ep.percentWatched,
                         current);
+                if (current) row.setTag("ep_current_row");
                 row.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
@@ -2588,9 +2672,9 @@ public class PlayerScreenController {
             return;
         }
 
-        List<Models.EpisodeItem> eps = (resolvedData != null && !resolvedData.episodes.isEmpty())
+        List<Models.EpisodeItem> rawEps = (resolvedData != null && !resolvedData.episodes.isEmpty())
                 ? resolvedData.episodes : (launchReq != null ? launchReq.episodes : new ArrayList<Models.EpisodeItem>());
-        if (eps.isEmpty()) {
+        if (rawEps.isEmpty()) {
             TextView empty = new TextView(context);
             empty.setText("Bộ phim này chỉ có 1 tập đầy đủ.");
             empty.setTextColor(UiHelper.COLOR_TEXT_MUTED);
@@ -2598,16 +2682,28 @@ public class PlayerScreenController {
             subModalBody.addView(empty);
             return;
         }
-        for (int i = 0; i < eps.size(); i++) {
-            final Models.EpisodeItem ep = eps.get(i);
-            final int num = i + 1;
+        List<Models.EpisodeItem> sortedEps = new ArrayList<Models.EpisodeItem>(rawEps);
+        Collections.sort(sortedEps, new Comparator<Models.EpisodeItem>() {
+            @Override
+            public int compare(Models.EpisodeItem a, Models.EpisodeItem b) {
+                int na = extractEpisodeNumber(a != null ? a.episodesName : "", a != null ? a.order : Integer.MAX_VALUE);
+                int nb = extractEpisodeNumber(b != null ? b.episodesName : "", b != null ? b.order : Integer.MAX_VALUE);
+                if (na != nb) return Integer.compare(na, nb);
+                return Integer.compare(a != null ? a.episodesId : 0, b != null ? b.episodesId : 0);
+            }
+        });
+        for (int i = 0; i < sortedEps.size(); i++) {
+            final Models.EpisodeItem ep = sortedEps.get(i);
+            final int num = extractEpisodeNumber(ep.episodesName, i + 1);
             boolean current = launchReq != null && ep.streamCode.equals(launchReq.streamCode);
             LinearLayout row = buildEpisodeRowCard(
                     buildEpisodeThumbUrl("", ep.streamCode),
+                    resolveEpisodeFallbackThumbUrl(),
                     ep.episodesName.isEmpty() ? ("Tập " + num) : ep.episodesName,
                     current ? "Đang phát" : "Nhấn OK để phát",
                     current ? 100 : 0,
                     current);
+            if (current) row.setTag("ep_current_row");
             row.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -2619,7 +2715,43 @@ public class PlayerScreenController {
         }
     }
 
-    private LinearLayout buildEpisodeRowCard(String thumbUrl, String title, String statusText, int progressPct, boolean current) {
+    private static int extractEpisodeNumber(String name, int fallback) {
+        if (name != null && !name.trim().isEmpty()) {
+            Matcher m = Pattern.compile("(?:t[ậa]p|episode|ep)\\s*0*(\\d+)", Pattern.CASE_INSENSITIVE).matcher(name);
+            if (m.find()) {
+                try {
+                    return Integer.parseInt(m.group(1));
+                } catch (Exception ignored) {
+                }
+            }
+            Matcher m2 = Pattern.compile("0*(\\d+)").matcher(name);
+            if (m2.find()) {
+                try {
+                    return Integer.parseInt(m2.group(1));
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return fallback;
+    }
+
+    private String resolveEpisodeFallbackThumbUrl() {
+        if (resolvedData != null && resolvedData.movie != null) {
+            String land = resolvedData.movie.getLandscapeUrl();
+            if (land != null && !land.isEmpty()) return land;
+            String port = resolvedData.movie.getPortraitUrl();
+            if (port != null && !port.isEmpty()) return port;
+        }
+        if (launchReq != null) {
+            String land = launchReq.getLandscapeUrl();
+            if (land != null && !land.isEmpty()) return land;
+            String port = launchReq.getPortraitUrl();
+            if (port != null && !port.isEmpty()) return port;
+        }
+        return "";
+    }
+
+    private LinearLayout buildEpisodeRowCard(String thumbUrl, String fallbackThumbUrl, String title, String statusText, int progressPct, boolean current) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -2627,11 +2759,26 @@ public class PlayerScreenController {
                 UiHelper.dp(context, 16), UiHelper.dp(context, 10));
         applyPlayerFocusButton(row, context, 18, current, 1.03f);
 
+        FrameLayout thumbWrap = new FrameLayout(context);
+        thumbWrap.setBackground(UiHelper.createPillDrawable(
+                context, 12, Color.parseColor("#141824"), Color.argb(32, 255, 255, 255), 1f));
+        thumbWrap.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline outline) {
+                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), UiHelper.dp(v.getContext(), 12));
+            }
+        });
+        thumbWrap.setClipToOutline(true);
+
         ImageView thumb = new ImageView(context);
-        UiHelper.safeLoadImage(thumb, thumbUrl, R.drawable.default_poster, 14);
+        thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        UiHelper.safeLoadImageWithFallback(thumb, thumbUrl, fallbackThumbUrl, R.drawable.default_poster, 0);
+        thumbWrap.addView(thumb, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
         LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(UiHelper.dp(context, 122), UiHelper.dp(context, 70));
         tLp.rightMargin = UiHelper.dp(context, 14);
-        row.addView(thumb, tLp);
+        row.addView(thumbWrap, tLp);
 
         LinearLayout col = new LinearLayout(context);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -3647,14 +3794,15 @@ public class PlayerScreenController {
             });
         }
 
-        // 4. Độ tương phản dịu mắt
-        addModalSectionLabel("Độ tương phản dịu mắt (Phòng tối / Máy chiếu)");
+        // 4. Độ sáng & Chi tiết (Máy chiếu)
+        addModalSectionLabel("Độ sáng & Chi tiết (Máy chiếu)");
         {
-            final String[] contrasts = {"Thấp", "Mặc định", "Cao", "Rất cao"};
+            final String[] contrasts = {"Mặc định", "Sáng nhẹ", "Sáng rõ", "Siêu sáng"};
             final List<TextView> cChips = new ArrayList<TextView>();
             List<View> items = new ArrayList<View>();
+            String curInit = normalizeEnhancementLevel(Prefs.getContrastLevel(context));
             for (final String lv : contrasts) {
-                TextView tv = makeGridChip(context, lv, lv.equals(Prefs.getContrastLevel(context)));
+                TextView tv = makeGridChip(context, lv, lv.equals(curInit));
                 tv.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
@@ -3671,7 +3819,7 @@ public class PlayerScreenController {
             stateUpdaters.add(new Runnable() {
                 @Override
                 public void run() {
-                    String cur = Prefs.getContrastLevel(context);
+                    String cur = normalizeEnhancementLevel(Prefs.getContrastLevel(context));
                     for (int i = 0; i < cChips.size(); i++) {
                         boolean sel = contrasts[i].equals(cur);
                         cChips.get(i).setBackground(createPlayerFocusSelector(context, 12, sel));
