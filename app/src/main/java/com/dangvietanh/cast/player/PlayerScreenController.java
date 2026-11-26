@@ -646,7 +646,7 @@ public class PlayerScreenController {
             public void onClick(View v) {
                 boolean next = !Prefs.isSubAiVoiceEnabled(PlayerScreenController.this.context);
                 Prefs.setSubAiVoiceEnabled(PlayerScreenController.this.context, next);
-                if (!next) dubbingEngine.pauseNow();
+                if (!next) dubbingEngine.stopAndResetQueue();
                 refreshQuickBadges();
                 toast(next ? "Đã bật Thuyết minh AI" : "Đã tắt Thuyết minh AI", UiHelper.COLOR_GREEN);
                 resetHudAutoHide();
@@ -3502,7 +3502,7 @@ public class PlayerScreenController {
                     public void run() {
                         boolean next = !Prefs.isSubAiVoiceEnabled(context);
                         Prefs.setSubAiVoiceEnabled(context, next);
-                        if (!next) dubbingEngine.pauseNow();
+                        if (!next) dubbingEngine.stopAndResetQueue();
                         refreshAllInPlace.run();
                     }
                 }, stateUpdaters);
@@ -3519,7 +3519,7 @@ public class PlayerScreenController {
                     @Override
                     public void onClick(View v) {
                         Prefs.setSubAiVoiceMode(context, vm);
-                        dubbingEngine.pauseNow();
+                        dubbingEngine.stopAndResetQueue();
                         refreshAllInPlace.run();
                     }
                 });
@@ -3550,6 +3550,7 @@ public class PlayerScreenController {
                     @Override
                     public void run() {
                         Prefs.setSubAiVoiceVolume(context, Prefs.getSubAiVoiceVolume(context) - 10);
+                        dubbingEngine.syncVolumeNow();
                         refreshAllInPlace.run();
                     }
                 },
@@ -3557,6 +3558,7 @@ public class PlayerScreenController {
                     @Override
                     public void run() {
                         Prefs.setSubAiVoiceVolume(context, Prefs.getSubAiVoiceVolume(context) + 10);
+                        dubbingEngine.syncVolumeNow();
                         refreshAllInPlace.run();
                     }
                 }, stateUpdaters);
@@ -3598,7 +3600,7 @@ public class PlayerScreenController {
             @Override
             public void onClick(View v) {
                 Prefs.resetSubtitlePrefs(context);
-                dubbingEngine.pauseNow();
+                dubbingEngine.stopAndResetQueue();
                 refreshAllInPlace.run();
                 toast("Đã khôi phục cài đặt phụ đề mặc định", UiHelper.COLOR_CYAN);
             }

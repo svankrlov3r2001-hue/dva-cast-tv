@@ -125,6 +125,12 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v23 = new ArrayList<>();
+        v23.add("Cải tiến tính năng Thuyết minh đọc trọn vẹn hết câu, không bị ngắt quãng giữa chừng khi qua khoảng lặng giữa hai câu phụ đề");
+        v23.add("Tự động căn chỉnh tốc độ đọc khớp nhịp hiển thị phụ đề và tốc độ phát phim, tránh đọc quá gấp ở các câu phụ đề ngắn");
+        v23.add("Giữ chất giọng trong trẻo tự nhiên, hạn chế tối đa tình trạng méo tiếng khi cần tăng tốc độ đọc");
+        list.add(new HistoryEntry(23L, "4.6.8", "26/11/2026", "Nâng Cấp Thuyết Minh Đọc Trọn Câu, Khớp Nhịp & Giữ Giọng Tự Nhiên", v23));
+
         List<String> v22 = new ArrayList<>();
         v22.add("Nâng cấp hiệu ứng khung tải toàn màn hình mượt mà cho trang Thông tin phim đồng bộ phong cách với Trang chủ");
         list.add(new HistoryEntry(22L, "4.6.7", "26/11/2026", "Khung Tải Mượt Mà Toàn Màn Hình Cho Trang Thông Tin Phim", v22));
