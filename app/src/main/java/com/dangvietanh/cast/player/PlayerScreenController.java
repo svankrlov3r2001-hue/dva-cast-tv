@@ -123,8 +123,10 @@ public class PlayerScreenController {
     private final View seekProgressFill;
     private final View seekIntroMarker;
     private final View seekCreditsMarker;
+    private final View seekSeamlessMarker;
     private final View seekThumbDot;
     private final TextView timeCombinedTv;
+    private final TextView seekCueNoteTv;
 
     // Bottom Bar Actions
     private final LinearLayout btnMemberPill;
@@ -175,6 +177,8 @@ public class PlayerScreenController {
     private int lastBufferedPct = 0;
     private boolean autoSkippedIntroThisEp = false;
     private boolean initialResumeApplied = false;
+    private boolean safeResumeChecked = false;
+    private boolean episodeEndedNotified = false;
     private boolean wishlistLocalState = false;
 
     // Seamless Preload & Next Episode Countdown
@@ -409,6 +413,8 @@ public class PlayerScreenController {
                 if (resolvedData != null && resolvedData.skipIntroSec > 0) {
                     nativePlayer.seekTo(resolvedData.skipIntroSec);
                     skipIntroBtn.setVisibility(View.GONE);
+                    toast("Đã bỏ qua giới thiệu", UiHelper.COLOR_CYAN);
+                    if (hudVisible) focusCenterPlayButton();
                     resetHudAutoHide();
                 }
             }
@@ -815,16 +821,33 @@ public class PlayerScreenController {
         bottomHudCol.setPadding(UiHelper.dp(context, 20), 0,
                 UiHelper.dp(context, 20), UiHelper.dp(context, 16));
 
+        LinearLayout timeNoteRow = new LinearLayout(context);
+        timeNoteRow.setOrientation(LinearLayout.HORIZONTAL);
+        timeNoteRow.setGravity(Gravity.CENTER_VERTICAL);
+
         timeCombinedTv = new TextView(context);
         timeCombinedTv.setText("00:00 / 00:00");
         timeCombinedTv.setTextColor(Color.WHITE);
         timeCombinedTv.setTextSize(12f);
         timeCombinedTv.setTypeface(null, Typeface.BOLD);
         timeCombinedTv.setShadowLayer(4f, 0f, 1f, Color.BLACK);
+        timeNoteRow.addView(timeCombinedTv);
+
+        seekCueNoteTv = new TextView(context);
+        seekCueNoteTv.setTextColor(UiHelper.COLOR_GOLD);
+        seekCueNoteTv.setTextSize(11.5f);
+        seekCueNoteTv.setTypeface(null, Typeface.BOLD);
+        seekCueNoteTv.setShadowLayer(4f, 0f, 1f, Color.BLACK);
+        seekCueNoteTv.setVisibility(View.GONE);
+        LinearLayout.LayoutParams scnLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        scnLp.leftMargin = UiHelper.dp(context, 10);
+        timeNoteRow.addView(seekCueNoteTv, scnLp);
+
         LinearLayout.LayoutParams tcLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         tcLp.bottomMargin = UiHelper.dp(context, 3);
-        bottomHudCol.addView(timeCombinedTv, tcLp);
+        bottomHudCol.addView(timeNoteRow, tcLp);
 
         seekBarFocusBox = new FrameLayout(context);
         seekBarFocusBox.setId(View.generateViewId());
@@ -862,15 +885,21 @@ public class PlayerScreenController {
                 0, UiHelper.dp(context, 3.5f), Gravity.CENTER_VERTICAL));
 
         seekIntroMarker = new View(context);
-        seekIntroMarker.setBackgroundColor(Color.WHITE);
+        seekIntroMarker.setBackground(UiHelper.createGlassRect(context, 2, Color.WHITE, Color.TRANSPARENT, 0));
         seekIntroMarker.setVisibility(View.GONE);
         seekTrackContainer.addView(seekIntroMarker, new FrameLayout.LayoutParams(
-                UiHelper.dp(context, 2), UiHelper.dp(context, 8), Gravity.CENTER_VERTICAL));
+                UiHelper.dp(context, 3), UiHelper.dp(context, 9), Gravity.CENTER_VERTICAL));
 
         seekCreditsMarker = new View(context);
-        seekCreditsMarker.setBackground(UiHelper.createGlassRect(context, 4, UiHelper.COLOR_GOLD, Color.TRANSPARENT, 0));
+        seekCreditsMarker.setBackground(UiHelper.createGlassRect(context, 2, UiHelper.COLOR_GOLD, Color.TRANSPARENT, 0));
         seekCreditsMarker.setVisibility(View.GONE);
         seekTrackContainer.addView(seekCreditsMarker, new FrameLayout.LayoutParams(
+                UiHelper.dp(context, 3), UiHelper.dp(context, 9), Gravity.CENTER_VERTICAL));
+
+        seekSeamlessMarker = new View(context);
+        seekSeamlessMarker.setBackground(UiHelper.createGlassRect(context, 4, UiHelper.COLOR_CYAN, Color.TRANSPARENT, 0));
+        seekSeamlessMarker.setVisibility(View.GONE);
+        seekTrackContainer.addView(seekSeamlessMarker, new FrameLayout.LayoutParams(
                 UiHelper.dp(context, 6), UiHelper.dp(context, 6), Gravity.CENTER_VERTICAL));
 
         seekThumbDot = new View(context);
@@ -1396,6 +1425,8 @@ public class PlayerScreenController {
         this.lastDurSec = 0.0;
         this.autoSkippedIntroThisEp = false;
         this.initialResumeApplied = false;
+        this.safeResumeChecked = false;
+        this.episodeEndedNotified = false;
         this.preloadAttemptedThisEp = false;
         this.preloadedNextUrl = "";
         this.nextCountdownDismissed = false;
@@ -1569,6 +1600,13 @@ public class PlayerScreenController {
             } else if (resolvedData != null && resolvedData.resumeSeconds > 5) {
                 resume = resolvedData.resumeSeconds;
             }
+            // Match iOS PlayerModal: auto-skip intro cleanly on fresh start
+            if (resume <= 2.0 && Prefs.isAutoSkipIntro(context)
+                    && resolvedData != null && resolvedData.skipIntroSec > 5) {
+                resume = resolvedData.skipIntroSec;
+                autoSkippedIntroThisEp = true;
+                toast("Đã tự động bỏ qua phần giới thiệu", UiHelper.COLOR_CYAN);
+            }
         }
         startMediaStreamAt(url, type, serverId, resume);
     }
@@ -1580,6 +1618,14 @@ public class PlayerScreenController {
         float rate = Prefs.getPlaybackRate(context);
         nativePlayer.loadMedia(url, type, startPosSec, false, false, rate);
         updateHudMetaText();
+    }
+
+    private ServerOrchestrator.ServerState findActiveServerState() {
+        if (activeServerId == null || activeServerId.isEmpty()) return null;
+        for (ServerOrchestrator.ServerState s : serverStates) {
+            if (activeServerId.equals(s.id)) return s;
+        }
+        return null;
     }
 
     private void handlePlaybackState(boolean isPlaying, boolean isBuffering, boolean isEnded, boolean isReady) {
@@ -1595,6 +1641,20 @@ public class PlayerScreenController {
             if (d > 0) {
                 lastDurSec = d;
                 updateHudMetaText();
+                // Match iOS computeSafeResumeSec: if resumed inside/near outro zone, rewind 2 minutes before outro
+                if (isReady && !safeResumeChecked && d > 60.0) {
+                    safeResumeChecked = true;
+                    double pos = nativePlayer.getCurrentPositionSec();
+                    int endCredits = resolvedData != null ? resolvedData.endCreditsSec : 0;
+                    double triggerSec = (endCredits > 15 && d > endCredits) ? (d - endCredits) : (d - 15.0);
+                    if (pos > 15.0 && pos >= Math.max(10.0, triggerSec - 15.0)) {
+                        double rewoundSec = Math.max(0.0, triggerSec - 120.0);
+                        if (rewoundSec < pos - 10.0) {
+                            nativePlayer.seekTo(rewoundSec);
+                            toast("Đã tự động lùi lại 2 phút trước đoạn chuyển tập", UiHelper.COLOR_CYAN);
+                        }
+                    }
+                }
             }
         }
 
@@ -1602,9 +1662,30 @@ public class PlayerScreenController {
             dubbingEngine.pauseNow();
         }
 
-        if (isEnded && nextEpisodeTarget != null && Prefs.isAutoPlayNext(context)) {
-            cancelNextCountdown(false);
-            playNextEpisode(true);
+        if (isEnded) {
+            // Match iOS handleActiveLayerPlayToEnd: never treat end of a 10p/30p preview clip as end of episode
+            ServerOrchestrator.ServerState curSrv = findActiveServerState();
+            if (curSrv != null && curSrv.previewTag != null && !curSrv.previewTag.isEmpty()) {
+                ServerOrchestrator.ServerState alt = serverOrchestrator.selectFailoverServer(
+                        serverStates, activeServerId, lastPosSec);
+                if (alt != null && !alt.streamUrl.equals(activeStreamUrl)) {
+                    toast("Đoạn xem trước vừa kết thúc, đang chuyển sang " + alt.label + "...", UiHelper.COLOR_CYAN);
+                    switchToServer(alt, true);
+                }
+                return;
+            }
+            if (nextEpisodeTarget != null && Prefs.isAutoPlayNext(context)) {
+                cancelNextCountdown(false);
+                playNextEpisode(true);
+            } else if (!episodeEndedNotified) {
+                episodeEndedNotified = true;
+                cancelNextCountdown(false);
+                setHudVisible(true);
+                focusCenterPlayButton();
+                toast(nextEpisodeTarget == null
+                        ? "Đã phát hết tập cuối của bộ phim"
+                        : "Đã phát hết tập phim", UiHelper.COLOR_GOLD);
+            }
         }
         resetHudAutoHide();
     }
@@ -1644,15 +1725,20 @@ public class PlayerScreenController {
             persistProgressNow();
         }
 
-        // Skip Intro check
-        if (resolvedData != null && resolvedData.skipIntroSec > 6) {
-            if (posSec >= 2.0 && posSec < resolvedData.skipIntroSec) {
+        // Skip Intro check (100% synced with iOS PlayerModal: skipIntroSec > 5 && pos >= 1 && pos < skipIntroSec - 2)
+        if (resolvedData != null && resolvedData.skipIntroSec > 5 && durSec > resolvedData.skipIntroSec) {
+            if (posSec >= 1.0 && posSec < (resolvedData.skipIntroSec - 2.0)) {
                 if (Prefs.isAutoSkipIntro(context) && !autoSkippedIntroThisEp) {
                     autoSkippedIntroThisEp = true;
+                    skipIntroBtn.setVisibility(View.GONE);
                     nativePlayer.seekTo(resolvedData.skipIntroSec);
                     toast("Đã tự động bỏ qua phần giới thiệu", UiHelper.COLOR_CYAN);
                 } else if (!Prefs.isAutoSkipIntro(context)) {
+                    boolean wasHidden = skipIntroBtn.getVisibility() != View.VISIBLE;
                     skipIntroBtn.setVisibility(View.VISIBLE);
+                    if (wasHidden && !hudVisible && activeModal == MODAL_NONE && nextEpCard.getVisibility() != View.VISIBLE) {
+                        skipIntroBtn.requestFocus();
+                    }
                 }
             } else {
                 skipIntroBtn.setVisibility(View.GONE);
@@ -1661,23 +1747,47 @@ public class PlayerScreenController {
             skipIntroBtn.setVisibility(View.GONE);
         }
 
-        // Seamless Preload + Next Episode Countdown
-        if (durSec > 20.0 && nextEpisodeTarget != null) {
-            double remSec = durSec - posSec;
+        // Seamless Preload + Outro Auto-Next Countdown (100% synced with iOS PlayerModal)
+        // Note: endCreditsSec from API is duration FROM THE END of the video (trigger at durSec - endCreditsSec)!
+        ServerOrchestrator.ServerState curSrv = findActiveServerState();
+        boolean isPreviewStream = curSrv != null && curSrv.previewTag != null && !curSrv.previewTag.isEmpty();
+        if (durSec > 30.0 && nextEpisodeTarget != null && !isPreviewStream) {
+            int endCredits = resolvedData != null ? resolvedData.endCreditsSec : 0;
 
-            // Preload 65s before end
-            if (Prefs.isSeamlessPreload(context) && !preloadAttemptedThisEp && remSec <= 65.0) {
+            // Preload next episode at T - endCredits - 120s (same as iOS)
+            double preloadTriggerSec = Math.max(5.0, durSec - endCredits - 120.0);
+            if (Prefs.isSeamlessPreload(context) && !preloadAttemptedThisEp && durSec > 60.0 && posSec >= preloadTriggerSec) {
                 preloadAttemptedThisEp = true;
                 resolveAndPreloadNextEpisode();
             }
 
-            boolean triggerCredits = resolvedData != null && resolvedData.endCreditsSec > 30
-                    && posSec >= resolvedData.endCreditsSec;
-            int triggerWindow = Math.max(8, Prefs.getNextEpisodeDelaySec(context) + 2);
-            if (Prefs.isAutoPlayNext(context) && !nextCountdownDismissed && !nextCountdownRunning
-                    && (triggerCredits || remSec <= triggerWindow)) {
-                startNextCountdown();
+            // Outro trigger timestamp: durSec - endCredits (if endCredits > 15s and valid), else near real end
+            boolean hasValidOutro = endCredits > 15 && durSec > (endCredits + 30.0);
+            double fallbackWindow = Math.max(8.0, Prefs.getNextEpisodeDelaySec(context) + 2.0);
+            double outroTriggerSec = hasValidOutro ? (durSec - endCredits) : (durSec - fallbackWindow);
+
+            // If user rewound out of outro zone, cancel countdown & allow future trigger
+            if (nextCountdownRunning && posSec < (outroTriggerSec - 5.0)) {
+                cancelNextCountdown(false);
             }
+            if (nextCountdownDismissed && posSec < (outroTriggerSec - 15.0)) {
+                nextCountdownDismissed = false;
+            }
+
+            if (Prefs.isAutoPlayNext(context)
+                    && !nextCountdownDismissed
+                    && !nextCountdownRunning
+                    && posSec >= outroTriggerSec
+                    && posSec < (durSec - 2.0)) {
+                int delaySec = Prefs.getNextEpisodeDelaySec(context);
+                if (delaySec <= 0) {
+                    playNextEpisode(true);
+                } else {
+                    startNextCountdown();
+                }
+            }
+        } else if (nextCountdownRunning) {
+            cancelNextCountdown(false);
         }
     }
 
@@ -1734,10 +1844,10 @@ public class PlayerScreenController {
     private void startNextCountdown() {
         if (nextEpisodeTarget == null) return;
         nextCountdownRunning = true;
-        nextCountdownRemaining = Math.max(3, Prefs.getNextEpisodeDelaySec(context));
+        nextCountdownRemaining = Math.max(1, Prefs.getNextEpisodeDelaySec(context));
         nextEpTitleTv.setText(nextEpisodeTarget.episodesName.isEmpty() ? "Tập tiếp theo" : nextEpisodeTarget.episodesName);
         nextEpCard.setVisibility(View.VISIBLE);
-        if (!hudVisible && activeModal == MODAL_NONE && btnNextPlayNow != null) {
+        if (activeModal == MODAL_NONE && btnNextPlayNow != null) {
             btnNextPlayNow.requestFocus();
         }
         handler.removeCallbacks(nextCountdownRunnable);
@@ -1944,22 +2054,67 @@ public class PlayerScreenController {
         ((FrameLayout.LayoutParams) seekThumbDot.getLayoutParams()).leftMargin = dotMargin;
         seekThumbDot.requestLayout();
 
-        if (lastDurSec > 20.0 && resolvedData != null && resolvedData.skipIntroSec > 6 && resolvedData.skipIntroSec < lastDurSec) {
+        int skipIntro = resolvedData != null ? resolvedData.skipIntroSec : 0;
+        int endCredits = resolvedData != null ? resolvedData.endCreditsSec : 0;
+        boolean hasIntro = lastDurSec > 20.0 && skipIntro > 0 && skipIntro < lastDurSec;
+        boolean hasOutro = lastDurSec > 20.0 && endCredits > 0 && lastDurSec > endCredits;
+        double outroAtSec = hasOutro ? (lastDurSec - endCredits) : -1.0;
+        boolean hasSeamless = lastDurSec > 60.0 && Prefs.isSeamlessPreload(context) && nextEpisodeTarget != null;
+        double seamlessAtSec = hasSeamless ? Math.max(5.0, lastDurSec - endCredits - 120.0) : -1.0;
+
+        if (hasIntro) {
             seekIntroMarker.setVisibility(View.VISIBLE);
-            int mLeft = Math.round(trackW * (float) (resolvedData.skipIntroSec / lastDurSec));
-            ((FrameLayout.LayoutParams) seekIntroMarker.getLayoutParams()).leftMargin = Math.max(0, Math.min(trackW - 4, mLeft));
+            int mLeft = Math.round(trackW * (float) Math.min(0.98, skipIntro / lastDurSec));
+            ((FrameLayout.LayoutParams) seekIntroMarker.getLayoutParams()).leftMargin = Math.max(0, Math.min(trackW - UiHelper.dp(context, 3), mLeft));
             seekIntroMarker.requestLayout();
         } else {
             seekIntroMarker.setVisibility(View.GONE);
         }
 
-        if (lastDurSec > 20.0 && resolvedData != null && resolvedData.endCreditsSec > 30 && resolvedData.endCreditsSec < lastDurSec) {
+        if (hasOutro) {
             seekCreditsMarker.setVisibility(View.VISIBLE);
-            int cLeft = Math.round(trackW * (float) (resolvedData.endCreditsSec / lastDurSec));
-            ((FrameLayout.LayoutParams) seekCreditsMarker.getLayoutParams()).leftMargin = Math.max(0, Math.min(trackW - 8, cLeft));
+            int cLeft = Math.round(trackW * (float) Math.max(0.02, outroAtSec / lastDurSec));
+            ((FrameLayout.LayoutParams) seekCreditsMarker.getLayoutParams()).leftMargin = Math.max(0, Math.min(trackW - UiHelper.dp(context, 3), cLeft));
             seekCreditsMarker.requestLayout();
         } else {
             seekCreditsMarker.setVisibility(View.GONE);
+        }
+
+        if (hasSeamless) {
+            seekSeamlessMarker.setVisibility(View.VISIBLE);
+            int dotColor = nativePlayer.isPreloadedFor(preloadedNextUrl) ? UiHelper.COLOR_GREEN : UiHelper.COLOR_CYAN;
+            seekSeamlessMarker.setBackground(UiHelper.createGlassRect(context, 4, dotColor, Color.TRANSPARENT, 0));
+            int sLeft = Math.round(trackW * (float) Math.min(0.98, Math.max(0.02, seamlessAtSec / lastDurSec)));
+            ((FrameLayout.LayoutParams) seekSeamlessMarker.getLayoutParams()).leftMargin = Math.max(0, Math.min(trackW - UiHelper.dp(context, 6), sLeft));
+            seekSeamlessMarker.requestLayout();
+        } else {
+            seekSeamlessMarker.setVisibility(View.GONE);
+        }
+
+        // Timeline Cue Note (synced with iOS PlayerModal: Mở đầu bộ phim / Kết thúc bộ phim / Xem liền mạch)
+        if (lastDurSec > 20.0) {
+            double threshold = Math.max(8.0, lastDurSec * 0.015);
+            String note = "";
+            int noteColor = UiHelper.COLOR_GOLD;
+            if (hasIntro && Math.abs(lastPosSec - skipIntro) <= threshold) {
+                note = "• Mở đầu bộ phim";
+                noteColor = Color.WHITE;
+            } else if (hasOutro && Math.abs(lastPosSec - outroAtSec) <= threshold) {
+                note = "• Kết thúc bộ phim";
+                noteColor = UiHelper.COLOR_GOLD;
+            } else if (hasSeamless && Math.abs(lastPosSec - seamlessAtSec) <= threshold) {
+                note = "• Xem liền mạch";
+                noteColor = nativePlayer.isPreloadedFor(preloadedNextUrl) ? UiHelper.COLOR_GREEN : UiHelper.COLOR_CYAN;
+            }
+            if (!note.isEmpty()) {
+                seekCueNoteTv.setText(note);
+                seekCueNoteTv.setTextColor(noteColor);
+                seekCueNoteTv.setVisibility(View.VISIBLE);
+            } else {
+                seekCueNoteTv.setVisibility(View.GONE);
+            }
+        } else {
+            seekCueNoteTv.setVisibility(View.GONE);
         }
     }
 

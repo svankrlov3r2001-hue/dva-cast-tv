@@ -125,6 +125,13 @@ public final class UpdateHistoryStore {
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
 
+        List<String> v17 = new ArrayList<>();
+        v17.add("Khắc phục lỗi hiện bảng đếm ngược Tập tiếp theo quá sớm khi chưa tới đoạn kết thúc phim");
+        v17.add("Hoàn thiện nút Bỏ qua giới thiệu, dấu mốc mở đầu/kết thúc trên thanh tua, ghi chú trạng thái và thông báo khi xem hết tập cuối");
+        v17.add("Thu gọn danh sách tập phim ở trang Thông tin phim thành 1 hàng ngang cuộn mượt từ Tập 01 đến tập cuối, tự cuộn tới tập đang xem");
+        v17.add("Khắc phục lỗi khung ảnh bìa đứng bị trống trên trang Thông tin phim và đồng bộ viền trắng khi chọn thẻ tập");
+        list.add(new HistoryEntry(17L, "4.6.2", "26/11/2026", "Chuẩn Hóa Chuyển Tập, Bỏ Qua Giới Thiệu & Danh Sách Tập 1 Hàng Ngang", v17));
+
         List<String> v16 = new ArrayList<>();
         v16.add("Khắc phục sự cố thoát ứng dụng khi mở trang Thông tin phim trên một số dòng Android TV và máy chiếu");
         v16.add("Tối ưu độ ổn định khi hiển thị và cuộn danh sách tập phim cùng thao tác điều khiển từ xa trên màn hình Chi tiết phim");
