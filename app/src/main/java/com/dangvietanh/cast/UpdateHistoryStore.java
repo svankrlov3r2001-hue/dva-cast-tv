@@ -78,7 +78,7 @@ public final class UpdateHistoryStore {
                 return entry.date;
             }
         }
-        return "26/11/2026";
+        return "27/11/2026";
     }
 
     private static List<HistoryEntry> parseServerJson(String rawJson) {
@@ -124,6 +124,11 @@ public final class UpdateHistoryStore {
 
     private static List<HistoryEntry> getBuiltInEntries() {
         List<HistoryEntry> list = new ArrayList<>();
+
+        List<String> v25 = new ArrayList<>();
+        v25.add("Nâng cấp cơ chế Giọng thuyết minh đọc tức thì theo phụ đề, loại bỏ hoàn toàn độ trễ khi bắt đầu câu thoại bằng cách nạp sẵn câu kế tiếp vào trình phát dự phòng");
+        v25.add("Tự động nạp trước các lời thuyết minh sắp tới về bộ nhớ thiết bị TV và làm ấm sẵn dữ liệu âm thanh trên máy chủ giúp phát mượt mà ngay khi mở tập hoặc tua nhanh");
+        list.add(new HistoryEntry(25L, "4.7.0", "27/11/2026", "Thuyết Minh Tức Thì Không Độ Trễ & Làm Ấm Bộ Nhớ Đệm Thông Minh", v25));
 
         List<String> v24 = new ArrayList<>();
         v24.add("Khắc phục triệt để tình trạng thanh điều khiển trình phát và các bảng tùy chọn không hiện viền sáng báo vị trí chọn khi dùng điều khiển từ xa");

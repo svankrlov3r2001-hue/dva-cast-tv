@@ -1614,6 +1614,7 @@ public class PlayerScreenController {
                 vnCues.addAll(result.vnCues);
                 enCues.addAll(result.enCues);
                 subtitleOverlay.setCues(vnCues, enCues, resolvedData != null ? resolvedData.subHigh : "");
+                dubbingEngine.onSubtitlesLoaded(vnCues, lastPosSec);
             }
         });
 
@@ -3669,7 +3670,11 @@ public class PlayerScreenController {
                     public void run() {
                         boolean next = !Prefs.isSubAiVoiceEnabled(context);
                         Prefs.setSubAiVoiceEnabled(context, next);
-                        if (!next) dubbingEngine.stopAndResetQueue();
+                        if (!next) {
+                            dubbingEngine.stopAndResetQueue();
+                        } else {
+                            dubbingEngine.onSubtitlesLoaded(vnCues, lastPosSec);
+                        }
                         refreshAllInPlace.run();
                     }
                 }, stateUpdaters);
@@ -3687,6 +3692,9 @@ public class PlayerScreenController {
                     public void onClick(View v) {
                         Prefs.setSubAiVoiceMode(context, vm);
                         dubbingEngine.stopAndResetQueue();
+                        if (Prefs.isSubAiVoiceEnabled(context)) {
+                            dubbingEngine.onSubtitlesLoaded(vnCues, lastPosSec);
+                        }
                         refreshAllInPlace.run();
                     }
                 });
@@ -3752,6 +3760,7 @@ public class PlayerScreenController {
                         vnCues.addAll(result.vnCues);
                         enCues.addAll(result.enCues);
                         subtitleOverlay.setCues(vnCues, enCues, resolvedData.subHigh);
+                        dubbingEngine.onSubtitlesLoaded(vnCues, lastPosSec);
                         toast("Đã tải lại phụ đề mới nhất", UiHelper.COLOR_GREEN);
                     }
                 });

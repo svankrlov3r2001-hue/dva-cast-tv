@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -33,15 +34,79 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * AI Voice Dubbing / Thuyết minh engine using handle.dangvietanh.com/tts_proxy
- * mixed cleanly over movie audio via a secondary audio-only ExoPlayer.
+ * Zero-delay AI Voice Dubbing / Thuyết minh engine using handle.dangvietanh.com/tts_proxy
+ * with dual-ExoPlayer ping-pong pre-staging, local prefetch cache, and server cache_tts_proxy pre-warming.
  */
 public final class DubbingTtsEngine {
 
+    public static final double TTS_START_LEAD_SEC = 0.22;
+    private static final int TTS_LOCAL_PREFETCH_COUNT = 12;
+    private static final int TTS_LOCAL_CACHE_MAX = 200;
+    private static final int TTS_SERVER_PREWARM_COUNT = 30;
+    private static final int TTS_SERVER_PREWARM_TRACK_MAX = 1000;
+
+    public static boolean isSpeakableSubtitleText(String text) {
+        if (text == null) return false;
+        String trimmed = text.trim();
+        if (trimmed.isEmpty() || trimmed.contains("♪")) return false;
+        if ("[Đặng Việt Anh]".equals(trimmed) || "Đặng Việt Anh".equals(trimmed)) return false;
+        return true;
+    }
+
+    private static final class CueAudioSpec {
+        final int cueIndex;
+        final SubtitleEngine.Cue cue;
+        final String spokenText;
+        final String spokenLang;
+        final String effVoice;
+        final double serverSpeed;
+        final String remoteUrl;
+        final String prewarmUrl;
+        final double nextCueStart;
+        final double speechWindowSec;
+
+        CueAudioSpec(
+                int cueIndex,
+                SubtitleEngine.Cue cue,
+                String spokenText,
+                String spokenLang,
+                String effVoice,
+                double serverSpeed,
+                String remoteUrl,
+                String prewarmUrl,
+                double nextCueStart,
+                double speechWindowSec) {
+            this.cueIndex = cueIndex;
+            this.cue = cue;
+            this.spokenText = spokenText;
+            this.spokenLang = spokenLang;
+            this.effVoice = effVoice;
+            this.serverSpeed = serverSpeed;
+            this.remoteUrl = remoteUrl;
+            this.prewarmUrl = prewarmUrl;
+            this.nextCueStart = nextCueStart;
+            this.speechWindowSec = speechWindowSec;
+        }
+    }
+
+    private static final class StagedSlot {
+        final String remoteUrl;
+        final String localPath;
+        boolean ready;
+
+        StagedSlot(String remoteUrl, String localPath) {
+            this.remoteUrl = remoteUrl;
+            this.localPath = localPath;
+            this.ready = false;
+        }
+    }
+
     private static final class QueuedTtsTask {
         final String cueSig;
+        final int cueIndex;
         final String spokenText;
         final String spokenLang;
         final String effVoice;
@@ -54,6 +119,7 @@ public final class DubbingTtsEngine {
 
         QueuedTtsTask(
                 String cueSig,
+                int cueIndex,
                 String spokenText,
                 String spokenLang,
                 String effVoice,
@@ -64,6 +130,7 @@ public final class DubbingTtsEngine {
                 double nextCueStart,
                 double speechWindowSec) {
             this.cueSig = cueSig;
+            this.cueIndex = cueIndex;
             this.spokenText = spokenText;
             this.spokenLang = spokenLang;
             this.effVoice = effVoice;
@@ -80,11 +147,23 @@ public final class DubbingTtsEngine {
     private final SubtitleEngine subtitleEngine;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService dlExecutor = Executors.newFixedThreadPool(2);
+    private final ExecutorService prewarmExecutor = Executors.newFixedThreadPool(2);
     private final Map<String, String> localCache = new ConcurrentHashMap<>();
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
+    private final Set<String> serverPrewarmed = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<String, Object> urlLocks = new ConcurrentHashMap<>();
 
-    private ExoPlayer ttsPlayer;
+    // Dual ping-pong audio players: standby pre-loads next line so cue onset has 0ms prepare latency
+    private final ExoPlayer[] ttsPlayers = new ExoPlayer[2];
+    private final StagedSlot[] stagedSlots = new StagedSlot[2];
+    private int activeSlot = 0;
+
+    private final AtomicInteger prefetchWaveId = new AtomicInteger(0);
+    private List<SubtitleEngine.Cue> latestVnCues = null;
+    private int lastLookaheadAnchor = -2;
+    private int lastLookaheadCuesCount = -1;
+    private String lastLookaheadTransLang = "";
+
     private String lastSpokenSig = "";
     private String episodeSig = "";
 
@@ -109,41 +188,58 @@ public final class DubbingTtsEngine {
         this.subtitleEngine = subtitleEngine;
     }
 
-    private void ensureTtsPlayer() {
-        if (ttsPlayer != null) return;
-        ttsPlayer = new ExoPlayer.Builder(context).build();
-        AudioAttributes attrs = new AudioAttributes.Builder()
-                .setUsage(C.USAGE_MEDIA)
-                .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
-                .build();
-        // handleAudioFocus = false so it mixes seamlessly with movie audio
-        ttsPlayer.setAudioAttributes(attrs, false);
-        ttsPlayer.addListener(new Player.Listener() {
-            @Override
-            public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_READY) {
-                    if (isSpeaking && currentTask != null && ttsPlayer != null) {
-                        long durMs = ttsPlayer.getDuration();
-                        if (durMs != C.TIME_UNSET && durMs > 200L) {
-                            calibrateRateAndTimer(durMs / 1000.0, currentTask, playGen);
+    private void ensureTtsPlayers() {
+        for (int i = 0; i < 2; i++) {
+            if (ttsPlayers[i] != null) continue;
+            final int slotIdx = i;
+            ExoPlayer p = new ExoPlayer.Builder(context).build();
+            AudioAttributes attrs = new AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+                    .build();
+            // handleAudioFocus = false so it mixes seamlessly with movie audio
+            p.setAudioAttributes(attrs, false);
+            p.addListener(new Player.Listener() {
+                @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_READY) {
+                        StagedSlot staged = stagedSlots[slotIdx];
+                        if (staged != null) {
+                            staged.ready = true;
+                        }
+                        if (activeSlot == slotIdx && isSpeaking && currentTask != null && ttsPlayers[slotIdx] != null) {
+                            long durMs = ttsPlayers[slotIdx].getDuration();
+                            if (durMs != C.TIME_UNSET && durMs > 200L) {
+                                calibrateRateAndTimer(ttsPlayers[slotIdx], durMs / 1000.0, currentTask, playGen);
+                            }
+                        }
+                    } else if (playbackState == Player.STATE_ENDED) {
+                        if (activeSlot == slotIdx) {
+                            completeAndFlushPending();
                         }
                     }
-                } else if (playbackState == Player.STATE_ENDED) {
-                    completeAndFlushPending();
                 }
-            }
 
-            @Override
-            public void onPlayerError(PlaybackException error) {
-                clearFinishWatchdog();
-                isSpeaking = false;
-                pausedMidUtterance = false;
-                currentTask = null;
-                pendingCue = null;
-                lastSpokenSig = "";
-                currentFinishEstMs = 0L;
-            }
-        });
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    if (activeSlot != slotIdx) {
+                        stagedSlots[slotIdx] = null;
+                        return;
+                    }
+                    clearFinishWatchdog();
+                    if (currentTask != null) {
+                        localCache.remove(currentTask.remoteUrl);
+                    }
+                    isSpeaking = false;
+                    pausedMidUtterance = false;
+                    currentTask = null;
+                    pendingCue = null;
+                    lastSpokenSig = "";
+                    currentFinishEstMs = 0L;
+                }
+            });
+            ttsPlayers[i] = p;
+        }
     }
 
     private void clearFinishWatchdog() {
@@ -180,8 +276,8 @@ public final class DubbingTtsEngine {
         );
     }
 
-    private void calibrateRateAndTimer(double actualAudioDurSec, QueuedTtsTask task, int expectedGen) {
-        if (actualAudioDurSec <= 0.2 || ttsPlayer == null || playGen != expectedGen) return;
+    private void calibrateRateAndTimer(ExoPlayer player, double actualAudioDurSec, QueuedTtsTask task, int expectedGen) {
+        if (actualAudioDurSec <= 0.2 || player == null || playGen != expectedGen) return;
         double availableWallSec = computeAvailableWallSecForTask(task);
         double refinedRate = computeLocalTtsPlaybackRate(
                 actualAudioDurSec,
@@ -192,13 +288,13 @@ public final class DubbingTtsEngine {
         );
         try {
             // Keep pitch = 1.0f so SonicAudioProcessor preserves natural voice timbre
-            ttsPlayer.setPlaybackParameters(new PlaybackParameters((float) refinedRate, 1.0f));
+            player.setPlaybackParameters(new PlaybackParameters((float) refinedRate, 1.0f));
         } catch (Exception ignored) {
         }
 
         double playerPosSec = 0.0;
         try {
-            long posMs = ttsPlayer.getCurrentPosition();
+            long posMs = player.getCurrentPosition();
             if (posMs > 0L) {
                 playerPosSec = posMs / 1000.0;
             }
@@ -227,14 +323,29 @@ public final class DubbingTtsEngine {
         this.episodeSig = sig != null ? sig : "";
         this.hasPrevVideoTime = false;
         this.prevVideoTimeSec = 0.0;
+        this.lastLookaheadAnchor = -2;
+        this.lastLookaheadCuesCount = -1;
+        this.latestVnCues = null;
         stopAndResetQueue();
+    }
+
+    public void onSubtitlesLoaded(List<SubtitleEngine.Cue> vnCues, double currentTimeSec) {
+        this.latestVnCues = vnCues;
+        this.lastLookaheadAnchor = -2;
+        this.lastLookaheadCuesCount = -1;
+        if (vnCues != null && !vnCues.isEmpty() && Prefs.isSubAiVoiceEnabled(context)) {
+            triggerLookaheadIfNeeded(vnCues, currentTimeSec, -1);
+        }
     }
 
     public void clearCacheAndReset() {
         hasPrevVideoTime = false;
         prevVideoTimeSec = 0.0;
+        lastLookaheadAnchor = -2;
+        lastLookaheadCuesCount = -1;
         localCache.clear();
         inFlight.clear();
+        serverPrewarmed.clear();
         dlExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -258,16 +369,19 @@ public final class DubbingTtsEngine {
         if (isSpeaking && Prefs.isSubAiVoiceEnabled(context)) {
             pausedMidUtterance = true;
         }
-        if (ttsPlayer != null) {
-            try {
-                ttsPlayer.pause();
-            } catch (Exception ignored) {
+        for (int i = 0; i < 2; i++) {
+            if (ttsPlayers[i] != null) {
+                try {
+                    ttsPlayers[i].pause();
+                } catch (Exception ignored) {
+                }
             }
         }
     }
 
     public void stopAndResetQueue() {
         playGen++;
+        prefetchWaveId.incrementAndGet();
         clearFinishWatchdog();
         isSpeaking = false;
         pausedMidUtterance = false;
@@ -275,22 +389,265 @@ public final class DubbingTtsEngine {
         pendingCue = null;
         lastSpokenSig = "";
         currentFinishEstMs = 0L;
-        if (ttsPlayer != null) {
-            try {
-                ttsPlayer.pause();
-                ttsPlayer.stop();
-            } catch (Exception ignored) {
+        stagedSlots[0] = null;
+        stagedSlots[1] = null;
+        for (int i = 0; i < 2; i++) {
+            if (ttsPlayers[i] != null) {
+                try {
+                    ttsPlayers[i].pause();
+                    ttsPlayers[i].stop();
+                } catch (Exception ignored) {
+                }
             }
         }
     }
 
     public void syncVolumeNow() {
-        if (ttsPlayer != null) {
-            try {
-                float vol = Math.max(0f, Math.min(1f, Prefs.getSubAiVoiceVolume(context) / 100f));
-                ttsPlayer.setVolume(vol);
-            } catch (Exception ignored) {
+        float vol = Math.max(0f, Math.min(1f, Prefs.getSubAiVoiceVolume(context) / 100f));
+        for (int i = 0; i < 2; i++) {
+            if (ttsPlayers[i] != null) {
+                try {
+                    ttsPlayers[i].setVolume(vol);
+                } catch (Exception ignored) {
+                }
             }
+        }
+    }
+
+    private CueAudioSpec buildSpecForCueIndex(
+            List<SubtitleEngine.Cue> vnCues,
+            int idx,
+            String voiceMode,
+            String transLang,
+            double extendSec,
+            double videoRate) {
+        if (vnCues == null || idx < 0 || idx >= vnCues.size()) return null;
+        SubtitleEngine.Cue cue = vnCues.get(idx);
+        if (cue == null || cue.isTop || !isSpeakableSubtitleText(cue.text)) return null;
+        String trans = (transLang != null && !transLang.isEmpty())
+                ? subtitleEngine.getCachedTranslation(transLang, cue.text)
+                : "";
+        String text = (!trans.isEmpty() ? trans : cue.text).trim();
+        if (!isSpeakableSubtitleText(text)) return null;
+        String spokenLang = (!trans.isEmpty() && transLang != null && !transLang.isEmpty()) ? transLang : "vi";
+        String effVoice = getAdaptiveVoiceForTime(voiceMode, cue.start);
+        SubtitleEngine.Cue after = findNextSpeakableCue(vnCues, idx, cue.start);
+        double afterStart = after != null ? after.start : -1.0;
+        double winSec = computeCueSpeechWindowSec(
+                cue.start,
+                cue.end,
+                extendSec,
+                afterStart,
+                videoRate
+        );
+        double srvSpeed = calculateTtsSpeed(text, winSec, effVoice);
+        String remoteUrl = buildTtsProxyUrl(text, spokenLang, srvSpeed, effVoice, false);
+        String prewarmUrl = buildTtsProxyUrl(text, spokenLang, srvSpeed, effVoice, true);
+        if (remoteUrl.isEmpty()) return null;
+        return new CueAudioSpec(
+                idx, cue, text, spokenLang, effVoice, srvSpeed,
+                remoteUrl, prewarmUrl, afterStart, winSec
+        );
+    }
+
+    private void stageUrlOnStandby(final String remoteUrl) {
+        if (remoteUrl == null || remoteUrl.isEmpty() || !Prefs.isSubAiVoiceEnabled(context)) return;
+        int standby = activeSlot == 0 ? 1 : 0;
+        StagedSlot existing = stagedSlots[standby];
+        if (existing != null && remoteUrl.equals(existing.remoteUrl)) {
+            return;
+        }
+
+        final String cachedPath = localCache.get(remoteUrl);
+        if (cachedPath != null) {
+            postStageToPlayer(remoteUrl, cachedPath);
+            return;
+        }
+
+        if (inFlight.contains(remoteUrl)) {
+            return;
+        }
+        inFlight.add(remoteUrl);
+        dlExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    final String downloadedPath = downloadToCache(remoteUrl);
+                    if (downloadedPath != null) {
+                        mainHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                postStageToPlayer(remoteUrl, downloadedPath);
+                            }
+                        });
+                    }
+                } finally {
+                    inFlight.remove(remoteUrl);
+                }
+            }
+        });
+    }
+
+    private void postStageToPlayer(final String remoteUrl, final String localPath) {
+        if (localPath == null || localPath.isEmpty() || !Prefs.isSubAiVoiceEnabled(context)) return;
+        int targetSlot = activeSlot == 0 ? 1 : 0;
+        StagedSlot current = stagedSlots[targetSlot];
+        if (current != null && remoteUrl.equals(current.remoteUrl)) return;
+
+        ensureTtsPlayers();
+        ExoPlayer player = ttsPlayers[targetSlot];
+        if (player == null) return;
+        StagedSlot entry = new StagedSlot(remoteUrl, localPath);
+        stagedSlots[targetSlot] = entry;
+        try {
+            player.pause();
+            player.stop();
+            player.setPlayWhenReady(false);
+            player.setMediaSource(new ProgressiveMediaSource.Factory(new DefaultDataSource.Factory(context))
+                    .createMediaSource(MediaItem.fromUri(Uri.fromFile(new File(localPath)))));
+            player.prepare();
+        } catch (Exception e) {
+            if (stagedSlots[targetSlot] == entry) {
+                stagedSlots[targetSlot] = null;
+            }
+        }
+    }
+
+    private void triggerLookaheadIfNeeded(List<SubtitleEngine.Cue> vnCues, double currentTimeSec, int activeAnchorIdx) {
+        if (vnCues == null || vnCues.isEmpty() || !Prefs.isSubAiVoiceEnabled(context)) return;
+        double ext = Prefs.getSubExtendSec(context);
+        double eff = currentTimeSec + Prefs.getSubDelaySec(context);
+        int anchorIdx = activeAnchorIdx;
+        if (anchorIdx < 0) {
+            for (int i = 0; i < vnCues.size(); i++) {
+                SubtitleEngine.Cue c = vnCues.get(i);
+                if (c != null && !c.isTop && (c.end + ext) >= eff && isSpeakableSubtitleText(c.text)) {
+                    anchorIdx = i;
+                    break;
+                }
+            }
+        }
+        if (anchorIdx < 0) return;
+
+        String transLang = Prefs.getSubTranslateLang(context);
+        if (transLang == null) transLang = "";
+        int cuesCount = vnCues.size();
+        if (anchorIdx == lastLookaheadAnchor
+                && cuesCount == lastLookaheadCuesCount
+                && transLang.equals(lastLookaheadTransLang)) {
+            return;
+        }
+        lastLookaheadAnchor = anchorIdx;
+        lastLookaheadCuesCount = cuesCount;
+        lastLookaheadTransLang = transLang;
+        scheduleLookahead(vnCues, anchorIdx, transLang);
+    }
+
+    private void scheduleLookahead(List<SubtitleEngine.Cue> vnCues, int anchorIdx, String transLang) {
+        final int waveId = prefetchWaveId.incrementAndGet();
+        final String vMode = Prefs.getSubAiVoiceMode(context);
+        final double ext = Prefs.getSubExtendSec(context);
+        float rawRate = Prefs.getPlaybackRate(context);
+        final double vRate = Math.max(0.5, Math.min(2.0, rawRate > 0f ? rawRate : 1.0));
+
+        int totalCollect = TTS_LOCAL_PREFETCH_COUNT + TTS_SERVER_PREWARM_COUNT;
+        final List<CueAudioSpec> specs = new ArrayList<>();
+        for (int i = anchorIdx; i < vnCues.size() && specs.size() < totalCollect; i++) {
+            CueAudioSpec spec = buildSpecForCueIndex(vnCues, i, vMode, transLang, ext, vRate);
+            if (spec != null) {
+                specs.add(spec);
+            }
+        }
+        if (specs.isEmpty()) return;
+
+        int localSplit = Math.min(TTS_LOCAL_PREFETCH_COUNT, specs.size());
+        final List<CueAudioSpec> localBatch = new ArrayList<>(specs.subList(0, localSplit));
+        final List<CueAudioSpec> serverBatch = localSplit < specs.size()
+                ? new ArrayList<>(specs.subList(localSplit, specs.size()))
+                : new ArrayList<CueAudioSpec>();
+
+        // Tier 1: Urgently download nearest cues and pre-stage next unplayed cue onto standby player
+        dlExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                boolean stagedFirst = false;
+                for (int i = 0; i < localBatch.size(); i++) {
+                    if (prefetchWaveId.get() != waveId || !Prefs.isSubAiVoiceEnabled(context)) return;
+                    final CueAudioSpec spec = localBatch.get(i);
+                    String path = localCache.get(spec.remoteUrl);
+                    if (path == null) {
+                        path = downloadToCache(spec.remoteUrl);
+                    }
+                    if (prefetchWaveId.get() != waveId || !Prefs.isSubAiVoiceEnabled(context)) return;
+                    if (path != null && !stagedFirst) {
+                        QueuedTtsTask cur = currentTask;
+                        boolean isActive = cur != null && spec.remoteUrl.equals(cur.remoteUrl);
+                        if (!isActive) {
+                            stagedFirst = true;
+                            final String readyPath = path;
+                            mainHandler.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (prefetchWaveId.get() == waveId) {
+                                        postStageToPlayer(spec.remoteUrl, readyPath);
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        // Tier 2: Gently pre-warm server cache_tts_proxy for upcoming cues (#13..#42) via ?prewarm=1 (204 No Content)
+        if (!serverBatch.isEmpty()) {
+            prewarmExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    for (int i = 0; i < serverBatch.size(); i++) {
+                        if (prefetchWaveId.get() != waveId || !Prefs.isSubAiVoiceEnabled(context)) return;
+                        CueAudioSpec spec = serverBatch.get(i);
+                        if (localCache.containsKey(spec.remoteUrl) || serverPrewarmed.contains(spec.remoteUrl)) {
+                            continue;
+                        }
+                        if (serverPrewarmed.size() > TTS_SERVER_PREWARM_TRACK_MAX) {
+                            Iterator<String> it = serverPrewarmed.iterator();
+                            int rem = 0;
+                            while (it.hasNext() && rem < 200) {
+                                it.next();
+                                it.remove();
+                                rem++;
+                            }
+                        }
+                        serverPrewarmed.add(spec.remoteUrl);
+                        HttpURLConnection conn = null;
+                        try {
+                            conn = (HttpURLConnection) new URL(spec.prewarmUrl).openConnection();
+                            conn.setRequestMethod("GET");
+                            conn.setConnectTimeout(6000);
+                            conn.setReadTimeout(8000);
+                            conn.setRequestProperty("User-Agent", "DVACastTV/4.7");
+                            int code = conn.getResponseCode();
+                            if (code == 429) {
+                                serverPrewarmed.remove(spec.remoteUrl);
+                                return;
+                            }
+                            if (code < 200 || code >= 300) {
+                                serverPrewarmed.remove(spec.remoteUrl);
+                            }
+                        } catch (Exception e) {
+                            serverPrewarmed.remove(spec.remoteUrl);
+                        } finally {
+                            if (conn != null) conn.disconnect();
+                        }
+                        try {
+                            Thread.sleep(90L);
+                        } catch (InterruptedException ignored) {
+                            return;
+                        }
+                    }
+                }
+            });
         }
     }
 
@@ -301,7 +658,9 @@ public final class DubbingTtsEngine {
             List<SubtitleEngine.Cue> vnCues,
             SubtitleEngine.Cue activeCue,
             int activeIdx) {
+        this.latestVnCues = vnCues;
         if (hasPrevVideoTime && Math.abs(currentTimeSec - prevVideoTimeSec) > 1.8) {
+            lastLookaheadAnchor = -2;
             stopAndResetQueue();
         }
         prevVideoTimeSec = currentTimeSec;
@@ -314,6 +673,7 @@ public final class DubbingTtsEngine {
 
         String voiceMode = Prefs.getSubAiVoiceMode(context);
         if (!lastVoiceMode.isEmpty() && !lastVoiceMode.equals(voiceMode)) {
+            lastLookaheadAnchor = -2;
             stopAndResetQueue();
         }
         lastVoiceMode = voiceMode != null ? voiceMode : "";
@@ -327,127 +687,132 @@ public final class DubbingTtsEngine {
         }
         if (!isPlaying) {
             pauseNow();
+            triggerLookaheadIfNeeded(vnCues, currentTimeSec, -1);
             return;
         }
 
-        if (ttsPlayer != null && isSpeaking) {
+        if (isSpeaking) {
             syncVolumeNow();
         }
 
-        if (pausedMidUtterance && isSpeaking && ttsPlayer != null) {
+        if (pausedMidUtterance && isSpeaking) {
             pausedMidUtterance = false;
-            try {
-                syncVolumeNow();
-                ttsPlayer.setPlayWhenReady(true);
-                ttsPlayer.play();
-                long durMs = ttsPlayer.getDuration();
-                long posMs = Math.max(0L, ttsPlayer.getCurrentPosition());
-                float speed = 1.0f;
+            ExoPlayer activePlayer = ttsPlayers[activeSlot];
+            if (activePlayer != null) {
                 try {
-                    speed = Math.max(0.5f, ttsPlayer.getPlaybackParameters().speed);
-                } catch (Exception ignored) {
+                    syncVolumeNow();
+                    activePlayer.setPlayWhenReady(true);
+                    activePlayer.play();
+                    long durMs = activePlayer.getDuration();
+                    long posMs = Math.max(0L, activePlayer.getCurrentPosition());
+                    float speed = 1.0f;
+                    try {
+                        speed = Math.max(0.5f, activePlayer.getPlaybackParameters().speed);
+                    } catch (Exception ignored) {
+                    }
+                    long remMs = (durMs != C.TIME_UNSET && durMs > 200L)
+                            ? Math.max(250L, Math.round(((Math.max(0L, durMs - posMs)) / (double) speed)))
+                            : Math.max(350L, currentFinishEstMs - System.currentTimeMillis());
+                    currentFinishEstMs = System.currentTimeMillis() + remMs;
+                    scheduleFinishWatchdog(remMs + 250L, playGen);
+                } catch (Exception e) {
+                    completeAndFlushPending();
                 }
-                long remMs = (durMs != C.TIME_UNSET && durMs > 200L)
-                        ? Math.max(250L, Math.round(((Math.max(0L, durMs - posMs)) / (double) speed)))
-                        : Math.max(350L, currentFinishEstMs - System.currentTimeMillis());
-                currentFinishEstMs = System.currentTimeMillis() + remMs;
-                scheduleFinishWatchdog(remMs + 250L, playGen);
-            } catch (Exception e) {
-                completeAndFlushPending();
             }
         }
 
+        // Lookahead 0.22s for narration start so first spoken syllable aligns smoothly with visual subtitle
+        double voiceEff = currentTimeSec + Prefs.getSubDelaySec(context) + TTS_START_LEAD_SEC;
+        SubtitleEngine.Cue voiceCue = null;
+        int voiceCueIdx = -1;
+        if (vnCues != null && !vnCues.isEmpty()) {
+            for (int i = 0; i < vnCues.size(); i++) {
+                SubtitleEngine.Cue c = vnCues.get(i);
+                if (c != null && !c.isTop && c.start <= voiceEff && voiceEff <= (c.end + lastExtendSec) && isSpeakableSubtitleText(c.text)) {
+                    voiceCue = c;
+                    voiceCueIdx = i;
+                    break;
+                }
+            }
+            if (voiceCue == null) {
+                for (int i = 0; i < vnCues.size(); i++) {
+                    SubtitleEngine.Cue c = vnCues.get(i);
+                    if (c != null && c.isTop && c.start <= voiceEff && voiceEff <= (c.end + lastExtendSec) && isSpeakableSubtitleText(c.text)) {
+                        voiceCue = c;
+                        voiceCueIdx = i;
+                        break;
+                    }
+                }
+            }
+        } else if (activeCue != null && isSpeakableSubtitleText(activeCue.text)) {
+            voiceCue = activeCue;
+            voiceCueIdx = activeIdx;
+        }
+
+        triggerLookaheadIfNeeded(vnCues, currentTimeSec, voiceCueIdx);
+
         // Silent gap between cues: never cut off an utterance already speaking
-        if (activeCue == null) {
+        if (voiceCue == null) {
             return;
         }
 
         String transLang = Prefs.getSubTranslateLang(context);
         String cachedTrans = !transLang.isEmpty()
-                ? subtitleEngine.getCachedTranslation(transLang, activeCue.text)
+                ? subtitleEngine.getCachedTranslation(transLang, voiceCue.text)
                 : "";
-        String spokenText = (!cachedTrans.isEmpty() ? cachedTrans : activeCue.text).trim();
+        String spokenText = (!cachedTrans.isEmpty() ? cachedTrans : voiceCue.text).trim();
         String spokenLang = (!cachedTrans.isEmpty() && !transLang.isEmpty()) ? transLang : "vi";
 
-        if (spokenText.isEmpty() || spokenText.contains("♪")) {
+        if (!isSpeakableSubtitleText(spokenText)) {
             return;
         }
 
-        final String sig = episodeSig + "|" + lastVoiceMode + "|" + activeCue.start + "|" + spokenText;
+        final String sig = episodeSig + "|" + lastVoiceMode + "|" + voiceCue.start + "|" + spokenText;
         if (sig.equals(lastSpokenSig)) {
             return;
         }
         lastSpokenSig = sig;
 
-        String effVoice = getAdaptiveVoiceForTime(voiceMode, activeCue.start);
-        SubtitleEngine.Cue nextCue = findNextSpeakableCue(vnCues, activeIdx, activeCue.start);
+        String effVoice = getAdaptiveVoiceForTime(voiceMode, voiceCue.start);
+        SubtitleEngine.Cue nextCue = findNextSpeakableCue(vnCues, voiceCueIdx, voiceCue.start);
         double nextCueStart = nextCue != null ? nextCue.start : -1.0;
         double speechWindowSec = computeCueSpeechWindowSec(
-                activeCue.start,
-                activeCue.end,
+                voiceCue.start,
+                voiceCue.end,
                 lastExtendSec,
                 nextCueStart,
                 lastVideoPlaybackRate
         );
         double serverSpeed = calculateTtsSpeed(spokenText, speechWindowSec, effVoice);
-        String remoteUrl = buildTtsProxyUrl(spokenText, spokenLang, serverSpeed, effVoice);
+        String remoteUrl = buildTtsProxyUrl(spokenText, spokenLang, serverSpeed, effVoice, false);
 
         QueuedTtsTask task = new QueuedTtsTask(
                 sig,
+                voiceCueIdx,
                 spokenText,
                 spokenLang,
                 effVoice,
                 serverSpeed,
                 remoteUrl,
-                activeCue.start,
-                activeCue.end,
+                voiceCue.start,
+                voiceCue.end,
                 nextCueStart,
                 speechWindowSec
         );
 
-        // Warm active cue and preload next 6 speakable cues
+        // Warm active cue locally if not yet cached
         preloadUrl(remoteUrl);
-        if (vnCues != null && !vnCues.isEmpty()) {
-            int startScan = activeIdx >= 0 ? activeIdx + 1 : 0;
-            int preloaded = 0;
-            for (int i = startScan; i < vnCues.size() && preloaded < 6; i++) {
-                SubtitleEngine.Cue nxt = vnCues.get(i);
-                if (nxt == null || nxt.isTop || nxt.text == null) continue;
-                if (activeIdx < 0 && nxt.start <= activeCue.start) continue;
-                String nxtRaw = nxt.text.trim();
-                if (nxtRaw.isEmpty() || nxtRaw.contains("♪")) continue;
-                String nxtTrans = !transLang.isEmpty()
-                        ? subtitleEngine.getCachedTranslation(transLang, nxt.text)
-                        : "";
-                String nxtText = (!nxtTrans.isEmpty() ? nxtTrans : nxt.text).trim();
-                if (nxtText.isEmpty()) continue;
-                String nxtLang = (!nxtTrans.isEmpty() && !transLang.isEmpty()) ? transLang : "vi";
-                String nxtVoice = getAdaptiveVoiceForTime(voiceMode, nxt.start);
-                SubtitleEngine.Cue afterNxt = findNextSpeakableCue(vnCues, i, nxt.start);
-                double afterNxtStart = afterNxt != null ? afterNxt.start : -1.0;
-                double nxtWindow = computeCueSpeechWindowSec(
-                        nxt.start,
-                        nxt.end,
-                        lastExtendSec,
-                        afterNxtStart,
-                        lastVideoPlaybackRate
-                );
-                double nxtSpeed = calculateTtsSpeed(nxtText, nxtWindow, nxtVoice);
-                String nxtUrl = buildTtsProxyUrl(nxtText, nxtLang, nxtSpeed, nxtVoice);
-                preloadUrl(nxtUrl);
-                preloaded++;
-            }
-        }
 
         if (!isSpeaking) {
             startTaskNow(task);
         } else {
+            ExoPlayer activePlayer = ttsPlayers[activeSlot];
             long remainingMs = Math.max(0L, currentFinishEstMs - System.currentTimeMillis());
-            if (ttsPlayer != null) {
+            if (activePlayer != null) {
                 try {
-                    long durMs = ttsPlayer.getDuration();
-                    long posMs = Math.max(0L, ttsPlayer.getCurrentPosition());
-                    float spd = Math.max(0.5f, ttsPlayer.getPlaybackParameters().speed);
+                    long durMs = activePlayer.getDuration();
+                    long posMs = Math.max(0L, activePlayer.getCurrentPosition());
+                    float spd = Math.max(0.5f, activePlayer.getPlaybackParameters().speed);
                     if (durMs != C.TIME_UNSET && durMs > 200L) {
                         remainingMs = Math.max(0L, Math.round(((Math.max(0L, durMs - posMs)) / (double) spd)));
                     }
@@ -488,14 +853,23 @@ public final class DubbingTtsEngine {
         final long estWallMs = Math.round((estAudioDurSec / Math.max(0.5, initialLocalRate)) * 1000.0);
         currentFinishEstMs = System.currentTimeMillis() + estWallMs;
 
-        String cached = localCache.get(task.remoteUrl);
-        if (cached != null) {
-            File cachedFile = new File(cached);
-            if (cachedFile.exists() && cachedFile.length() > 128L) {
-                playUriForTask(Uri.fromFile(cachedFile), task, myGen, initialLocalRate, estWallMs);
+        ensureTtsPlayers();
+        int standbySlot = activeSlot == 0 ? 1 : 0;
+        int[] checkSlots = new int[]{standbySlot, activeSlot};
+        for (int slot : checkSlots) {
+            StagedSlot staged = stagedSlots[slot];
+            if (staged != null && task.remoteUrl.equals(staged.remoteUrl) && ttsPlayers[slot] != null) {
+                stagedSlots[slot] = null;
+                playPrestagedSlot(slot, task, myGen, initialLocalRate, estWallMs);
                 return;
             }
-            localCache.remove(task.remoteUrl);
+        }
+
+        // Fast memory cache hit (avoid synchronous File.length I/O latency)
+        String cached = localCache.get(task.remoteUrl);
+        if (cached != null) {
+            playUriForTask(standbySlot, Uri.fromFile(new File(cached)), task, myGen, initialLocalRate, estWallMs);
+            return;
         }
 
         inFlight.add(task.remoteUrl);
@@ -504,7 +878,7 @@ public final class DubbingTtsEngine {
             public void run() {
                 try {
                     final String path = downloadToCache(task.remoteUrl);
-                    final Uri targetUri = (path != null && new File(path).exists())
+                    final Uri targetUri = path != null
                             ? Uri.fromFile(new File(path))
                             : Uri.parse(task.remoteUrl);
                     mainHandler.post(new Runnable() {
@@ -517,7 +891,8 @@ public final class DubbingTtsEngine {
                                 }
                                 return;
                             }
-                            playUriForTask(targetUri, task, myGen, initialLocalRate, estWallMs);
+                            int target = activeSlot == 0 ? 1 : 0;
+                            playUriForTask(target, targetUri, task, myGen, initialLocalRate, estWallMs);
                         }
                     });
                 } finally {
@@ -527,7 +902,66 @@ public final class DubbingTtsEngine {
         });
     }
 
+    private void preStageNextCueAfter(QueuedTtsTask task) {
+        if (task == null || task.cueIndex < 0 || latestVnCues == null) return;
+        String transLang = Prefs.getSubTranslateLang(context);
+        if (transLang == null) transLang = "";
+        for (int i = task.cueIndex + 1; i < latestVnCues.size(); i++) {
+            CueAudioSpec nextSpec = buildSpecForCueIndex(
+                    latestVnCues, i, lastVoiceMode, transLang, lastExtendSec, lastVideoPlaybackRate);
+            if (nextSpec != null) {
+                stageUrlOnStandby(nextSpec.remoteUrl);
+                break;
+            }
+        }
+    }
+
+    private void playPrestagedSlot(
+            int targetSlot,
+            QueuedTtsTask task,
+            int expectedGen,
+            double initialLocalRate,
+            long estWallMs) {
+        if (playGen != expectedGen || !canPlayAudioNow) {
+            if (playGen == expectedGen) {
+                isSpeaking = false;
+                currentTask = null;
+            }
+            return;
+        }
+        try {
+            int otherSlot = targetSlot == 0 ? 1 : 0;
+            if (ttsPlayers[otherSlot] != null) {
+                try {
+                    ttsPlayers[otherSlot].pause();
+                } catch (Exception ignored) {
+                }
+            }
+            activeSlot = targetSlot;
+            ExoPlayer player = ttsPlayers[targetSlot];
+            float vol = Math.max(0f, Math.min(1f, Prefs.getSubAiVoiceVolume(context) / 100f));
+            player.setPlaybackParameters(new PlaybackParameters((float) initialLocalRate, 1.0f));
+            player.setVolume(vol);
+            player.setPlayWhenReady(true);
+            player.play();
+
+            long syncDurMs = player.getDuration();
+            if (syncDurMs != C.TIME_UNSET && syncDurMs > 200L) {
+                calibrateRateAndTimer(player, syncDurMs / 1000.0, task, expectedGen);
+            } else {
+                currentFinishEstMs = System.currentTimeMillis() + estWallMs;
+                scheduleFinishWatchdog(estWallMs + 350L, expectedGen);
+            }
+            preStageNextCueAfter(task);
+        } catch (Exception e) {
+            if (playGen == expectedGen) {
+                completeAndFlushPending();
+            }
+        }
+    }
+
     private void playUriForTask(
+            int targetSlot,
             Uri uri,
             QueuedTtsTask task,
             int expectedGen,
@@ -541,23 +975,34 @@ public final class DubbingTtsEngine {
             return;
         }
         try {
-            ensureTtsPlayer();
+            ensureTtsPlayers();
+            int otherSlot = targetSlot == 0 ? 1 : 0;
+            if (ttsPlayers[otherSlot] != null) {
+                try {
+                    ttsPlayers[otherSlot].pause();
+                } catch (Exception ignored) {
+                }
+            }
+            stagedSlots[targetSlot] = null;
+            activeSlot = targetSlot;
+            ExoPlayer player = ttsPlayers[targetSlot];
             float vol = Math.max(0f, Math.min(1f, Prefs.getSubAiVoiceVolume(context) / 100f));
-            ttsPlayer.stop();
-            ttsPlayer.setMediaSource(new ProgressiveMediaSource.Factory(new DefaultDataSource.Factory(context))
+            player.stop();
+            player.setMediaSource(new ProgressiveMediaSource.Factory(new DefaultDataSource.Factory(context))
                     .createMediaSource(MediaItem.fromUri(uri)));
-            ttsPlayer.setPlaybackParameters(new PlaybackParameters((float) initialLocalRate, 1.0f));
-            ttsPlayer.setVolume(vol);
-            ttsPlayer.setPlayWhenReady(true);
-            ttsPlayer.prepare();
+            player.setPlaybackParameters(new PlaybackParameters((float) initialLocalRate, 1.0f));
+            player.setVolume(vol);
+            player.setPlayWhenReady(true);
+            player.prepare();
 
-            long syncDurMs = ttsPlayer.getDuration();
+            long syncDurMs = player.getDuration();
             if (syncDurMs != C.TIME_UNSET && syncDurMs > 200L) {
-                calibrateRateAndTimer(syncDurMs / 1000.0, task, expectedGen);
+                calibrateRateAndTimer(player, syncDurMs / 1000.0, task, expectedGen);
             } else {
                 currentFinishEstMs = System.currentTimeMillis() + estWallMs;
                 scheduleFinishWatchdog(estWallMs + 350L, expectedGen);
             }
+            preStageNextCueAfter(task);
         } catch (Exception e) {
             if (playGen == expectedGen) {
                 completeAndFlushPending();
@@ -567,12 +1012,7 @@ public final class DubbingTtsEngine {
 
     private void preloadUrl(final String remoteUrl) {
         if (remoteUrl == null || remoteUrl.isEmpty()) return;
-        String cached = localCache.get(remoteUrl);
-        if (cached != null) {
-            if (new File(cached).exists()) return;
-            localCache.remove(remoteUrl);
-        }
-        if (inFlight.contains(remoteUrl)) return;
+        if (localCache.containsKey(remoteUrl) || inFlight.contains(remoteUrl)) return;
         inFlight.add(remoteUrl);
         dlExecutor.execute(new Runnable() {
             @Override
@@ -616,7 +1056,7 @@ public final class DubbingTtsEngine {
                 conn = (HttpURLConnection) new URL(remoteUrl).openConnection();
                 conn.setConnectTimeout(6000);
                 conn.setReadTimeout(8000);
-                conn.setRequestProperty("User-Agent", "DVACastTV/4.0");
+                conn.setRequestProperty("User-Agent", "DVACastTV/4.7");
                 if (conn.getResponseCode() < 200 || conn.getResponseCode() >= 300) return null;
 
                 File outFile = new File(dir, "tts_" + Math.abs(remoteUrl.hashCode()) + "_" + System.currentTimeMillis() + ".mp3");
@@ -651,14 +1091,14 @@ public final class DubbingTtsEngine {
     private void pruneCacheIfNeeded(File dir) {
         try {
             File[] files = dir.listFiles();
-            if (files == null || files.length < 120) return;
+            if (files == null || files.length < TTS_LOCAL_CACHE_MAX) return;
             Arrays.sort(files, new Comparator<File>() {
                 @Override
                 public int compare(File a, File b) {
                     return Long.compare(a.lastModified(), b.lastModified());
                 }
             });
-            for (int i = 0; i < files.length - 90; i++) {
+            for (int i = 0; i < files.length - 160; i++) {
                 String delPath = files[i].getAbsolutePath();
                 //noinspection ResultOfMethodCallIgnored
                 files[i].delete();
@@ -720,8 +1160,7 @@ public final class DubbingTtsEngine {
             SubtitleEngine.Cue c = cues.get(i);
             if (c == null || c.isTop || c.text == null) continue;
             if (currentIndex < 0 && c.start <= afterStartSec) continue;
-            String trimmed = c.text.trim();
-            if (!trimmed.isEmpty() && !trimmed.contains("♪")) {
+            if (isSpeakableSubtitleText(c.text)) {
                 return c;
             }
         }
@@ -793,15 +1232,20 @@ public final class DubbingTtsEngine {
     }
 
     public static String buildTtsProxyUrl(String text, String lang, double speed, String voiceGd) {
+        return buildTtsProxyUrl(text, lang, speed, voiceGd, false);
+    }
+
+    public static String buildTtsProxyUrl(String text, String lang, double speed, String voiceGd, boolean prewarm) {
         try {
             String speedStr = (speed == Math.floor(speed))
                     ? String.valueOf((int) speed)
                     : String.format(Locale.US, "%s", speed);
-            return "https://handle.dangvietanh.com/tts_proxy?text="
+            String url = "https://handle.dangvietanh.com/tts_proxy?text="
                     + URLEncoder.encode(text, "UTF-8").replace("+", "%20")
                     + "&tl=" + URLEncoder.encode(lang != null && !lang.isEmpty() ? lang : "vi", "UTF-8").replace("+", "%20")
                     + "&speed=" + speedStr
                     + "&voice_gd=" + URLEncoder.encode(voiceGd, "UTF-8").replace("+", "%20");
+            return prewarm ? (url + "&prewarm=1") : url;
         } catch (Exception e) {
             return "";
         }
@@ -809,6 +1253,7 @@ public final class DubbingTtsEngine {
 
     public void release() {
         playGen++;
+        prefetchWaveId.incrementAndGet();
         clearFinishWatchdog();
         isSpeaking = false;
         pausedMidUtterance = false;
@@ -816,13 +1261,17 @@ public final class DubbingTtsEngine {
         pendingCue = null;
         lastSpokenSig = "";
         currentFinishEstMs = 0L;
-        if (ttsPlayer != null) {
-            try {
-                ttsPlayer.stop();
-                ttsPlayer.release();
-            } catch (Exception ignored) {
+        stagedSlots[0] = null;
+        stagedSlots[1] = null;
+        for (int i = 0; i < 2; i++) {
+            if (ttsPlayers[i] != null) {
+                try {
+                    ttsPlayers[i].stop();
+                    ttsPlayers[i].release();
+                } catch (Exception ignored) {
+                }
+                ttsPlayers[i] = null;
             }
-            ttsPlayer = null;
         }
     }
 }
